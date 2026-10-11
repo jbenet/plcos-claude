@@ -56,8 +56,7 @@ The rules all three share (`app/targets/[id]/_lp/`):
 - **The email trail is the record**: one line per touch, newest first, other vehicles' touches faded; health
   details lend no text (N56).
 
-Nothing in what is computed, recorded or allowed changed. A small "Try a shorter page: A · B · C" line on the
-current page links to them. When one is picked, it replaces the current page and the other two are deleted.
+Nothing in what is computed, recorded or allowed changed. Juan picked A; it replaced the current page (§3a) and the trial pages are gone.
 
 ## 3a. Design A, in three steps
 
@@ -73,7 +72,13 @@ Juan, 11 Oct 2026, on "Pick A and apply the rules above, in three steps": "SGTM 
    route-score notes) moved behind an "i" (`components/ui/Info.tsx`), and the shared coverage line
    (`components/ui/Coverage.tsx`) keeps the corpus and dates on the line with the rest behind its "i" (call D).
    Next moves, What we know and Open questions are hidden when empty.
-2. **Tabs with their own URLs** — next.
+2. **Tabs with their own URLs.** Under the header, a brief card gives why they'd care, the next step (a person's
+   leads; the strategy's is marked suggested, with Accept beside it), the way in and the ask, one line each.
+   Then six tabs, each at `?tab=<key>`: **Activity** (the page itself: close track, what changed, the timeline,
+   next moves), **Email** (Before you send and the drafts), **Strategy** (every vehicle's strategy, add context,
+   open questions), **Research** (what we know, Dakota, public profile), **Routes** (warm intro, routes in,
+   connection feedback) and **People** (the organisation's people or the LP unit, SPVs). Only the open tab's
+   cards render. The A, B and C trial pages were removed.
 3. **W5 length limits** so new strategies come out short — after.
 
 ## 4. The strategy the pages serve

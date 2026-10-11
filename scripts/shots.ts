@@ -2730,7 +2730,7 @@ const SHOTS: Record<string, Shot[]> = {
       prepare: async (page) => {
         await asUser(page);
         const pursuitId = await commsFixture(page);
-        await page.goto(new URL(`/targets/${pursuitId}`, page.url()).toString(), { waitUntil: 'networkidle' });
+        await page.goto(new URL(`/targets/${pursuitId}?tab=email`, page.url()).toString(), { waitUntil: 'networkidle' });
         const panel = page.locator('[data-outreach-context]');
         await panel.waitFor();
         await panel.evaluate((el) => el.scrollIntoView({ block: 'start' }));

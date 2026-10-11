@@ -1,5 +1,8 @@
 # Three shorter LP pages to compare · 11 Oct 2026
 
+_Later the same day Juan picked A; the trial pages were removed and A replaced the LP page in three steps
+(see "The LP page, shorter" and "The LP page in tabs")._
+
 Juan, 11 Oct 2026: "the LP and strategy pages are super verbose ... humans get overloaded with noise", then
 "plan out some versions ... under different routes i can visit to compare".
 

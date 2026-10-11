@@ -43,7 +43,6 @@ import { PublicProfile } from '@/components/entity/PublicProfile';
 import { SuggestedStrategy } from '@/components/strategy/SuggestedStrategy';
 import { AddContext } from '@/components/strategy/AddContext';
 import { OrgPeople, WarmIntroBox } from '@/components/strategy/LpSideCards';
-import lp from '@/components/strategy/lp-tables.module.css';
 import hd from './lp-header.module.css';
 import { RUNGS, rungIndex } from '@/modules/strategy';
 import { listEntities } from '@/lib/authz/read/identity';
@@ -53,6 +52,8 @@ import { findOpenTicket } from '@/modules/governance';
 import { EmailDrafts } from '@/components/email/EmailDrafts';
 import { OutreachContext } from '@/components/outreach/OutreachContext';
 import { linearFor, traceFor } from '@/lib/comms/read';
+import { decideSuggestionAction } from '@/app/targets/actions';
+import type { Strategy } from '@/lib/enrich/strategy';
 import { Info } from '@/components/ui/Info';
 
 export const dynamic = 'force-dynamic';
@@ -61,13 +62,19 @@ export const dynamic = 'force-dynamic';
 const claimValue = (field: string, value: string) =>
   /_usd$/.test(field) && Number.isFinite(Number(value)) ? usdCompact(Number(value)) : value;
 
+/** The page's tabs (design A, 11 Oct 2026), each at its own address: ?tab=<key>; Activity is the page itself. */
+const TABS = ['activity', 'email', 'strategy', 'research', 'routes', 'people'] as const;
+type Tab = typeof TABS[number];
+const TAB_LABEL: Record<Tab, string> = { activity: 'Activity', email: 'Email', strategy: 'Strategy', research: 'Research', routes: 'Routes', people: 'People' };
+
 async function TargetWorkspace({ params, searchParams }: {
   params: Promise<{ id: string }>;
   /** The timeline's filter and page size (N81): a vehicle's slug, 'unclear' or 'none'; how many rows. */
-  searchParams: Promise<{ tl?: string; tln?: string }>;
+  searchParams: Promise<{ tl?: string; tln?: string; tab?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
+  const tab: Tab = (TABS as readonly string[]).includes(sp.tab ?? '') ? sp.tab as Tab : 'activity';
   const pursuit = await getPursuit(id);
   if (!pursuit) notFound();
 
@@ -189,6 +196,10 @@ async function TargetWorkspace({ params, searchParams }: {
     ]),
   );
   const questions = notes.filter((n) => n.kind === 'open_question');
+  const base = `/targets/${pursuit.pursuitId}`;
+  const count: Partial<Record<Tab, number>> = {
+    activity: shown.length, strategy: strategyPursuits.length, routes: (routes?.routes ?? []).filter((r) => r.foldedUnder == null).length,
+  };
   // Public-source facts (N64) are in their own card, with their pages; these are the rest.
   const ownClaims = claims.filter((c) => !c.field.startsWith('public.'));
 
@@ -292,7 +303,7 @@ async function TargetWorkspace({ params, searchParams }: {
             ))}
 
             <div className={hd.acts}>
-              <a className="btn p" href="#email">Draft an email</a>
+              <Link className="btn p" href={`${base}?tab=email`}>Draft an email</Link>
               <details className={hd.more}>
                 <summary className="btn">Change the status</summary>
                 <div className={hd.panel}>
@@ -323,194 +334,228 @@ async function TargetWorkspace({ params, searchParams }: {
         );
       })()}
 
-      {/* Two columns while there is room for both. Narrower — an iPad with the pane open — the side
-          column comes first, warm intro on top, instead of spilling under the pane (issue 0093). */}
-      <div className={lp.lpWrap}><div className={lp.lpGrid}>
-        <div>
-          {tracks.map((t) => <CloseTrack key={t.exposure.exposureId} track={t} pursuitId={pursuit.pursuitId} />)}
+      {(() => {
+        // The brief (design A, Juan 11 Oct 2026): why they'd care, the next step, the way in and the ask, one line
+        // each. A person's next step leads; the strategy's is marked suggested, with Accept beside it.
+        const st = (openSuggestion?.data ?? null) as Strategy | null;
+        const next = pursuit.nextStep ? { what: pursuit.nextStep, meta: pursuit.nextStepOn ? `by ${shortDate(pursuit.nextStepOn)}` : null, suggested: false }
+        : st?.next ? { what: st.next.what, meta: [st.next.who, st.next.when].filter(Boolean).join(' · ') || null, suggested: openSuggestion?.status === 'proposed' } : null;
+        if (!st && !next && !bestRoute) return null;
+        return (
+        <section className={`card ${hd.brief}`} aria-label="The plan">
+          <dl className={hd.plan}>
+            {st?.angle && <><dt>Why</dt><dd className={hd.clip} title={st.angle}>{st.angle}</dd></>}
+            <dt>Next</dt>
+            <dd>{next ? <><b className={hd.clip} title={next.what}>{next.what}</b> {next.meta && <span className="muted">{next.meta}</span>}{next.suggested && <span className="muted"> · suggested</span>}</> : <span className="muted">None set</span>}</dd>
+            <dt>Way in</dt>
+            <dd>{bestRoute ? <><span className={`tier t${bestRoute.weakestTier}`}>{bestRoute.weakestTier}</span> {[bestRoute.fromName ?? routes?.fromName, ...bestRoute.hops.map((h) => h.toName)].filter(Boolean).join(' → ')}</>
+              : st?.route ? <><span className={`tier t${st.route.tier}`}>{st.route.tier}</span> {st.route.via}</>
+                : <span className="muted">No supported route found</span>}</dd>
+            {st?.ask && <><dt>Ask</dt><dd>{st.ask.shape}{st.ask.range ? ` · ${st.ask.range}` : ''} <span className="muted">· {st.list === 'this year' ? 'this year' : st.list === '2027' ? '2027' : 'not now'}</span></dd></>}
+          </dl>
+          {openSuggestion?.status === 'proposed' && !pursuit.nextStep && (
+            <form action={decideSuggestionAction} className={hd.acts}>
+              <input type="hidden" name="suggestionId" value={openSuggestion.suggestionId} />
+              <input type="hidden" name="pursuitId" value={pursuit.pursuitId} />
+              <button className="btn" name="decision" value="accept" type="submit">Accept next step</button>
+              <Link href={`${base}?tab=strategy`}>Full strategy</Link>
+            </form>
+          )}
+        </section>
+        );
+      })()}
 
-          {/* What the sender needs to decide, in place of an approval (Juan, 5 Oct 2026). */}
-          <OutreachContext entityId={pursuit.entityId} vehicleId={pursuit.vehicleId} pursuitId={pursuit.pursuitId} trace={trace}
-            connectorId={emailPlan.purpose === 'intro_ask' ? emailPlan.connector?.entityId ?? null : null}
-            connectorName={emailPlan.purpose === 'intro_ask' ? emailPlan.connector?.name ?? null : null} />
+      {/* Each kind of detail on its own tab, with its own address (design A, step 2). */}
+      <nav className={hd.tabs} aria-label="LP detail">
+        {TABS.map((k) => (
+        <Link key={k} href={k === 'activity' ? base : `${base}?tab=${k}`} aria-current={k === tab ? 'page' : undefined}>
+          {TAB_LABEL[k]}{count[k] ? <small>{count[k]}</small> : null}
+        </Link>
+        ))}
+      </nav>
 
-          {/* The first message, written here and moved to the person's own Gmail Drafts (docs/25). Above the
-              timeline (Juan, 3 Oct 2026: under a 4,000 px timeline and the strategies it was never seen). */}
-          <EmailDrafts
-            title="Email"
-            lede={`${KIND_LABEL[emailPlan.kind]}${emailPlan.sender ? `, from ${emailPlan.sender}` : ''}, about ${pursuit.vehicleName}. ${emailPlan.why}`}
-            where={{ pursuitId: pursuit.pursuitId }}
-            create={emailPlan.purpose === 'intro_ask' && emailPlan.connector
-              ? { purpose: 'intro_ask', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId, connectorId: emailPlan.connector.entityId }
-              : { purpose: 'first_message', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId }}
-            path={`/targets/${pursuit.pursuitId}`}
-            startLabel={emailPlan.purpose === 'intro_ask' && emailPlan.connector ? `Draft the intro ask to ${emailPlan.connector.name}` : 'Draft the first message'}
-            alternative={emailPlan.purpose === 'intro_ask' && emailPlan.connector
-              ? { label: 'Draft the first message to them instead', create: { purpose: 'first_message', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId } }
-              : null}
-          />
-
-          <Timeline
-            touches={shown}
-            counted={counted}
-            windows={[...windows.values()]}
-            summary={touchSummary}
-            notes={affinityNotes}
-            pursuitId={pursuit.pursuitId}
-            entityId={pursuit.entityId}
-            vehicleId={pursuit.vehicleId}
-            vehicleName={pursuit.vehicleName}
-            calendarPartial={Boolean((calendar?.detail as { stoppedAtCap?: boolean } | undefined)?.stoppedAtCap)}
-            context={context}
-            sameAs={Object.fromEntries(trace.sameAs)}
-            subjects={Object.fromEntries([...trace.messageOf].map(([k, m]) => [k, m.subject ?? '']))}
-            mismatches={trace.flags.map((f) => f.text)}
-            extras={extras}
-            read={theirRead}
-            status={pursuit.status}
-            today={new Date().toISOString().slice(0, 10)}
-            updates={updates}
-            statusEvents={statusEvents}
-            ladder={pursuit.events}
-            onRecord={file.byRung}
-            proposalId={proposal?.id ?? null}
-            filter={sp.tl ?? 'all'}
-            limit={Math.max(1, Math.min(5000, Number(sp.tln) || 40))}
-            path={`/targets/${pursuit.pursuitId}`}
-          />
-
-          <BeforeOutreach entityId={pursuit.entityId} />
-          {strategyPursuits.map((p) => <SuggestedStrategy key={p.pursuitId} pursuitId={p.pursuitId} vehicleName={p.vehicleName} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />)}
-          <DakotaClaims entityId={pursuit.entityId} />
-          <PublicProfile entityId={pursuit.entityId} />
-          <ConnectionFeedback key={pursuit.entityId} lp={pursuit.entityId} />
-
+      {tab === 'activity' && <>
+        {tracks.map((t) => <CloseTrack key={t.exposure.exposureId} track={t} pursuitId={pursuit.pursuitId} />)}
+        {signals.length > 0 && (
           <div className="card">
             <div className="chead">
-              <h2>Routes in</h2>
-              <span className="lbl">best first</span>
+              <h2>What changed</h2>
             </div>
-            {!routes || routes.routes.length === 0 ? (
-              <div className="cbody">
-                <p className="muted">No supported route found from the team or PL.</p>
-              </div>
-            ) : (
-              routes.routes.filter((r) => r.foldedUnder == null).slice(0, 3).map((route, i) => (
-                <div className="route" key={i}>
-                  <span className={`tier t${route.weakestTier}`}>{route.weakestTier}</span>
-                  <div className="rt">
-                    <b>
-                      {route.fromName ?? routes.fromName} → {route.hops.map((h) => h.toName).join(' → ')}
-                    </b>
-                    <p>{route.reasons[0]}</p>
-                  </div>
-                  <div className="verdict">
-                    <b className={route.verdict === 'excluded' || route.verdict === 'not_a_route' ? 'stop' : ''}>
-                      {VERDICT_LABEL[route.verdict]}
-                    </b>
-                    {route.askLoad ? `${route.askLoad.used} of ${route.askLoad.cap} asks used` : 'direct'}
-                  </div>
+            {signals.map((s) => (
+              <SignalRow key={s.signalId} signal={s} compact />
+            ))}
+          </div>
+        )}
+        <Timeline
+          touches={shown}
+          counted={counted}
+          windows={[...windows.values()]}
+          summary={touchSummary}
+          notes={affinityNotes}
+          pursuitId={pursuit.pursuitId}
+          entityId={pursuit.entityId}
+          vehicleId={pursuit.vehicleId}
+          vehicleName={pursuit.vehicleName}
+          calendarPartial={Boolean((calendar?.detail as { stoppedAtCap?: boolean } | undefined)?.stoppedAtCap)}
+          context={context}
+          sameAs={Object.fromEntries(trace.sameAs)}
+          subjects={Object.fromEntries([...trace.messageOf].map(([k, m]) => [k, m.subject ?? '']))}
+          mismatches={trace.flags.map((f) => f.text)}
+          extras={extras}
+          read={theirRead}
+          status={pursuit.status}
+          today={new Date().toISOString().slice(0, 10)}
+          updates={updates}
+          statusEvents={statusEvents}
+          ladder={pursuit.events}
+          onRecord={file.byRung}
+          proposalId={proposal?.id ?? null}
+          filter={sp.tl ?? 'all'}
+          limit={Math.max(1, Math.min(5000, Number(sp.tln) || 40))}
+          path={`/targets/${pursuit.pursuitId}`}
+        />
+        {pursuit.plan.length > 0 && <div className="card">
+          <div className="chead">
+            <h2>Next moves</h2>
+          </div>
+          <div className="cbody">
+            <ol className="moves">
+                {pursuit.plan.map((step) => (
+                  <li key={step.move}>
+                    {step.move}
+                    <small>{step.because}</small>
+                    {step.blockedBy && <span className="block">Blocked: {step.blockedBy}</span>}
+                  </li>
+                ))}
+              </ol>
+          </div>
+        </div>}
+      </>}
+      {tab === 'email' && <>
+        {/* What the sender needs to decide, in place of an approval (Juan, 5 Oct 2026). */}
+        <OutreachContext entityId={pursuit.entityId} vehicleId={pursuit.vehicleId} pursuitId={pursuit.pursuitId} trace={trace}
+          connectorId={emailPlan.purpose === 'intro_ask' ? emailPlan.connector?.entityId ?? null : null}
+          connectorName={emailPlan.purpose === 'intro_ask' ? emailPlan.connector?.name ?? null : null} />
+        {/* The first message, written here and moved to the person's own Gmail Drafts (docs/25). Above the
+            timeline (Juan, 3 Oct 2026: under a 4,000 px timeline and the strategies it was never seen). */}
+        <EmailDrafts
+          title="Email"
+          lede={`${KIND_LABEL[emailPlan.kind]}${emailPlan.sender ? `, from ${emailPlan.sender}` : ''}, about ${pursuit.vehicleName}. ${emailPlan.why}`}
+          where={{ pursuitId: pursuit.pursuitId }}
+          create={emailPlan.purpose === 'intro_ask' && emailPlan.connector
+            ? { purpose: 'intro_ask', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId, connectorId: emailPlan.connector.entityId }
+            : { purpose: 'first_message', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId }}
+          path={`/targets/${pursuit.pursuitId}?tab=email`}
+          startLabel={emailPlan.purpose === 'intro_ask' && emailPlan.connector ? `Draft the intro ask to ${emailPlan.connector.name}` : 'Draft the first message'}
+          alternative={emailPlan.purpose === 'intro_ask' && emailPlan.connector
+            ? { label: 'Draft the first message to them instead', create: { purpose: 'first_message', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId } }
+            : null}
+        />
+      </>}
+      {tab === 'strategy' && <>
+        {strategyPursuits.map((p) => <SuggestedStrategy key={p.pursuitId} pursuitId={p.pursuitId} vehicleName={p.vehicleName} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />)}
+        {/* Context or a correction from the team (issue 0016): research on this LP, read first by the strategy workflow. */}
+        <AddContext
+          pursuitId={pursuit.pursuitId}
+          entityId={pursuit.entityId}
+          vehicleId={pursuit.vehicleId}
+          notes={notes.filter((n) => n.kind === 'context').map((n) => ({ id: n.noteId, by: n.author, on: shortDate(n.createdAt), body: n.body }))}
+        />
+        {questions.length > 0 && <div className="card">
+          <div className="chead">
+            <h2>Open questions</h2>
+            <span className="lbl">{questions.length}</span>
+          </div>
+          <div className="cbody">
+            {(
+              questions.map((q) => (
+                <div className="fact" key={q.noteId} style={{ display: 'block' }}>
+                  <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>{q.body}</div>
+                  <span className={`flag ${String(q.data['status']) === 'stale' ? 'f-ev' : 'f-mute'}`} style={{ marginTop: 6, display: 'inline-block' }}>
+                    {String(q.data['status'] ?? 'unknown')}
+                  </span>
                 </div>
               ))
             )}
-            {routes && (
-              <Coverage
-                corpus={`${routes.coverage.edges} relationship edges, up to ${routes.coverage.maxHops} hops`}
-                from={routes.coverage.from ? shortDate(routes.coverage.from) : null}
-                to={routes.coverage.to ? shortDate(routes.coverage.to) : null}
-                notInspected={routes.coverage.notInspected}
-              />
+          </div>
+        </div>}
+      </>}
+      {tab === 'research' && <>
+        {ownClaims.length > 0 && <div className="card">
+          <div className="chead">
+            <h2>What we know</h2>
+          </div>
+          <div className="cbody">
+            {(
+              ownClaims.map((c) => (
+                <div className="fact" key={c.claimId} title={`${c.provenance.source} · as of ${shortDate(c.provenance.asOf)} · ${c.provenance.confidence}${c.provenance.lastVerifiedBy ? ` · verified by ${c.provenance.lastVerifiedBy}` : ' · unverified'}`}>
+                  <span>{claimLabel(c.field)}</span>
+                  <span>
+                    {claimValue(c.field, c.value)}
+                    {docMap.has(c.provenance.source) && <EvidenceRef doc={docMap.get(c.provenance.source)!} />}
+                  </span>
+                </div>
+              ))
             )}
           </div>
-
-          {signals.length > 0 && (
-            <div className="card">
-              <div className="chead">
-                <h2>What changed</h2>
+        </div>}
+        <BeforeOutreach entityId={pursuit.entityId} />
+        <DakotaClaims entityId={pursuit.entityId} />
+        <PublicProfile entityId={pursuit.entityId} />
+      </>}
+      {tab === 'routes' && <>
+        <WarmIntroBox search={routes} entityId={pursuit.entityId} />
+        <div className="card">
+          <div className="chead">
+            <h2>Routes in</h2>
+            <span className="lbl">best first</span>
+          </div>
+          {!routes || routes.routes.length === 0 ? (
+            <div className="cbody">
+              <p className="muted">No supported route found from the team or PL.</p>
+            </div>
+          ) : (
+            routes.routes.filter((r) => r.foldedUnder == null).slice(0, 3).map((route, i) => (
+              <div className="route" key={i}>
+                <span className={`tier t${route.weakestTier}`}>{route.weakestTier}</span>
+                <div className="rt">
+                  <b>
+                    {route.fromName ?? routes.fromName} → {route.hops.map((h) => h.toName).join(' → ')}
+                  </b>
+                  <p>{route.reasons[0]}</p>
+                </div>
+                <div className="verdict">
+                  <b className={route.verdict === 'excluded' || route.verdict === 'not_a_route' ? 'stop' : ''}>
+                    {VERDICT_LABEL[route.verdict]}
+                  </b>
+                  {route.askLoad ? `${route.askLoad.used} of ${route.askLoad.cap} asks used` : 'direct'}
+                </div>
               </div>
-              {signals.map((s) => (
-                <SignalRow key={s.signalId} signal={s} compact />
-              ))}
-            </div>
+            ))
           )}
-
-          {pursuit.plan.length > 0 && <div className="card">
-            <div className="chead">
-              <h2>Next moves</h2>
-            </div>
-            <div className="cbody">
-              <ol className="moves">
-                  {pursuit.plan.map((step) => (
-                    <li key={step.move}>
-                      {step.move}
-                      <small>{step.because}</small>
-                      {step.blockedBy && <span className="block">Blocked: {step.blockedBy}</span>}
-                    </li>
-                  ))}
-                </ol>
-            </div>
-          </div>}
+          {routes && (
+            <Coverage
+              corpus={`${routes.coverage.edges} relationship edges, up to ${routes.coverage.maxHops} hops`}
+              from={routes.coverage.from ? shortDate(routes.coverage.from) : null}
+              to={routes.coverage.to ? shortDate(routes.coverage.to) : null}
+              notInspected={routes.coverage.notInspected}
+            />
+          )}
         </div>
-
-        <div>
-          <WarmIntroBox search={routes} entityId={pursuit.entityId} />
-          {/* Context or a correction from the team (issue 0016): research on this LP, read first by the strategy workflow. */}
-          <AddContext
-            pursuitId={pursuit.pursuitId}
-            entityId={pursuit.entityId}
-            vehicleId={pursuit.vehicleId}
-            notes={notes.filter((n) => n.kind === 'context').map((n) => ({ id: n.noteId, by: n.author, on: shortDate(n.createdAt), body: n.body }))}
-          />
-          {/* An organisation that is the LP lists its people (issue 0092). */}
-          {(() => {
-            // The LP unit (docs/23): an organisation's page lists its people; a person's asks who the LP is.
-            return isPerson
-              ? <LpUnitCard pursuitId={pursuit.pursuitId} personId={pursuit.entityId} personName={pursuit.entityName} vehicleId={pursuit.vehicleId}
-                  capacity={pursuit.lpCapacity} review={pursuit.lpReview} historical={pursuit.historical} />
-              : <OrgPeople orgId={pursuit.entityId} orgName={pursuit.entityName} vehicleId={pursuit.vehicleId} currentPursuitId={pursuit.pursuitId} />;
-          })()}
-          {/* Whether they do SPVs (Juan, 27 Sep 2026): the stance, its evidence, and a person's setting. */}
-          <SpvCard entityId={pursuit.entityId} entityName={pursuit.entityName} spvVehicle={vehicleKind === 'spv'} />
-          {ownClaims.length > 0 && <div className="card">
-            <div className="chead">
-              <h2>What we know</h2>
-            </div>
-            <div className="cbody">
-              {(
-                ownClaims.map((c) => (
-                  <div className="fact" key={c.claimId} title={`${c.provenance.source} · as of ${shortDate(c.provenance.asOf)} · ${c.provenance.confidence}${c.provenance.lastVerifiedBy ? ` · verified by ${c.provenance.lastVerifiedBy}` : ' · unverified'}`}>
-                    <span>{claimLabel(c.field)}</span>
-                    <span>
-                      {claimValue(c.field, c.value)}
-                      {docMap.has(c.provenance.source) && <EvidenceRef doc={docMap.get(c.provenance.source)!} />}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>}
-
-          {questions.length > 0 && <div className="card">
-            <div className="chead">
-              <h2>Open questions</h2>
-              <span className="lbl">{questions.length}</span>
-            </div>
-            <div className="cbody">
-              {(
-                questions.map((q) => (
-                  <div className="fact" key={q.noteId} style={{ display: 'block' }}>
-                    <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>{q.body}</div>
-                    <span className={`flag ${String(q.data['status']) === 'stale' ? 'f-ev' : 'f-mute'}`} style={{ marginTop: 6, display: 'inline-block' }}>
-                      {String(q.data['status'] ?? 'unknown')}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>}
-
-        </div>
-      </div></div>
+        <ConnectionFeedback key={pursuit.entityId} lp={pursuit.entityId} />
+      </>}
+      {tab === 'people' && <>
+        {/* An organisation that is the LP lists its people (issue 0092). */}
+        {(() => {
+          // The LP unit (docs/23): an organisation's page lists its people; a person's asks who the LP is.
+          return isPerson
+            ? <LpUnitCard pursuitId={pursuit.pursuitId} personId={pursuit.entityId} personName={pursuit.entityName} vehicleId={pursuit.vehicleId}
+                capacity={pursuit.lpCapacity} review={pursuit.lpReview} historical={pursuit.historical} />
+            : <OrgPeople orgId={pursuit.entityId} orgName={pursuit.entityName} vehicleId={pursuit.vehicleId} currentPursuitId={pursuit.pursuitId} />;
+        })()}
+        {/* Whether they do SPVs (Juan, 27 Sep 2026): the stance, its evidence, and a person's setting. */}
+        <SpvCard entityId={pursuit.entityId} entityName={pursuit.entityName} spvVehicle={vehicleKind === 'spv'} />
+      </>}
     </Page>
   );
 }
