@@ -10,3 +10,11 @@ Design A, step 2 of 3 (Juan, 11 Oct 2026: "SGTM -- go for it, lets do this").
 - **Draft an email** in the header opens the Email tab. The A, B and C trial pages are gone.
 
 Next: W5 writes shorter strategies. Notes: `docs/strategy/lp-pages.md` §3a.
+
+![Activity, with the brief](../shots/lp-tabs/01-activity.webp)
+![Email](../shots/lp-tabs/02-email.webp)
+![Strategy](../shots/lp-tabs/03-strategy.webp)
+![Routes](../shots/lp-tabs/04-routes.webp)
+![People, on an LP with a restriction](../shots/lp-tabs/05-people.webp)
+![On a phone](../shots/lp-tabs/06-phone.webp)
+![Dark](../shots/lp-tabs/07-dark.webp)
