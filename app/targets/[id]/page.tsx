@@ -40,7 +40,6 @@ import { laterFacts, shownRead } from '@/lib/reads';
 import { onFile } from '@/lib/reconcile';
 import { ConnectionFeedback } from '@/components/routes/ConnectionFeedback';
 import { PublicProfile } from '@/components/entity/PublicProfile';
-import { VehicleInvestments } from '@/components/entity/VehicleInvestments';
 import { SuggestedStrategy } from '@/components/strategy/SuggestedStrategy';
 import { AddContext } from '@/components/strategy/AddContext';
 import { OrgPeople, WarmIntroBox } from '@/components/strategy/LpSideCards';
@@ -72,8 +71,7 @@ async function TargetWorkspace({ params, searchParams }: {
   const [user, vehicles, [entity]] = await Promise.all([(async () => (await auth()).currentUser())(), listVehicles(), listEntities([pursuit.entityId])]);
   // The routes page's own search — team scope, three hops, this vehicle — so the warm intro box
   // and the page it opens agree (issue 0093).
-  const thisVehicle = vehicles.find((v) => v.id === pursuit.vehicleId);
-  const vehicleKind = thisVehicle?.kind ?? 'fund';
+  const vehicleKind = vehicles.find((v) => v.id === pursuit.vehicleId)?.kind ?? 'fund';
   const [claims, notes, restrictions, routes, signals, affinityNotes, tracks, calendar, readings, logged, updates, statusLog] = await Promise.all([
     claimsFor(pursuit.entityId),
     notesFor(pursuit.entityId),
@@ -294,7 +292,13 @@ async function TargetWorkspace({ params, searchParams }: {
         </div>
       )}
       <p className="sublede">{pursuit.headline}</p>
-      <p className="muted" style={{ marginTop: -6 }}><a href="#email">Draft an email ↓</a></p>
+      <p className="muted" style={{ marginTop: -6 }}>
+        <a href="#email">Draft an email ↓</a>
+        {/* The compared shorter designs (11 Oct 2026, docs/strategy/lp-pages.md), until one is picked. */}
+        {' · '}Try a shorter page: <Link href={`/targets/${pursuit.pursuitId}/a`}>A</Link>
+        {' · '}<Link href={`/targets/${pursuit.pursuitId}/b`}>B</Link>
+        {' · '}<Link href={`/targets/${pursuit.pursuitId}/c`}>C</Link>
+      </p>
 
       {(() => {
         const p = pursuit;
@@ -451,7 +455,6 @@ async function TargetWorkspace({ params, searchParams }: {
           {strategyPursuits.map((p) => <SuggestedStrategy key={p.pursuitId} pursuitId={p.pursuitId} vehicleName={p.vehicleName} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />)}
           <DakotaClaims entityId={pursuit.entityId} />
           <PublicProfile entityId={pursuit.entityId} />
-          {thisVehicle && <VehicleInvestments entityId={pursuit.entityId} vehicle={thisVehicle} />}
           <ConnectionFeedback key={pursuit.entityId} lp={pursuit.entityId} />
 
           <div className="card">

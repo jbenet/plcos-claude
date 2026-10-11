@@ -61,7 +61,7 @@ export async function seedStrategy(db: Db): Promise<{ pursuits: number; ladderEv
         {
           move: 'Send the DDQ pack Eskildsen asked for.',
           because: 'She asked for it directly on 31 August.',
-          blockedBy: 'No SEND ticket has been opened for it yet.',
+          blockedBy: 'The administrator has not sent the final DDQ figures yet.',
         },
         {
           move: 'Do not record an indication until there is a number from them.',
