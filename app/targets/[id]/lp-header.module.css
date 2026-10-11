@@ -1,0 +1,49 @@
+/* The LP page header (11 Oct 2026): name, status as chips, restrictions in red, three actions. Tokens only. */
+.head { margin-bottom: 16px; }
+.meta { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--label); }
+.name { margin: 4px 0 0; }
+.name a { color: inherit; text-decoration: none; }
+.sub {
+  margin: 6px 0 0; max-width: 80ch; color: var(--muted); font-size: 13.5px; line-height: 1.45;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 9px; font-size: 12px; line-height: 1.3;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); cursor: default;
+}
+.chip b { font-weight: 600; }
+.cut { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cg { border-color: var(--green-line); background: var(--green-bg); }
+.ca { border-color: var(--amber-line); background: var(--amber-bg); color: var(--amber); }
+.cr { border-color: var(--clay); background: var(--clay-bg); color: var(--clay); font-weight: 500; }
+.cm { color: var(--muted); }
+.ladder { display: inline-flex; gap: 3px; }
+.ladder i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--green); }
+.ladder i.on { background: var(--green); }
+.stop { margin: 10px 0 0; padding: 7px 11px; border: 1px solid var(--clay); border-radius: 7px; background: var(--clay-bg); color: var(--clay); font-size: 13px; }
+.stop b { font-weight: 600; }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; margin-top: 12px; }
+.acts > a { text-decoration: none; }
+.more > summary { list-style: none; cursor: pointer; }
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary::after { content: ' ▸'; color: var(--muted); }
+.more[open] > summary::after { content: ' ▾'; }
+.more[open] { flex-basis: 100%; }
+.panel { margin-top: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+@media (max-width: 640px) { .cut { max-width: 220px; } }
+
+/* The brief and the tabs (design A, step 2). */
+.brief { padding: 13px 16px; }
+.plan { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: 13.5px; line-height: 1.45; }
+.plan dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--label); padding-top: 2px; }
+.plan dd { margin: 0; min-width: 0; }
+.plan dd :global(.tier) { display: inline-grid; vertical-align: middle; width: 20px; height: 20px; margin-right: 4px; }
+.clip { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+b.clip { display: inline; -webkit-line-clamp: unset; font-weight: 500; }
+.brief .acts { margin-top: 10px; align-items: center; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 6px 0 14px; overflow-x: auto; }
+.tabs a { padding: 8px 12px; font-size: 13px; color: var(--muted); text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent; }
+.tabs a[aria-current='page'] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
+.tabs small { font-family: var(--mono); font-size: 10.5px; margin-left: 4px; color: var(--muted); }
+@media (max-width: 640px) { .tabs { flex-wrap: wrap; overflow-x: visible; } }

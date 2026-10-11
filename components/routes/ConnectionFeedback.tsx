@@ -4,6 +4,7 @@ import { useId, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { enqueueConnectionNote } from '@/lib/feedback-outbox';
 import { useOutbox } from '@/components/shell/FeedbackOutbox';
+import { Info } from '@/components/ui/Info';
 
 /**
  * A note about this LP's connections, journaled on the server like the feedback box (Juan, 27 Sep:
@@ -39,7 +40,7 @@ export function ConnectionFeedback({ lp }: { lp: string }) {
   else if (last) message = 'Saved on the server.';
 
   return <section className="card">
-    <div className="chead"><h2>Connection feedback</h2></div>
+    <div className="chead"><h2>Connection feedback</h2><span className="lbl"><Info>Saved with your name and date. Saying you know this LP records your own reviewed tie; other corrections await review.</Info></span></div>
     <form className="cbody" onSubmit={async (event) => {
       event.preventDefault();
       if (saving || !text.trim()) return;
@@ -56,7 +57,6 @@ export function ConnectionFeedback({ lp }: { lp: string }) {
         placeholder="For example: I know them directly. Or describe a missing tie or a redundant route."
         onChange={(event) => { setText(event.target.value); setFailed(null); }}
         style={{ display: 'block', width: '100%', margin: '8px 0', padding: 10, border: '1px solid var(--hair)', borderRadius: 4, background: 'var(--surface)', color: 'var(--ink)', font: 'inherit' }} />
-      <p className="muted" style={{ fontSize: 12 }}>Saved with your name and date. An explicit statement that you know this LP records your own reviewed tie; other corrections await review.</p>
       <button className="btn p" disabled={saving || !text.trim()}>{saving ? 'Saving…' : 'Save connection feedback'}</button>
       <p role={alert ? 'alert' : 'status'} style={{ color: alert ? 'var(--clay)' : 'var(--muted)', marginTop: 8 }}>{message}</p>
     </form>

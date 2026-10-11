@@ -56,8 +56,30 @@ The rules all three share (`app/targets/[id]/_lp/`):
 - **The email trail is the record**: one line per touch, newest first, other vehicles' touches faded; health
   details lend no text (N56).
 
-Nothing in what is computed, recorded or allowed changed. A small "Try a shorter page: A · B · C" line on the
-current page links to them. When one is picked, it replaces the current page and the other two are deleted.
+Nothing in what is computed, recorded or allowed changed. Juan picked A; it replaced the current page (§3a) and the trial pages are gone.
+
+## 3a. Design A, in three steps
+
+Juan, 11 Oct 2026, on "Pick A and apply the rules above, in three steps": "SGTM -- go for it, lets do this."
+
+1. **Copy cut, status in the header, empty cards hidden** (`app/targets/[id]/page.tsx`, `lp-header.module.css`).
+   The status panel, the stepper and the side panel became one header: the name, a two-line description, and
+   chips for the status with its ladder as dots, where it came from, the next step, the money, indicated, who
+   owes a reply, meetings, their read, needs evidence, doesn't do SPVs, met-but-still-early and Affinity
+   disagreeing; each long reason is on hover. Restrictions show in red under the chips. "Change the status" and
+   "The ladder" (the stepper and the ladder request) open in place. Explainer paragraphs ("What this covers",
+   "A draft is not a send", "Proposed, not decided", "What this keeps", the close-track note, the SPV and
+   route-score notes) moved behind an "i" (`components/ui/Info.tsx`), and the shared coverage line
+   (`components/ui/Coverage.tsx`) keeps the corpus and dates on the line with the rest behind its "i" (call D).
+   Next moves, What we know and Open questions are hidden when empty.
+2. **Tabs with their own URLs.** Under the header, a brief card gives why they'd care, the next step (a person's
+   leads; the strategy's is marked suggested, with Accept beside it), the way in and the ask, one line each.
+   Then six tabs, each at `?tab=<key>`: **Activity** (the page itself: close track, what changed, the timeline,
+   next moves), **Email** (Before you send and the drafts), **Strategy** (every vehicle's strategy, add context,
+   open questions), **Research** (what we know, Dakota, public profile), **Routes** (warm intro, routes in,
+   connection feedback) and **People** (the organisation's people or the LP unit, SPVs). Only the open tab's
+   cards render. The A, B and C trial pages were removed.
+3. **W5 length limits** so new strategies come out short — after.
 
 ## 4. The strategy the pages serve
 
@@ -82,8 +104,8 @@ Each has a recommendation; only E is built, as the three trial pages.
 | A | Fold the account plan (`/<vehicle>/strategy/<lp>`: needs, plays, propose and commit) into the LP page as part of its Strategy section, and retire the separate page? | **Yes.** It is the same LP and vehicle, and hardly anyone reaches it today. |
 | B | Make the organisation page the cross-vehicle hub, with one plan card per vehicle? | **Yes, next.** It fits "either end" and reuses the plan card. |
 | C | Refresh a strategy automatically when it is written before a reply from them, as a nightly Astra batch with a cap? | **Yes**, once the Astra runner is launching on its own; it costs no Claude usage. |
-| D | Fold the long "What this covers" notes under each card into a one-line coverage note with the rest behind a disclosure? | **Yes.** Rule 7 needs the disclosure, not the paragraph. |
-| E | Which design replaces the current page: A, B or C? | **A.** It is the shortest above the fold and gives each kind of detail its own address; B suits people working mostly from mail. |
+| D | Fold the long "What this covers" notes under each card into a one-line coverage note with the rest behind a disclosure? | **Done** in step 1 of design A. |
+| E | Which design replaces the current page: A, B or C? | **A**, picked by Juan 11 Oct; built in three steps (§3a). |
 
 ## 6. How it was checked
 

@@ -4,6 +4,7 @@ import { draftsOn, mailStatus, moveBlocks, PURPOSE_LABEL, voiceOf, warningsFor, 
 import { EmailDraftBox, type DraftView, type GmailView } from './EmailDraftBox';
 import { NewDraftButton } from './NewDraftButton';
 import s from './email.module.css';
+import { Info } from '@/components/ui/Info';
 
 /**
  * The email box on a page that suggests an email (docs/25 §Where boxes appear): the LP page's first
@@ -50,7 +51,7 @@ export async function EmailDrafts({ title, lede, where, create, path, startLabel
     <div className="card" id="email">
       <div className="chead">
         <h2>{title}</h2>
-        <span className="lbl">drafts go to your own Gmail · nothing sends from here</span>
+        <span className="lbl">to your own Gmail drafts <Info>A draft is not a send. Moving puts it in your Gmail Drafts to review and send yourself. The checks read the restrictions, the vehicle&rsquo;s wrap rule, the email guidelines and, for an intro ask, the asks on file; they warn and never block, and every move is recorded. A person needs no approval to send (Juan, 5 Oct 2026).</Info></span>
       </div>
       {!open ? (
         <div className={s.start}>
@@ -93,12 +94,6 @@ export async function EmailDrafts({ title, lede, where, create, path, startLabel
           )))}
         </div>
       )}
-      <p className="cover">
-        <b>A draft is not a send.</b> Moving puts it in your Gmail Drafts to review and send yourself. The checks above
-        the button read the restrictions, the vehicle&rsquo;s wrap rule, the email guidelines and, for an intro ask, the
-        asks on file; they warn and never block, and every move is recorded. A person needs no approval to send
-        (Juan, 5 Oct 2026).
-      </p>
     </div>
   );
 }

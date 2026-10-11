@@ -323,3 +323,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [The Astra runner, run from Developer → Astra](entries/astra-runner.md)
 - [The Astra app — a menu-bar app for the Astra runner, with feedback](entries/astra-app.md)
 - [Three shorter LP pages to compare](entries/lp-designs.md)
+- [The LP page, shorter: status in the header, explainers behind an "i"](entries/lp-header.md)
+- [The LP page in tabs, each with its own address](entries/lp-tabs.md)
