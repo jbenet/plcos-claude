@@ -1,0 +1,13 @@
+{
+  "name": "astra-desktop",
+  "private": true,
+  "scripts": {
+    "icon": "tauri icon icon-source.png -o src-tauri/icons",
+    "dev": "tauri dev",
+    "build": "tauri build --bundles app",
+    "install-app": "npm run build && rm -rf ~/Applications/Astra.app && cp -R src-tauri/target/release/bundle/macos/Astra.app ~/Applications/ && open ~/Applications/Astra.app"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.9.6"
+  }
+}

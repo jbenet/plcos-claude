@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The server page gets no Tauri commands; the app works only from the tray.",
+  "windows": [],
+  "permissions": []
+}
