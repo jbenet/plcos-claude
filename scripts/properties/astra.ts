@@ -1,7 +1,8 @@
+import { readFile } from 'node:fs/promises';
 import { syncGuard } from '../../lib/sync/auth';
 import { SYNC_ADMIN, SYNC_PUSH } from '../../lib/sync/scopes';
 import { astraCall } from '../../lib/sync/astra';
-import { cancel, enqueue, inWindow, readRunner, recentJobs, saveSettings } from '../../lib/astra/jobs';
+import { ASTRA_WORKFLOWS, cancel, cancelQueued, enqueue, inWindow, readRunner, recentJobs, saveSettings } from '../../lib/astra/jobs';
 import { batchPrefix, codexArgs, fill, nightOf, shouldFallBack } from '../../lib/astra/runner';
 import { createMcpToken, type AppUser } from '../../modules/platform';
 import { freshDb, type Check } from './harness';
@@ -35,7 +36,7 @@ export async function astraProperties(check: Check) {
     if ('response' in guard) return { status: guard.response.status, body: await guard.response.json() as Record<string, any> };
     return astraCall(guard.caller, req(), { db }) as Promise<{ status: number; body: Record<string, any> }>;
   };
-  const poll = (o: Partial<{ inWindow: boolean; free: number; held: string[]; night: string }> = {}) =>
+  const poll = (o: Partial<{ inWindow: boolean; free: number; held: string[]; night: string; workflows: string[] }> = {}) =>
     call(admin.secret, { op: 'poll', host: 'props', inWindow: false, night: '2026-10-10', free: 4, held: [], slots: [{ slot: 's1', job: null }], ...o });
 
   check('astra refuses a push-only token', (await call(pushOnly.secret, { op: 'poll' })).status === 403, 'push-only');
@@ -86,4 +87,19 @@ export async function astraProperties(check: Check) {
     && Array.isArray(status.body.jobs) && status.body.jobs.length > 0, JSON.stringify(Object.keys(status.body)));
   check('astra status and queue refuse a push-only token', (await call(pushOnly.secret, { op: 'status' })).status === 403
     && (await call(pushOnly.secret, { op: 'queue', workflow: 'w1', size: 3, count: 1, runNow: true })).status === 403, 'push-only');
+
+  // w5t (Shorten strategies): a runner from before it names no workflows and must never be handed one.
+  await cancelQueued(db);
+  await enqueue(db, juan.id, { workflow: 'w5t', size: 8, count: 1, runNow: true });
+  await enqueue(db, juan.id, { workflow: 'w5', size: 4, count: 1, runNow: true });
+  const older = await poll({ free: 4 });
+  const newer = await poll({ free: 4, held: older.body.jobs.map((j: { id: string }) => j.id), workflows: ['w1w5', 'w1', 'w5', 'w5t', 'w9'] });
+  check('astra hands w5t only to a runner that names it', older.body.jobs.length === 1 && older.body.jobs[0].workflow === 'w5'
+    && newer.body.jobs.length === 1 && newer.body.jobs[0].workflow === 'w5t' && newer.body.jobs[0].size === 8,
+    `${JSON.stringify(older.body.jobs)} ${JSON.stringify(newer.body.jobs)}`);
+  const values = Object.fromEntries(['worker', 'repo', 'data', 'count', 'batch', 'rawExamples', 'strategyExamples'].map((k) => [k, `<${k}>`]));
+  const filled = await Promise.all(ASTRA_WORKFLOWS.map(async (w) => {
+    try { return fill(await readFile(`scripts/astra/templates/${w}.md`, 'utf8'), { ...values, common: 'COMMON' }).startsWith('COMMON'); } catch { return false; }
+  }));
+  check('astra has a brief template the runner can fill for every workflow', filled.every(Boolean), JSON.stringify(filled));
 }

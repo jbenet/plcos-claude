@@ -12,6 +12,11 @@
  * cloud-push.sh, finishes the ledger run and reports counts back. The server hands out only a workflow and a size:
  * it can never make this runner run a command or a brief of its choosing. Names stay on the Mac; logs and briefs
  * stay under plcos-data/real/workflows/astra/.
+ *
+ * Each poll names the workflows this copy can run, so the server never hands an older runner a workflow it doesn't
+ * know. Under launchd or the Astra app, which restart it, an idle runner fast-forwards the live checkout to
+ * origin/master every ten minutes and exits when that brought new code, so it comes back on it (never with local
+ * changes, off master, or when the dependencies changed: those wait for a person).
  */
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -28,7 +33,10 @@ const run = promisify(execFile);
 const REPO = process.cwd();
 const SLOTS = Math.max(1, Math.min(6, Number(process.env.ASTRA_SLOTS ?? 4)));
 const POLL_MS = 60_000;
-type Job = { id: string; workflow: 'w1w5' | 'w1' | 'w5'; size: number };
+const WORKFLOWS = ['w1w5', 'w1', 'w5', 'w5t'] as const;
+type Job = { id: string; workflow: (typeof WORKFLOWS)[number]; size: number };
+const SUPERVISED = process.env.ASTRA_SUPERVISED === '1' || process.env.XPC_SERVICE_NAME === 'com.plcos.astra-runner';
+const UPDATE_MS = 10 * 60_000;
 type Slot = { name: string; folder: string; git: string[]; job: Job | null; child: ChildProcess | null; cancelled: boolean };
 
 const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
@@ -78,10 +86,12 @@ async function examples(dir: string, skip: Set<string>, n: number): Promise<stri
   return dated.sort((a, b) => b.t - a.t).slice(0, n).map((x) => join(dir, x.f)).join(', ') || 'none on file';
 }
 
-async function writtenSince(dir: string, keys: string[], since: number): Promise<string[]> {
+/** Files for these keys written since `since`; with `folders`, also in each vehicle folder (strategy/<vehicle>/<key>.json). */
+async function writtenSince(dir: string, keys: string[], since: number, folders = false): Promise<string[]> {
+  const dirs = [dir, ...(folders ? (await readdir(dir, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory()).map((e) => join(dir, e.name)) : [])];
   const out: string[] = [];
-  for (const k of keys) {
-    const f = join(dir, `${k}.json`);
+  for (const d of dirs) for (const k of keys) {
+    const f = join(d, `${k}.json`);
     try { if ((await stat(f)).mtimeMs >= since) out.push(f); } catch { /* not written */ }
   }
   return out;
@@ -126,9 +136,10 @@ async function work(slot: Slot, job: Job, root: string) {
   const env = { ...process.env, DATA_PROFILE: 'real' };
   await reportJob(job.id, 'running', { slot: slot.name });
   // Cut one batch at a time, so two runs never take the same LPs.
-  const mode = job.workflow === 'w5' ? 'w5' : 'w1';
+  const mode = job.workflow === 'w5' || job.workflow === 'w5t' ? 'w5' : 'w1';
   const prefix = batchPrefix(job.id);
-  const cut = cutting.then(() => run('npx', ['tsx', 'scripts/enrich-batch.ts', mode, prefix, String(job.size), '--max', '1'], { cwd: REPO, env, timeout: 600_000 }));
+  const cut = cutting.then(() => run('npx', ['tsx', 'scripts/enrich-batch.ts', mode, prefix, String(job.size), '--max', '1',
+    ...(job.workflow === 'w5t' ? ['--tighten'] : [])], { cwd: REPO, env, timeout: 600_000 }));
   cutting = cut.catch(() => undefined);
   try { await cut; } catch { return reportJob(job.id, 'failed', { message: 'The batch cutter failed; see the runner log on the Mac.' }); }
   const batch = `${prefix}01`, file = join(batches, `${batch}.${mode === 'w1' ? 'jsonl' : 'txt'}`);
@@ -138,7 +149,7 @@ async function work(slot: Slot, job: Job, root: string) {
   if (job.workflow === 'w1w5') await writeFile(join(batches, `${batch}.txt`), keys.join('\n') + '\n');
   const skip = new Set(keys);
   const values: Record<string, string> = { worker: slot.folder, repo: REPO, data: root, count: String(keys.length), batch,
-    rawExamples: job.workflow === 'w5' ? '' : await examples(join(enrich, 'raw'), skip, 3),
+    rawExamples: mode === 'w5' ? '' : await examples(join(enrich, 'raw'), skip, 3),
     strategyExamples: job.workflow === 'w1' ? '' : await examples(join(enrich, 'strategy'), skip, 2) };
   const templates = join(REPO, 'scripts', 'astra', 'templates');
   const template = await readFile(join(templates, `${job.workflow}.md`), 'utf8');
@@ -147,7 +158,7 @@ async function work(slot: Slot, job: Job, root: string) {
   await mkdir(join(astra, 'runs'), { recursive: true });
   await writeFile(`${base}-brief.md`, brief);
   const protocol = mode === 'w1' ? 'w1-profile.md' : 'w5-strategy.md';
-  const runId = await beginRun({ parentRunId: null, workflow: mode === 'w1' ? 'W1' : 'W5', operation: job.workflow === 'w1w5' ? 'astra profile+strategy' : `astra ${mode}`,
+  const runId = await beginRun({ parentRunId: null, workflow: mode === 'w1' ? 'W1' : 'W5', operation: job.workflow === 'w1w5' ? 'astra profile+strategy' : job.workflow === 'w5t' ? 'astra shorten strategies' : `astra ${mode}`,
     protocol: { version: null, hash: sha(template + await readFile(join(REPO, 'docs', 'workflows', protocol), 'utf8')) },
     source: 'chatgpt', agent: 'astra-runner', model: MODELS[0], launchFolder: REPO, workerFolder: slot.folder,
     batch: { id: batch, manifest: `enrich/batches/${basename(file)}`, hash: sha(text), planned: keys.length } });
@@ -156,7 +167,7 @@ async function work(slot: Slot, job: Job, root: string) {
   const result = await codex(slot, brief, base, enrich);
   if (result.capacity) capacityUntil = Date.now() + CAPACITY_WAIT_MS;
   const raw = mode === 'w1' ? await writtenSince(join(enrich, 'raw'), keys, started) : [];
-  const strategies = job.workflow === 'w1' ? [] : await writtenSince(join(enrich, 'strategy'), keys, started);
+  const strategies = job.workflow === 'w1' ? [] : await writtenSince(join(enrich, 'strategy'), keys, started, true);
   const pushed = (raw.length ? await push('W1', runId, raw) : 0) + (strategies.length ? await push('W5', runId, strategies) : 0);
   const written = raw.length + strategies.length;
   const why = slot.cancelled ? 'Stopped from the page.' : result.capacity ? 'Both models were at capacity.' : !result.finished ? 'The worker ended without a final message.' : null;
@@ -172,6 +183,33 @@ async function work(slot: Slot, job: Job, root: string) {
   log(`run ${job.id.slice(0, 8)} ${outcome}: ${keys.length} LPs, ${written} files, ${pushed} pushed`);
 }
 
+const git = async (...args: string[]) => (await run('git', args, { cwd: REPO, timeout: 120_000 })).stdout.trim();
+let lastUpdate = 0, heldBack = '';
+
+/** Fast-forward the live checkout to origin/master; true when new code landed and the runner should restart on it. */
+async function selfUpdate(): Promise<boolean> {
+  if (!SUPERVISED || Date.now() - lastUpdate < UPDATE_MS) return false;
+  lastUpdate = Date.now();
+  try {
+    if (await git('rev-parse', '--abbrev-ref', 'HEAD') !== 'master' || await git('status', '--porcelain', '--untracked-files=no')) return false;
+    await git('fetch', '--quiet', 'origin', 'master');
+    const [head, next] = [await git('rev-parse', 'HEAD'), await git('rev-parse', 'origin/master')];
+    if (head === next) return false;
+    await git('merge-base', '--is-ancestor', head, next);
+    if (/^package(-lock)?\.json$/m.test(await git('diff', '--name-only', head, next))) {
+      if (heldBack !== next) log(`Not updating to ${next.slice(0, 7)}: its dependencies changed. Run npm ci in the live checkout, then restart the runner.`);
+      heldBack = next;
+      return false;
+    }
+    await git('merge', '--ff-only', '--quiet', next);
+    log(`Updated the live checkout ${head.slice(0, 7)} → ${next.slice(0, 7)}; restarting on the new code.`);
+    return true;
+  } catch (e) {
+    log(`update check skipped: ${e instanceof Error ? e.message.split('\n')[0] : e}`);
+    return false;
+  }
+}
+
 async function main() {
   const root = await realRoot();
   const astra = join(root, 'workflows', 'astra');
@@ -184,7 +222,7 @@ async function main() {
     const idle = pool.filter((s) => !s.job);
     const waiting = capacityUntil > Date.now();
     try {
-      const answer = await call({ op: 'poll', host: hostname().slice(0, 60), inWindow, night, free: waiting ? 0 : idle.length,
+      const answer = await call({ op: 'poll', host: hostname().slice(0, 60), workflows: WORKFLOWS, inWindow, night, free: waiting ? 0 : idle.length,
         held: pool.flatMap((s) => (s.job ? [s.job.id] : [])), slots: pool.map((s) => ({ slot: s.name, job: s.job?.id ?? null })),
         capacityUntil: waiting ? new Date(capacityUntil).toISOString() : null, note: null });
       window = answer.window ?? window;
@@ -203,6 +241,7 @@ async function main() {
     } catch (e) {
       log(`poll failed: ${e instanceof Error ? e.message : e}`);
     }
+    if (pool.every((s) => !s.job) && await selfUpdate()) process.exit(0);
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 }

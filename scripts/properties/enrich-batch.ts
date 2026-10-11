@@ -44,4 +44,34 @@ export async function enrichBatchProperties(check: Check) {
       stdout.includes('4 of 11 listed keys not selected (no finding: 1, unresolved: 1, not a candidate: 1, open batch: 1, already batched: 0)'),
       'Unlisted LPs stay out; missing, unresolved, unknown and reserved targets are counted explicitly.');
   } finally { await rm(scratch, { recursive: true, force: true }); }
+
+  // --tighten (W5 1.13): strategies before 1.13, furthest pursuit status first, back to Selected, either layout.
+  const tight = await mkdtemp(join(tmpdir(), 'batch-tighten-'));
+  const tdir = join(tight, 'data/demo/enrich');
+  try {
+    for (const folder of ['raw', 'strategy/spv-invented', 'batches']) await mkdir(join(tdir, folder), { recursive: true });
+    const fund = 'Invented Fund', spv = 'Invented SPV';
+    const rows: Array<[string, Array<[string, string]>]> = [['selected', [[fund, 'selected']]], ['connecting', [[fund, 'connecting']]],
+      ['committed', [[fund, 'committed']]], ['done', [[fund, 'committed']]], ['sourcing', [[fund, 'sourcing']]], ['spvOnly', [[fund, 'selected'], [spv, 'discussing']]]];
+    const cands = rows.map(([key, ps]) => ({ key, name: `Invented ${key}`, domains: [], org: null,
+      pursuits: ps.map(([vehicle, status]) => ({ vehicle, status })), contact: { meetings: 0, groupMeetings: 0, lastFromThem: null, lastTouch: null } }));
+    const jsonl = (xs: unknown[]) => xs.map(x => JSON.stringify(x)).join('\n');
+    await writeFile(join(tdir, 'candidates.jsonl'), jsonl(cands));
+    await writeFile(join(tdir, 'research-set.jsonl'), jsonl(cands));
+    await writeFile(join(tdir, 'vehicles.json'), JSON.stringify([{ slug: 'fund-invented', name: fund }, { slug: 'spv-invented', name: spv }]));
+    const strategy = (key: string, version: string, vehicle: string) => JSON.stringify({ key, made: { at: '2026-10-01', version }, ask: { vehicle } });
+    for (const key of ['selected', 'connecting', 'committed', 'sourcing']) await writeFile(join(tdir, 'strategy', `${key}.json`), strategy(key, '1.12', fund));
+    await writeFile(join(tdir, 'strategy', 'done.json'), strategy('done', '1.13', fund));
+    await writeFile(join(tdir, 'strategy', 'spvOnly.json'), strategy('spvOnly', '1.13', fund));
+    await writeFile(join(tdir, 'strategy/spv-invented/spvOnly.json'), strategy('spvOnly', '1.10', 'spv-invented'));
+    await writeFile(join(tdir, 'batches/astra-other-01.txt'), 'connecting\n');
+    await promisify(execFile)(process.execPath,
+      ['--import', import.meta.resolve('tsx'), resolve('scripts/enrich-batch.ts'), 'w5', 'tt', '1', '--tighten'],
+      { cwd: tight, env: { ...process.env, DATA_PROFILE: 'demo', DATABASE_URL: '', TSX_TSCONFIG_PATH: resolve('tsconfig.json') } });
+    const files = (await readdir(join(tdir, 'batches'))).filter(f => f.startsWith('tt')).sort();
+    const order = (await Promise.all(files.map(f => readFile(join(tdir, 'batches', f), 'utf8')))).map(t => t.trim());
+    check('W5 --tighten takes pre-1.13 strategies furthest first, back to Selected, in either layout, skipping open Astra batches',
+      JSON.stringify(order) === JSON.stringify(['committed', 'spvOnly', 'selected']),
+      `Invented fixture ordered ${JSON.stringify(order)}; 1.13 files, Sourcing and an LP held by another Astra batch stay out.`);
+  } finally { await rm(tight, { recursive: true, force: true }); }
 }
