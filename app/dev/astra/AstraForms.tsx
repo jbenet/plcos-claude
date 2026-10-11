@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { astraSettingsAction, queueAstraAction } from './actions';
+import { astraCommandAction, astraSettingsAction, queueAstraAction } from './actions';
 import s from './astra.module.css';
 
 const WORKFLOWS: Array<[string, string]> = [['w1w5', 'Profile, then strategy (W1+W5)'], ['w1', 'Profile (W1)'], ['w5', 'Strategy (W5)'], ['w5t', 'Shorten strategies (W5)']];
@@ -62,6 +62,24 @@ export function AutoForm(p: { autoOn: boolean; autoWorkflow: string; autoBatches
           <select name="windowEnd" defaultValue={p.windowEnd}>{HOURS.map((h) => <option key={h} value={h}>{hour(h)}</option>)}</select>
         </label>
         <button className="btn" disabled={pending}>{pending ? 'Saving…' : 'Save'}</button>
+      </form>
+      <div aria-live="polite">
+        {state.message && <p role="status" className={s.msg}>{state.message}</p>}
+        {state.error && <p role="alert" className={s.err}>{state.error}</p>}
+      </div>
+    </>
+  );
+}
+
+/** Check, Restart, Update: the runner takes one on its next poll and answers in the list below. */
+export function CommandButtons() {
+  const [state, action, pending] = useActionState(astraCommandAction, {});
+  return (
+    <>
+      <form action={action} className={s.form}>
+        <button className="btn" name="op" value="diagnose" disabled={pending}>Check</button>
+        <button className="btn" name="op" value="update" disabled={pending}>Update</button>
+        <button className="btn" name="op" value="restart" disabled={pending}>Restart</button>
       </form>
       <div aria-live="polite">
         {state.message && <p role="status" className={s.msg}>{state.message}</p>}

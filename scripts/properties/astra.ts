@@ -36,7 +36,7 @@ export async function astraProperties(check: Check) {
     if ('response' in guard) return { status: guard.response.status, body: await guard.response.json() as Record<string, any> };
     return astraCall(guard.caller, req(), { db }) as Promise<{ status: number; body: Record<string, any> }>;
   };
-  const poll = (o: Partial<{ inWindow: boolean; free: number; held: string[]; night: string; workflows: string[] }> = {}) =>
+  const poll = (o: Partial<{ inWindow: boolean; free: number; held: string[]; night: string; workflows: string[]; commands: string[]; commit: string; startedAt: string }> = {}) =>
     call(admin.secret, { op: 'poll', host: 'props', inWindow: false, night: '2026-10-10', free: 4, held: [], slots: [{ slot: 's1', job: null }], ...o });
 
   check('astra refuses a push-only token', (await call(pushOnly.secret, { op: 'poll' })).status === 403, 'push-only');
@@ -102,4 +102,22 @@ export async function astraProperties(check: Check) {
     try { return fill(await readFile(`scripts/astra/templates/${w}.md`, 'utf8'), { ...values, common: 'COMMON' }).startsWith('COMMON'); } catch { return false; }
   }));
   check('astra has a brief template the runner can fill for every workflow', filled.every(Boolean), JSON.stringify(filled));
+
+  // Runner commands (Juan, 11 Oct 2026: "built some RC type thing for the runner on the Mac so you can help admin it").
+  const issued = await call(admin.secret, { op: 'command', command: 'diagnose' });
+  const again = await call(admin.secret, { op: 'command', command: 'diagnose' });
+  const shell = await call(admin.secret, { op: 'command', command: 'rm -rf ~' });
+  check('astra issues a runner command by token, once per kind, from the fixed list only', issued.status === 200 && again.body.existing === true
+    && again.body.id === issued.body.id && shell.status === 422, `${issued.status} ${JSON.stringify(again.body)} ${shell.status}`);
+  const oldRunner = await poll({ free: 0 });
+  const newRunner = await poll({ free: 0, commands: ['diagnose', 'restart', 'update', 'format-disk'], commit: 'abcdef1234567', startedAt: '2026-10-11T23:00:00Z' });
+  check('astra hands commands only to a runner that takes them, and records its code', oldRunner.body.commands.length === 0
+    && newRunner.body.commands.length === 1 && newRunner.body.commands[0].op === 'diagnose' && (await readRunner(db)).code === 'abcdef1234567',
+    `${JSON.stringify(oldRunner.body.commands)} ${JSON.stringify(newRunner.body.commands)}`);
+  const answered = await call(admin.secret, { op: 'command-report', id: issued.body.id, status: 'done', message: 'Checked.',
+    result: { head: 'abcdef123456', behind: 2, supervised: true, names: ['Invented Person'], nested: { a: 1 }, 'bad key!': 'x' } });
+  const twice = await call(admin.secret, { op: 'command-report', id: issued.body.id, status: 'done', result: {} });
+  const done = (await call(admin.secret, { op: 'status' })).body.commands.find((c: { id: string }) => c.id === issued.body.id);
+  check('astra keeps short scalar command results only, and takes one answer', answered.status === 200 && twice.status === 409 && done?.status === 'done'
+    && done.result.behind === 2 && !('names' in done.result) && !('nested' in done.result) && Object.keys(done.result).length === 3, JSON.stringify(done));
 }

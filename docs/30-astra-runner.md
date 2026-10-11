@@ -43,14 +43,28 @@ permission check refused. The runner takes Claude out of the launch path entirel
 A run that wrote nothing gives its LPs back (the batch file is renamed `.unrun`). When both models are at capacity
 the runner claims nothing for 30 minutes. Briefs and logs stay under `plcos-data/real/workflows/astra/`.
 
-## Keeping the runner current
+## Keeping the runner current, and admin from the page
 
-Each poll names the workflows the runner can run (`workflows`); the server hands it only those, and a runner that
-names none (one from before `w5t`) gets only W1+W5, W1 and W5. A runner started by launchd or the Astra app (both
-restart it; `ASTRA_SUPERVISED=1`) checks every ten minutes while idle: on `master` with no local changes, it
-fast-forwards the live checkout to `origin/master` and exits so it comes back on the new code. It never updates
-when the dependencies changed (`package.json`, `package-lock.json`); it logs that `npm ci` and a restart are
-needed. Started by hand (`npm run astra`), it never updates itself.
+Juan, 11 Oct 2026: "built some RC type thing for the runner on the Mac so you can help admin it".
+
+- **Commands** (migration 026, `platform.astra_command`). Developer → Astra has **Check**, **Update** and **Restart**;
+  an Admin token does the same with `op: "command"`, so a Claude session holding one can admin the runner without
+  touching the Mac. The runner takes a command on its next poll and answers with `op: "command-report"`; the page
+  lists the last few. Check reports the code it started on, the checkout's commit, how far behind master it is, local
+  changes and whether the fetch worked. Update fast-forwards to `origin/master` (with `npm ci` when the dependencies
+  changed) and restarts; Restart restarts. Both wait for running batches and claim nothing new meanwhile. Three fixed
+  commands: the server can never hand the runner a command line.
+- **Which code.** Each poll carries the commit the runner started on (the page's Code), the workflows it can run
+  (`workflows`; a runner that names none gets only W1+W5, W1 and W5) and the commands it takes (`commands`; one that
+  names none is given none).
+- **Restarts.** Restart and Update exit the runner; launchd (the login item) and the Astra app start it again. A runner
+  started by hand with `npm run astra` stays stopped, and says so in its answer.
+- **Self-update.** Under launchd or the Astra app (found by `ASTRA_SUPERVISED=1`, launchd's label, or the app up its
+  parent chain), an idle runner fetches every ten minutes and restarts whenever the checkout differs from the code it
+  started on, so a pull made by hand also takes effect. It never updates with local changes, off `master`, or when
+  the dependencies changed (that waits for Update).
+- **Fetching.** HTTPS first for a GitHub remote, through git's credential helper (`gh auth git-credential` on the
+  Mac), since 1Password's SSH agent can refuse to sign for a background process; SSH in batch mode is the fallback.
 
 ## Not yet
 

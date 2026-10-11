@@ -4,7 +4,7 @@ import { requireAction } from '@/lib/authz/server';
 import { revalidatePath } from 'next/cache';
 import { getDb } from '@/lib/db';
 import { appendAudit } from '@/modules/platform';
-import type { AstraWorkflow } from '@/lib/astra/jobs';
+import type { AstraCommandOp, AstraWorkflow } from '@/lib/astra/jobs';
 
 /**
  * Developer → Astra (docs/30-astra-runner.md): a person queues, cancels and schedules the Mac runner's Astra runs.
@@ -52,5 +52,20 @@ export async function astraSettingsAction(_prev: State, form: FormData): Promise
     return { message: 'paused' in settings ? (settings.paused ? 'Paused: the runner starts nothing new.' : 'Resumed.') : 'Saved.' };
   } catch {
     return { error: 'Not saved: check the numbers (batches 1–12, batch size 1–20, hours 0–23).' };
+  }
+}
+
+/** Check, Restart or Update the Mac runner: it takes the command on its next poll (Restart and Update wait for running batches). */
+export async function astraCommandAction(_prev: State, form: FormData): Promise<State> {
+  const user = await requireAction('app/dev/astra/actions.ts#astraCommandAction', _prev, form);
+  const { issueCommand, COMMAND_LABEL } = await import('@/lib/astra/jobs');
+  const op = String(form.get('op')) as AstraCommandOp;
+  try {
+    const { existing } = await issueCommand(await getDb(), user.id, op);
+    await appendAudit({ actorId: user.id, action: 'astra.command', subjectType: 'astra_runner', subjectId: null, detail: { op, existing } });
+    revalidatePath('/dev/astra');
+    return { message: existing ? `${COMMAND_LABEL[op]} is already waiting for the runner.` : `${COMMAND_LABEL[op]} sent; the runner takes it on its next poll.` };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Not sent.' };
   }
 }
