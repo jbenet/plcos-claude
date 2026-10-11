@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feedback</title>
+<style>
+  :root { --bg: #fbfaf7; --ink: #1d1b16; --mute: #6f6a60; --line: #e3dfd6; --accent: #5b45d9; --card: #fff; --bad: #b42318; --ok: #12784a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1b1a17; --ink: #f2efe8; --mute: #a39d91; --line: #3a3731; --accent: #a594ff; --card: #24221e; --bad: #f97066; --ok: #47cd89; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px 20px; background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, system-ui, sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 12px; font-weight: 650; }
+  label { display: block; color: var(--mute); margin: 0 0 6px; }
+  textarea { width: 100%; min-height: 170px; resize: vertical; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; }
+  textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  select, button { font: inherit; padding: 5px 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+  button { cursor: pointer; } button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; margin-left: auto; }
+  .shot { margin-top: 10px; display: none; position: relative; }
+  .shot img { max-width: 100%; max-height: 180px; border: 1px solid var(--line); border-radius: 6px; display: block; }
+  .shot button { position: absolute; top: 6px; right: 6px; font-size: 12px; padding: 2px 8px; }
+  .check { display: inline-flex; gap: 6px; align-items: center; color: var(--mute); }
+  .status { margin-top: 10px; min-height: 20px; color: var(--mute); }
+  .status.bad { color: var(--bad); } .status.ok { color: var(--ok); }
+  .hint { color: var(--mute); font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>Feedback</h1>
+  <label for="body">Enter any feedback:</label>
+  <textarea id="body" placeholder="What happened, or what would help? Markdown works." autofocus></textarea>
+  <div class="row">
+    <select id="kind" aria-label="Kind"><option value="bug">Bug</option><option value="request">Request</option><option value="question">Question</option><option value="chore">Chore</option></select>
+    <select id="priority" aria-label="Priority"><option>P0</option><option>P1</option><option selected>P2</option><option>P3</option></select>
+    <button id="pick" title="Drag over a part of the screen; Esc cancels">Pick a part of the screen</button>
+  </div>
+  <div class="shot" id="shot"><img id="shotimg" alt="Screenshot to attach"><button id="drop">Remove</button></div>
+  <div class="row">
+    <label class="check"><input type="checkbox" id="log"> Attach the runner's last 40 log lines</label>
+    <button class="primary" id="send">Send</button>
+  </div>
+  <div class="status" id="status"></div>
+  <p class="hint">Filed on Developer → Issues as you, with the runner's state. ⌘↩ sends.</p>
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const $ = (id) => document.getElementById(id);
+  let shot = null;
+  const say = (text, cls = '') => { $('status').textContent = text; $('status').className = 'status ' + cls; };
+  $('pick').onclick = async () => {
+    say('Drag over the part of the screen to capture…');
+    try {
+      const url = await invoke('capture_region');
+      if (url) { shot = url; $('shotimg').src = url; $('shot').style.display = 'block'; say(''); } else say('No screenshot taken.');
+    } catch (e) { say(String(e), 'bad'); }
+  };
+  $('drop').onclick = () => { shot = null; $('shot').style.display = 'none'; };
+  async function send() {
+    const body = $('body').value.trim();
+    if (!body) return say('Say what happened first.', 'bad');
+    $('send').disabled = true; say('Sending…');
+    try {
+      const id = await invoke('file_feedback', { body, kind: $('kind').value, priority: $('priority').value, screenshot: shot, includeLog: $('log').checked });
+      say(id ? `Filed as issue ${id}. Thanks.` : 'Saved on the server; it will be filed in a moment.', 'ok');
+      $('body').value = ''; shot = null; $('shot').style.display = 'none';
+    } catch (e) { say(String(e), 'bad'); }
+    $('send').disabled = false;
+  }
+  $('send').onclick = send;
+  document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); });
+</script>
+</body>
+</html>

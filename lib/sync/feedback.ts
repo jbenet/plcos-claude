@@ -16,6 +16,7 @@ import type { PushAnswer } from './push';
  *   GET  ?ids=0201,0202            → 200 { items: [{ …issue, markdown }], missing } (the signal link's shape)
  *   GET  ?id=0201&file=<path>      → the image, only a path that issue lists
  *   POST { id, status, note? }     → 200 { issue: { id, status, closedAt } }; `note` is appended to the body
+ *   POST ?op=file { report }       → 202 { journaled, clientId, id? }: files an issue as the token's holder
  *
  * Issue text is real data (docs/agent-rules/real-data.md): it is returned to the token's holder and never
  * written to the audit row, which carries ids, statuses and counts.
@@ -99,4 +100,42 @@ export async function setFeedbackStatus(caller: SyncCaller, request: Request, o:
   if (!await sink.get(id)) return answer(404, 'invalid', { error: 'No issue has that id.' }, { reason: 'unknown-issue', id });
   const issue = await sink.update(id, { status, note });
   return answer(200, 'ok', { issue: { id: issue.id, status: issue.status, closedAt: issue.closedAt ?? null } }, { id, status, noted: Boolean(note?.trim()) });
+}
+
+const MAX_REPORT = 12 * 1024 * 1024;
+
+/**
+ * POST ?op=file { title?, body, kind?, priority?, page?, context?, screenshots?, images?, clientId? }
+ *   → 202 { journaled, clientId, id? }: files an issue as the token's holder, the way the feedback box does
+ *   (journal first, file after). For apps without a browser session, such as the Astra menu-bar app
+ *   (desktop/astra). The text is never written to the audit row.
+ */
+export async function fileFeedbackByToken(caller: SyncCaller, request: Request, o: { root?: string; filesHere?: boolean } = {}): Promise<PushAnswer> {
+  const answer = async (status: number, outcome: 'ok' | 'refused' | 'invalid' | 'error', body: Record<string, unknown>, detail: Record<string, unknown> = {}) => {
+    await auditSync(caller, 'feedback', outcome, { op: 'file', ...detail });
+    return { status, body: { ok: status < 300, ...body } };
+  };
+  const { feedbackHome } = await import('@/config/ports');
+  if (config.data.copyTakenAt || !(o.filesHere ?? feedbackHome(config.data.profile).filesHere)) {
+    return answer(403, 'refused', { error: 'Feedback is filed on the live server.' }, { reason: 'not-live' });
+  }
+  const text = await request.text();
+  if (text.length > MAX_REPORT) return answer(413, 'invalid', { error: 'The report is too large.' }, { reason: 'size' });
+  let raw: Record<string, unknown>;
+  try { raw = JSON.parse(text); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return answer(422, 'invalid', { error: 'Send a report object.' }, { reason: 'shape' });
+  const { isClientId } = await import('@/lib/feedback-journal');
+  if (raw.clientId !== undefined && !isClientId(raw.clientId)) return answer(400, 'invalid', { error: 'The report\'s client id is malformed.' }, { reason: 'client-id' });
+  const { checkReport, journal } = await import('@/lib/feedback-inbox');
+  const checked = checkReport(raw);
+  if (!checked.ok) return answer(checked.status, 'invalid', { error: checked.error }, { reason: 'report' });
+  const { newRequestKey } = await import('@/lib/request-key');
+  const { join } = await import('node:path');
+  const clientId = (raw.clientId as string | undefined) ?? newRequestKey();
+  const done = await journal(o.root ?? join(process.cwd(), config.issues.dir), {
+    kind: 'issue', clientId, receivedAt: new Date().toISOString(), reporter: caller.user.handle, request: checked.value,
+  });
+  if (!o.root) setImmediate(() => { void import('@/lib/feedback-ingest').then((m) => m.kickIngest()).catch(() => undefined); });
+  return answer(202, 'ok', { journaled: true, clientId, repeat: done.already !== null, ...(done.filed?.issueId ? { id: done.filed.issueId } : {}) },
+    { shots: checked.value.screenshots.length, repeat: done.already !== null });
 }

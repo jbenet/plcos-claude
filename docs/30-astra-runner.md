@@ -21,7 +21,8 @@ permission check refused. The runner takes Claude out of the launch path entirel
   or as a login item with `npm run astra:install` (or double-click `scripts/astra/Install Astra runner.command`
   in Finder). It runs as Juan, so no Claude permission check is ever involved. `npm run astra:uninstall` removes it.
 - **The Astra app** (`desktop/astra`, Tauri; 11 Oct 2026). A menu-bar app that runs and restarts the runner, shows
-  its state, and opens Developer → Astra in its own window. It replaces the login item; use one or the other.
+  its state and the server's, queues runs (`op: "queue"`), opens Developer → Astra in its own window, and files
+  feedback by token (`/api/sync/feedback?op=file`). It replaces the login item; use one or the other.
 
 ## One run
 

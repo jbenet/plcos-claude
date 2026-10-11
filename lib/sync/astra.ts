@@ -10,6 +10,9 @@ import type { PushAnswer } from './push';
  *   POST { op: "poll", host, inWindow, night, free, held: [jobId], slots: [{slot, job}], capacityUntil, note }
  *        → 200 { paused, batchSize, window, jobs: [{ id, workflow, size }], cancel: [jobId] }
  *   POST { op: "report", id, status: "running" | "done" | "failed", batch?, slot?, model?, counts?, message? }
+ *   POST { op: "queue", workflow, size, count, runNow } → 200 { queued }: what Queue runs does on the page, for the
+ *        Astra menu-bar app (desktop/astra), queued as the token's holder.
+ *   POST { op: "status" } → 200 { runner, up, jobs }: the page's runner state and recent runs (counts, no names).
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
@@ -50,5 +53,19 @@ export async function astraCall(caller: SyncCaller, request: Request, o: { db?: 
     if (!ok) return answer(409, 'refused', { error: 'That run is not claimed or running (it may have been cancelled).' }, { op: 'report', reason: 'state' });
     return status === 'running' ? { status: 200, body: { ok: true } } : answer(200, 'ok', {}, { op: 'report', status });
   }
-  return answer(422, 'invalid', { error: 'op must be poll or report.' }, { reason: 'op' });
+  if (input?.op === 'queue') {
+    const workflow = astra.ASTRA_WORKFLOWS.find((w) => w === input.workflow);
+    if (!workflow || typeof input.runNow !== 'boolean') return answer(422, 'invalid', { error: 'A queue call needs workflow, size, count and runNow.' }, { op: 'queue', reason: 'shape' });
+    try {
+      const queued = await astra.enqueue(db, caller.user.id, { workflow, size: Number(input.size), count: Number(input.count), runNow: input.runNow });
+      return answer(200, 'ok', { queued }, { op: 'queue', workflow, count: queued, now: input.runNow });
+    } catch (e) {
+      return answer(422, 'invalid', { error: e instanceof Error ? e.message : 'Not queued.' }, { op: 'queue', reason: 'enqueue' });
+    }
+  }
+  if (input?.op === 'status') {
+    const runner = await astra.readRunner(db);
+    return { status: 200, body: { ok: true, runner, up: astra.runnerUp(runner), jobs: await astra.recentJobs(db, 20) } };
+  }
+  return answer(422, 'invalid', { error: 'op must be poll, report, queue or status.' }, { reason: 'op' });
 }
