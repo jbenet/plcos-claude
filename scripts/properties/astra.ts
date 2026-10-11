@@ -72,4 +72,18 @@ export async function astraProperties(check: Check) {
   check('astra records the runner\'s heartbeat and slots', Boolean(r.heartbeatAt) && r.host === 'props' && r.slots.length === 1, JSON.stringify(r.slots));
   const badPoll = await call(admin.secret, { op: 'poll', inWindow: true });
   check('astra refuses a poll without a night', badPoll.status === 422, String(badPoll.status));
+
+  const before = (await recentJobs(db)).length;
+  const queued = await call(admin.secret, { op: 'queue', workflow: 'w1w5', size: 3, count: 2, runNow: true });
+  const after = await recentJobs(db);
+  check('astra queues runs by token, as a person does', queued.status === 200 && queued.body.queued === 2 && after.length === before + 2
+    && after.filter((j) => j.source === 'person' && j.runNow && j.size === 3).length >= 2, JSON.stringify(queued.body));
+  const tooMany = await call(admin.secret, { op: 'queue', workflow: 'w1w5', size: 3, count: 50, runNow: true });
+  const noFlow = await call(admin.secret, { op: 'queue', workflow: 'rm -rf', size: 3, count: 1, runNow: true });
+  check('astra refuses a queue call out of bounds or with an unknown workflow', tooMany.status === 422 && noFlow.status === 422, `${tooMany.status} ${noFlow.status}`);
+  const status = await call(admin.secret, { op: 'status' });
+  check('astra status gives the runner and recent runs', status.status === 200 && typeof status.body.up === 'boolean' && status.body.runner.host === 'props'
+    && Array.isArray(status.body.jobs) && status.body.jobs.length > 0, JSON.stringify(Object.keys(status.body)));
+  check('astra status and queue refuse a push-only token', (await call(pushOnly.secret, { op: 'status' })).status === 403
+    && (await call(pushOnly.secret, { op: 'queue', workflow: 'w1', size: 3, count: 1, runNow: true })).status === 403, 'push-only');
 }

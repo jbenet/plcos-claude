@@ -321,4 +321,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Status moves with the mail](entries/status-from-mail.md)
 - [Travel and Events sorted from your own calendar, and only LP meetings](entries/calendar-entries-sorted.md)
 - [The Astra runner, run from Developer → Astra](entries/astra-runner.md)
+- [The Astra app — a menu-bar app for the Astra runner, with feedback](entries/astra-app.md)
 - [Three shorter LP pages to compare](entries/lp-designs.md)
