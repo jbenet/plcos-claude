@@ -17,3 +17,8 @@ Juan, 11 Oct 2026: "revamping LP pages + strategy". The review, the strategy and
 
 Nothing a card computes, records or guards changed. Checks: tsc, boundaries, props, and demo renders at desktop
 and phone widths and in dark mode.
+
+| Shot | What it shows |
+| --- | --- |
+| ![The plan on an invented LP's page](docs/changelog/shots/lp-plan-first/01-plan.webp) | The plan with a W5 strategy (invented, added for the shot): the suggested next step past its date, the best route, the ask, "written before the latest", a risk and an open question as chips. |
+| ![The plan with a restriction](docs/changelog/shots/lp-plan-first/02-restriction.webp) | No strategy yet, and a restriction in red at the top of the plan. |
