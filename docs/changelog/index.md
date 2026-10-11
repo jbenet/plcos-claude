@@ -321,3 +321,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Status moves with the mail](entries/status-from-mail.md)
 - [Travel and Events sorted from your own calendar, and only LP meetings](entries/calendar-entries-sorted.md)
 - [The Astra runner, run from Developer → Astra](entries/astra-runner.md)
+- [The LP page opens on the plan](entries/lp-plan-first.md)
