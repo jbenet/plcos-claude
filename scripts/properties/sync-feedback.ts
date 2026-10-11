@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { syncGuard } from '../../lib/sync/auth';
 import { SYNC_ADMIN, SYNC_PUSH } from '../../lib/sync/scopes';
-import { readFeedback, setFeedbackStatus } from '../../lib/sync/feedback';
+import { fileFeedbackByToken, readFeedback, setFeedbackStatus } from '../../lib/sync/feedback';
+import { readdir } from 'node:fs/promises';
 import { fileIssueSink } from '../../lib/issues/file';
 import { createMcpToken, type AppUser } from '../../modules/platform';
 import { freshDb, type Check } from './harness';
@@ -81,6 +82,24 @@ export async function syncFeedbackProperties(check: Check) {
     check('Feedback by token: every call is audited, and no audit row carries issue text',
       audit.length >= 10 && audit.every((r) => r.detail.tool === 'feedback_queue' && !JSON.stringify(r.detail).includes('grey') && !JSON.stringify(r.detail).includes('Invented')),
       `${audit.length} rows`);
+
+    const inbox = await mkdtemp(join(tmpdir(), 'plcos-feedback-inbox-'));
+    const file = async (secret: string, body: unknown, filesHere = true) => {
+      const g = await syncGuard(req(secret, '?op=file', body), 'feedback');
+      if ('response' in g) return { status: g.response.status, body: {} as Record<string, any> };
+      return fileFeedbackByToken(g.caller, req(secret, '?op=file', body), { root: inbox, filesHere }) as Promise<any>;
+    };
+    const filed = await file(admin.secret, { body: 'Invented: the tray says stopped.', kind: 'bug', page: '/dev/astra', context: { source: 'astra-app' }, screenshots: [`data:image/png;base64,${pixel}`] });
+    const again = await file(admin.secret, { body: 'Invented: the tray says stopped.', clientId: filed.body.clientId });
+    const journaled = JSON.stringify(await readdir(inbox, { recursive: true }));
+    check('Feedback by token: an Admin files an issue, journaled first, once per client id',
+      filed.status === 202 && filed.body.journaled === true && again.status === 202 && again.body.repeat === true && journaled.includes(filed.body.clientId), `${filed.status} ${again.body.repeat} ${journaled.slice(0, 120)}`);
+    const fileByPush = await file(pushOnly.secret, { body: 'Invented.' });
+    const empty = await file(admin.secret, { body: '' });
+    const branch = await file(admin.secret, { body: 'Invented.' }, false);
+    check('Feedback by token: filing refuses a push token, an empty report, and a server that does not file',
+      fileByPush.status === 403 && empty.status === 400 && branch.status === 403, `${fileByPush.status} ${empty.status} ${branch.status}`);
+    await rm(inbox, { recursive: true, force: true });
   } finally {
     await rm(abs, { recursive: true, force: true });
   }
