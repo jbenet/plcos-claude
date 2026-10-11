@@ -12,3 +12,11 @@ Juan, 11 Oct 2026, picking design A: "SGTM -- go for it, lets do this." Step 1 o
 - **Empty cards are gone**: Next moves, What we know and Open questions show only when they have something.
 
 Next: tabs with their own addresses, then shorter strategies from W5. Notes: `docs/strategy/lp-pages.md` §3a.
+
+![The header](../shots/lp-header/01-header.webp)
+![A restriction, in red under the chips](../shots/lp-header/02-restriction.webp)
+![The ladder, opened in place](../shots/lp-header/03-ladder-open.webp)
+![The whole page](../shots/lp-header/04-full.webp)
+![On a phone](../shots/lp-header/05-phone.webp)
+![Dark](../shots/lp-header/06-dark.webp)
+![Dark, with a restriction](../shots/lp-header/07-dark-restriction.webp)
