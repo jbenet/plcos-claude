@@ -26,7 +26,19 @@ export interface AstraRunner {
   paused: boolean; autoOn: boolean; autoWorkflow: AstraWorkflow; autoBatches: number; batchSize: number;
   windowStart: number; windowEnd: number; heartbeatAt: string | null; host: string | null;
   slots: Array<{ slot: string; job: string | null }>; inWindow: boolean | null; capacityUntil: string | null; note: string | null;
+  /** The commit the runner started on, and when (runners from before 026 send neither). */
+  code: string | null; codeStartedAt: string | null;
 }
+/** Commands for the runner (migration 026): a fixed list, never a command line. */
+export const ASTRA_COMMANDS = ['diagnose', 'restart', 'update'] as const;
+export type AstraCommandOp = (typeof ASTRA_COMMANDS)[number];
+export const COMMAND_LABEL: Record<AstraCommandOp, string> = { diagnose: 'Check', restart: 'Restart', update: 'Update' };
+export interface AstraCommand {
+  id: string; op: AstraCommandOp; status: 'queued' | 'sent' | 'done' | 'failed'; result: Record<string, string | number | boolean>;
+  message: string | null; createdAt: string; sentAt: string | null; finishedAt: string | null;
+}
+/** A command the runner took but never answered: failed after this long (a Restart or Update waits for running batches, up to 3 hours each). */
+const COMMAND_STALE = '4 hours';
 
 const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 const JOB_COLUMNS = `id::text, workflow, size, run_now, source, night::text, status, batch, slot, model, counts, message,
@@ -43,7 +55,8 @@ export async function readRunner(db: Queryable): Promise<AstraRunner> {
   if (!r) throw new Error('The Astra runner row is missing; migration 024 did not apply.');
   return { paused: r.paused, autoOn: r.auto_on, autoWorkflow: r.auto_workflow, autoBatches: r.auto_batches, batchSize: r.batch_size,
     windowStart: r.window_start, windowEnd: r.window_end, heartbeatAt: iso(r.heartbeat_at), host: r.host,
-    slots: Array.isArray(r.slots) ? r.slots : [], inWindow: r.in_window, capacityUntil: iso(r.capacity_until), note: r.note };
+    slots: Array.isArray(r.slots) ? r.slots : [], inWindow: r.in_window, capacityUntil: iso(r.capacity_until), note: r.note,
+    code: r.code ?? null, codeStartedAt: iso(r.code_started_at) };
 }
 
 export async function recentJobs(db: Queryable, limit = 60): Promise<AstraJob[]> {
@@ -97,20 +110,26 @@ export async function saveSettings(db: Queryable, actor: string, s: Partial<Pick
 
 export interface Poll {
   host: string; inWindow: boolean; night: string; free: number; held: string[]; workflows?: readonly AstraWorkflow[];
+  commands?: readonly AstraCommandOp[]; code?: string | null; codeStartedAt?: string | null;
   slots: Array<{ slot: string; job: string | null }>; capacityUntil: string | null; note: string | null;
 }
-export interface PollAnswer { paused: boolean; batchSize: number; window: [number, number]; jobs: Array<Pick<AstraJob, 'id' | 'workflow' | 'size'>>; cancel: string[] }
+export interface PollAnswer {
+  paused: boolean; batchSize: number; window: [number, number]; jobs: Array<Pick<AstraJob, 'id' | 'workflow' | 'size'>>; cancel: string[];
+  commands: Array<Pick<AstraCommand, 'id' | 'op'>>;
+}
 
 /**
  * The runner's poll, every minute: record its heartbeat and slots; on the first poll of a night window with
  * Auto on, queue that night's runs (once: the night and sequence are unique); tell it which held jobs were
  * cancelled; mark any job it no longer holds as lost; and hand it up to `free` queued jobs it may start now, of the
- * workflows it says it can run (a runner that names none is an older one: the first three only).
+ * workflows it says it can run (a runner that names none is an older one: the first three only), and any queued
+ * commands of the kinds it says it takes.
  */
 export async function poll(db: Db, p: Poll): Promise<PollAnswer> {
   return db.transaction(async (tx) => {
     await tx.query(`update platform.astra_runner set heartbeat_at = clock_timestamp(), host = $1, slots = $2::jsonb, in_window = $3,
-      capacity_until = $4, note = $5 where id = 1`, [p.host, JSON.stringify(p.slots), p.inWindow, p.capacityUntil, p.note]);
+      capacity_until = $4, note = $5, code = $6, code_started_at = $7 where id = 1`,
+      [p.host, JSON.stringify(p.slots), p.inWindow, p.capacityUntil, p.note, p.code ?? null, p.codeStartedAt ?? null]);
     const r = await readRunner(tx);
     if (r.autoOn && p.inWindow && !r.paused) {
       const owner = await tx.one<{ updated_by: string | null }>('select updated_by::text from platform.astra_runner where id = 1');
@@ -130,7 +149,14 @@ export async function poll(db: Db, p: Poll): Promise<PollAnswer> {
        where id in (select id from platform.astra_job where status = 'queued' and (run_now or $1) and workflow = any($3::text[])
          order by created_at limit $2)
        returning id::text, workflow, size`, [p.inWindow, Math.min(p.free, 12), [...(p.workflows ?? FIRST_WORKFLOWS)]]);
-    return { paused: r.paused, batchSize: r.batchSize, window: [r.windowStart, r.windowEnd], jobs, cancel: cancelled };
+    await tx.query(`update platform.astra_command set status = 'failed', finished_at = clock_timestamp(), message = 'The runner took it but never answered.'
+      where status = 'sent' and sent_at < clock_timestamp() - interval '${COMMAND_STALE}'`);
+    const takes = (p.commands ?? []).filter((c) => ASTRA_COMMANDS.includes(c));
+    const commands = takes.length ? await tx.query<{ id: string; op: AstraCommandOp }>(
+      `update platform.astra_command set status = 'sent', sent_at = clock_timestamp()
+       where id in (select id from platform.astra_command where status = 'queued' and op = any($1::text[]) order by created_at limit 4)
+       returning id::text, op`, [takes]) : [];
+    return { paused: r.paused, batchSize: r.batchSize, window: [r.windowStart, r.windowEnd], jobs, cancel: cancelled, commands };
   });
 }
 
@@ -146,4 +172,33 @@ export async function report(db: Queryable, r: Report): Promise<boolean> {
     where id::text = $1 and status in ('claimed','running') returning id`,
     [r.id, r.status, r.batch?.slice(0, 80) ?? null, r.slot?.slice(0, 40) ?? null, r.model?.slice(0, 40) ?? null, JSON.stringify(counts), r.message?.slice(0, 300) ?? null]);
   return rows.length > 0;
+}
+
+/** A person (or an Admin token) asks the runner for a command. One of each kind waits at a time: asking again returns it. */
+export async function issueCommand(db: Queryable, actor: string, op: AstraCommandOp): Promise<{ id: string; existing: boolean }> {
+  if (!ASTRA_COMMANDS.includes(op)) throw new Error('Pick Check, Restart or Update.');
+  const open = await db.one<{ id: string }>(`select id::text from platform.astra_command where op = $1 and status in ('queued','sent')
+    and created_at > clock_timestamp() - interval '${COMMAND_STALE}' order by created_at limit 1`, [op]);
+  if (open) return { id: open.id, existing: true };
+  const row = await db.one<{ id: string }>(`insert into platform.astra_command(op, actor) values ($1, $2) returning id::text`, [op, actor]);
+  return { id: row!.id, existing: false };
+}
+
+const RESULT_KEYS = 16;
+/** The runner answers a command it took. Its result keeps up to 16 short scalar fields; anything else is dropped. */
+export async function reportCommand(db: Queryable, r: { id: string; status: 'done' | 'failed'; result?: Record<string, unknown>; message?: string }): Promise<boolean> {
+  const result = Object.fromEntries(Object.entries(r.result ?? {}).filter(([k, v]) => /^[a-zA-Z]{1,24}$/.test(k)
+    && (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || typeof v === 'string'))
+    .slice(0, RESULT_KEYS).map(([k, v]) => [k, typeof v === 'string' ? v.slice(0, 200) : v]));
+  const rows = await db.query(`update platform.astra_command set status = $2, result = $3::jsonb, message = $4, finished_at = clock_timestamp()
+    where id::text = $1 and status = 'sent' returning id`, [r.id, r.status, JSON.stringify(result), r.message?.slice(0, 300) ?? null]);
+  return rows.length > 0;
+}
+
+export async function recentCommands(db: Queryable, limit = 6): Promise<AstraCommand[]> {
+  const rows = await db.query<{ id: string; op: AstraCommandOp; status: AstraCommand['status']; result: AstraCommand['result'] | null; message: string | null;
+    created_at: Date; sent_at: Date | null; finished_at: Date | null }>(
+    `select id::text, op, status, result, message, created_at, sent_at, finished_at from platform.astra_command order by created_at desc limit $1`, [limit]);
+  return rows.map((r) => ({ id: r.id, op: r.op, status: r.status, result: r.result ?? {}, message: r.message,
+    createdAt: iso(r.created_at)!, sentAt: iso(r.sent_at), finishedAt: iso(r.finished_at) }));
 }

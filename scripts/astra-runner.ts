@@ -14,9 +14,12 @@
  * stay under plcos-data/real/workflows/astra/.
  *
  * Each poll names the workflows this copy can run, so the server never hands an older runner a workflow it doesn't
- * know. Under launchd or the Astra app, which restart it, an idle runner fast-forwards the live checkout to
- * origin/master every ten minutes and exits when that brought new code, so it comes back on it (never with local
- * changes, off master, or when the dependencies changed: those wait for a person).
+ * know, and the commands it takes from Developer → Astra (Juan, 11 Oct 2026: "built some RC type thing for the runner
+ * on the Mac so you can help admin it"): Check reports the checkout's state, Restart exits so launchd or the Astra
+ * app starts it again, Update fast-forwards to origin/master (npm ci when the dependencies changed) and restarts.
+ * Only those three, from a fixed list: the server can never hand it a command line. Under launchd or the Astra app,
+ * an idle runner also fast-forwards every ten minutes and restarts whenever the checkout differs from the code it
+ * started on (never with local changes, off master, or when the dependencies changed: that waits for Update).
  */
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -35,7 +38,19 @@ const SLOTS = Math.max(1, Math.min(6, Number(process.env.ASTRA_SLOTS ?? 4)));
 const POLL_MS = 60_000;
 const WORKFLOWS = ['w1w5', 'w1', 'w5', 'w5t'] as const;
 type Job = { id: string; workflow: (typeof WORKFLOWS)[number]; size: number };
-const SUPERVISED = process.env.ASTRA_SUPERVISED === '1' || process.env.XPC_SERVICE_NAME === 'com.plcos.astra-runner';
+/** Restarted when it exits: by launchd (the login item), or by the Astra app — found by its env, or up the parent chain for app builds before it set one. */
+let SUPERVISED = process.env.ASTRA_SUPERVISED === '1' || process.env.XPC_SERVICE_NAME === 'com.plcos.astra-runner';
+async function underAstraApp(): Promise<boolean> {
+  let pid = process.ppid;
+  for (let i = 0; i < 8 && pid > 1; i++) {
+    try {
+      const [ppid, ...comm] = (await run('ps', ['-o', 'ppid=,comm=', '-p', String(pid)])).stdout.trim().split(/\s+/);
+      if (/Astra\.app\/Contents\/MacOS\//.test(comm.join(' '))) return true;
+      pid = Number(ppid);
+    } catch { return false; }
+  }
+  return false;
+}
 const UPDATE_MS = 10 * 60_000;
 type Slot = { name: string; folder: string; git: string[]; job: Job | null; child: ChildProcess | null; cancelled: boolean };
 
@@ -183,30 +198,100 @@ async function work(slot: Slot, job: Job, root: string) {
   log(`run ${job.id.slice(0, 8)} ${outcome}: ${keys.length} LPs, ${written} files, ${pushed} pushed`);
 }
 
-const git = async (...args: string[]) => (await run('git', args, { cwd: REPO, timeout: 120_000 })).stdout.trim();
-let lastUpdate = 0, heldBack = '';
+const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_SSH_COMMAND: 'ssh -o BatchMode=yes -o ConnectTimeout=15' };
+const git = async (...args: string[]) => (await run('git', args, { cwd: REPO, env: GIT_ENV, timeout: 120_000 })).stdout.trim();
+const firstLine = (e: unknown) => (e instanceof Error ? e.message : String(e)).split('\n')[0]!.slice(0, 200);
+let lastUpdate = 0, heldBack = '', startCommit = '';
+const startedAt = new Date().toISOString();
 
-/** Fast-forward the live checkout to origin/master; true when new code landed and the runner should restart on it. */
+/**
+ * Bring origin/master up to date. HTTPS first for a GitHub remote: under launchd the SSH agent (1Password) can refuse
+ * to sign, and git's own credential helper (gh) serves HTTPS without a prompt. SSH, in batch mode, is the fallback.
+ */
+async function fetchMaster(): Promise<string> {
+  const origin = await git('remote', 'get-url', 'origin');
+  const https = origin.replace(/^git@github\.com:/, 'https://github.com/').replace(/^ssh:\/\/git@github\.com\//, 'https://github.com/');
+  if (https.startsWith('https://')) {
+    try { await git('fetch', '--quiet', https, '+refs/heads/master:refs/remotes/origin/master'); return 'https'; } catch { /* try the remote as configured */ }
+  }
+  await git('fetch', '--quiet', 'origin', '+refs/heads/master:refs/remotes/origin/master');
+  return 'origin';
+}
+
+/** The checkout's state, for the page's Check command. Counts and commits only. */
+async function diagnose(pool: Slot[]): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = { startCommit: startCommit.slice(0, 12), startedAt, supervised: SUPERVISED, node: process.version,
+    busy: pool.filter((x) => x.job).length, slots: pool.length };
+  try {
+    out.fetch = await fetchMaster();
+  } catch (e) { out.fetch = `failed: ${firstLine(e)}`; }
+  try {
+    out.branch = await git('rev-parse', '--abbrev-ref', 'HEAD');
+    out.head = (await git('rev-parse', 'HEAD')).slice(0, 12);
+    out.master = (await git('rev-parse', 'origin/master')).slice(0, 12);
+    out.behind = Number(await git('rev-list', '--count', 'HEAD..origin/master'));
+    out.ahead = Number(await git('rev-list', '--count', 'origin/master..HEAD'));
+    out.changedFiles = (await git('status', '--porcelain', '--untracked-files=no')).split('\n').filter(Boolean).length;
+  } catch (e) { out.git = `failed: ${firstLine(e)}`; }
+  return out;
+}
+
+/**
+ * Fast-forward the live checkout to origin/master. `deps` runs npm ci when the dependencies changed (the page's Update);
+ * otherwise such an update is held back. Answers whether the checkout now differs from the code this runner started on.
+ */
+async function advance(deps: boolean): Promise<{ restart: boolean; message: string }> {
+  if (await git('rev-parse', '--abbrev-ref', 'HEAD') !== 'master') return { restart: false, message: 'The live checkout is not on master; not updated.' };
+  if (await git('status', '--porcelain', '--untracked-files=no')) return { restart: false, message: 'The live checkout has local changes; not updated.' };
+  const via = await fetchMaster();
+  const [head, next] = [await git('rev-parse', 'HEAD'), await git('rev-parse', 'origin/master')];
+  if (head !== next) {
+    try { await git('merge-base', '--is-ancestor', head, next); } catch { return { restart: false, message: 'master is not a fast-forward of the checkout; not updated.' }; }
+    const depsChanged = /^package(-lock)?\.json$/m.test(await git('diff', '--name-only', head, next));
+    if (depsChanged && !deps) {
+      if (heldBack !== next) log(`Not updating to ${next.slice(0, 7)}: its dependencies changed. Use Update on Developer → Astra.`);
+      heldBack = next;
+      return { restart: false, message: 'Held back: the dependencies changed.' };
+    }
+    await git('merge', '--ff-only', '--quiet', next);
+    if (depsChanged) await run('npm', ['ci', '--no-audit', '--no-fund'], { cwd: REPO, timeout: 900_000 });
+    log(`Updated the live checkout ${head.slice(0, 7)} → ${next.slice(0, 7)} over ${via}${depsChanged ? ', with npm ci' : ''}.`);
+  }
+  const now = await git('rev-parse', 'HEAD');
+  return { restart: now !== startCommit, message: now === startCommit ? `Already on ${now.slice(0, 7)}.` : `On ${now.slice(0, 7)}; restarting on it.` };
+}
+
+/** Idle and supervised: update every ten minutes, and restart whenever the checkout moved past the code this runner started on. */
 async function selfUpdate(): Promise<boolean> {
   if (!SUPERVISED || Date.now() - lastUpdate < UPDATE_MS) return false;
   lastUpdate = Date.now();
-  try {
-    if (await git('rev-parse', '--abbrev-ref', 'HEAD') !== 'master' || await git('status', '--porcelain', '--untracked-files=no')) return false;
-    await git('fetch', '--quiet', 'origin', 'master');
-    const [head, next] = [await git('rev-parse', 'HEAD'), await git('rev-parse', 'origin/master')];
-    if (head === next) return false;
-    await git('merge-base', '--is-ancestor', head, next);
-    if (/^package(-lock)?\.json$/m.test(await git('diff', '--name-only', head, next))) {
-      if (heldBack !== next) log(`Not updating to ${next.slice(0, 7)}: its dependencies changed. Run npm ci in the live checkout, then restart the runner.`);
-      heldBack = next;
-      return false;
+  try { return (await advance(false)).restart; }
+  catch (e) { log(`update check skipped: ${firstLine(e)}`); return false; }
+}
+
+type Command = { id: string; op: 'restart' | 'update' | 'diagnose' };
+const COMMANDS = ['restart', 'update', 'diagnose'] as const;
+const pendingCommands: Command[] = [];
+const reportCommand = (id: string, status: 'done' | 'failed', result: Record<string, unknown>, message: string) =>
+  call({ op: 'command-report', id, status, result, message }).catch((e) => log(`command report failed: ${firstLine(e)}`));
+
+/** Run what the page asked. Check runs at once; Restart and Update wait until no run is working, and nothing new starts meanwhile. */
+async function runCommands(pool: Slot[]): Promise<void> {
+  while (pendingCommands.length) {
+    const c = pendingCommands[0]!;
+    if (c.op !== 'diagnose' && pool.some((x) => x.job)) return;
+    pendingCommands.shift();
+    log(`command ${c.op} from the page`);
+    if (c.op === 'diagnose') { await reportCommand(c.id, 'done', await diagnose(pool), 'Checked.'); continue; }
+    const tail = SUPERVISED ? '' : ' Started by hand: it will not come back by itself.';
+    if (c.op === 'restart') { await reportCommand(c.id, 'done', { startCommit: startCommit.slice(0, 12) }, `Restarting.${tail}`); process.exit(0); }
+    try {
+      const r = await advance(true);
+      await reportCommand(c.id, 'done', await diagnose(pool), `${r.message}${r.restart ? tail : ''}`);
+      if (r.restart) process.exit(0);
+    } catch (e) {
+      await reportCommand(c.id, 'failed', {}, `Update failed: ${firstLine(e)}`);
     }
-    await git('merge', '--ff-only', '--quiet', next);
-    log(`Updated the live checkout ${head.slice(0, 7)} → ${next.slice(0, 7)}; restarting on the new code.`);
-    return true;
-  } catch (e) {
-    log(`update check skipped: ${e instanceof Error ? e.message.split('\n')[0] : e}`);
-    return false;
   }
 }
 
@@ -215,17 +300,23 @@ async function main() {
   const astra = join(root, 'workflows', 'astra');
   await mkdir(astra, { recursive: true });
   const pool = await slots(astra);
+  startCommit = await git('rev-parse', 'HEAD').catch(() => '');
+  SUPERVISED ||= await underAstraApp();
   let window: [number, number] = [22, 7];
-  log(`Astra runner up: ${pool.length} slots (${pool.map((s) => s.name).join(', ')}), polling every minute.`);
+  log(`Astra runner up on ${startCommit.slice(0, 7) || 'unknown code'}${SUPERVISED ? '' : ' (started by hand: no self-update)'}: ${pool.length} slots (${pool.map((s) => s.name).join(', ')}), polling every minute.`);
   for (;;) {
     const { night, inWindow } = nightOf(new Date(), window[0], window[1]);
     const idle = pool.filter((s) => !s.job);
     const waiting = capacityUntil > Date.now();
+    // A Restart or Update waiting for the running batches: start nothing new meanwhile.
+    const holding = pendingCommands.some((c) => c.op !== 'diagnose');
     try {
-      const answer = await call({ op: 'poll', host: hostname().slice(0, 60), workflows: WORKFLOWS, inWindow, night, free: waiting ? 0 : idle.length,
+      const answer = await call({ op: 'poll', host: hostname().slice(0, 60), workflows: WORKFLOWS, commands: COMMANDS, commit: startCommit.slice(0, 12), startedAt,
+        inWindow, night, free: waiting || holding ? 0 : idle.length,
         held: pool.flatMap((s) => (s.job ? [s.job.id] : [])), slots: pool.map((s) => ({ slot: s.name, job: s.job?.id ?? null })),
-        capacityUntil: waiting ? new Date(capacityUntil).toISOString() : null, note: null });
+        capacityUntil: waiting ? new Date(capacityUntil).toISOString() : null, note: holding ? 'Waiting for running batches to finish before a restart.' : null });
       window = answer.window ?? window;
+      for (const c of (answer.commands ?? []) as Command[]) if (COMMANDS.includes(c.op) && !pendingCommands.some((x) => x.id === c.id)) pendingCommands.push(c);
       for (const id of answer.cancel ?? []) {
         const slot = pool.find((s) => s.job?.id === id);
         if (slot) { slot.cancelled = true; slot.child?.kill('SIGTERM'); }
@@ -241,6 +332,7 @@ async function main() {
     } catch (e) {
       log(`poll failed: ${e instanceof Error ? e.message : e}`);
     }
+    await runCommands(pool);
     if (pool.every((s) => !s.job) && await selfUpdate()) process.exit(0);
     await new Promise((r) => setTimeout(r, POLL_MS));
   }

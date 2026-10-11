@@ -3,9 +3,9 @@ import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { ago } from '@/lib/time';
 import { getDb } from '@/lib/db';
-import { readRunner, recentJobs, runnerUp, WORKFLOW_LABEL, type AstraJob, type AstraRunner } from '@/lib/astra/jobs';
+import { COMMAND_LABEL, readRunner, recentCommands, recentJobs, runnerUp, WORKFLOW_LABEL, type AstraCommand, type AstraJob, type AstraRunner } from '@/lib/astra/jobs';
 import { cancelAstraAction } from './actions';
-import { AutoForm, PauseButton, QueueForm } from './AstraForms';
+import { AutoForm, CommandButtons, PauseButton, QueueForm } from './AstraForms';
 import s from './astra.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -24,6 +24,16 @@ function waiting(job: AstraJob, r: AstraRunner): string | null {
   return 'Next poll';
 }
 
+const CMD_STATUS: Record<AstraCommand['status'], string> = { queued: 'Waiting for the runner', sent: 'Taken', done: 'Done', failed: 'Failed' };
+const CMD_FLAG: Record<AstraCommand['status'], string> = { queued: 'f-mute', sent: 'f-ev', done: 'f-ok', failed: 'f-block' };
+/** The few result fields a person reads; the rest stays in the API's status answer. */
+function resultLine(c: AstraCommand): string {
+  const r = c.result;
+  const parts = [r.head && `on ${r.head}`, typeof r.behind === 'number' && `${r.behind} behind master`, r.changedFiles ? `${r.changedFiles} local changes` : null,
+    typeof r.fetch === 'string' && r.fetch.startsWith('failed') && `fetch ${r.fetch}`, r.supervised === false && 'started by hand'];
+  return parts.filter(Boolean).join(' · ');
+}
+
 function elapsed(job: AstraJob): string {
   if (!job.startedAt) return '';
   const end = job.finishedAt ? Date.parse(job.finishedAt) : Date.now();
@@ -33,7 +43,7 @@ function elapsed(job: AstraJob): string {
 
 async function AstraPage() {
   const db = await getDb();
-  const [runner, jobs] = await Promise.all([readRunner(db), recentJobs(db)]);
+  const [runner, jobs, commands] = await Promise.all([readRunner(db), recentJobs(db), recentCommands(db)]);
   const up = runnerUp(runner);
   const active = jobs.filter((j) => j.status === 'running' || j.status === 'claimed');
   const queued = jobs.filter((j) => j.status === 'queued');
@@ -81,7 +91,25 @@ async function AstraPage() {
           <div className={s.stat}><span className={s.k}>Working</span><span className={s.v}>{active.length}</span></div>
           <div className={s.stat}><span className={s.k}>Queued</span><span className={s.v}>{queued.length}</span></div>
           <div className={s.stat}><span className={s.k}>Last 24 h</span><span className={s.v}>{sum('valid')} valid of {sum('selected')}</span></div>
+          <div className={s.stat}><span className={s.k}>Code</span>
+            <span className={s.v}>{runner.code ? <span className={s.key}>{runner.code.slice(0, 7)}</span> : 'Older runner'}</span>
+            {runner.codeStartedAt && <span className={s.sub}>started {ago(new Date(runner.codeStartedAt))}</span>}</div>
         </div>
+        <CommandButtons />
+        <p className={s.hint}>
+          Check reports the runner&apos;s code and checkout; Update brings it to the latest master and restarts it; Restart restarts it. Update and
+          Restart wait for running batches and start nothing new meanwhile.{!runner.code && up ? ' This runner is from before these commands: restart it once on the Mac (Astra menu → Stop, Start).' : ''}
+        </p>
+        {commands.length > 0 && (
+          <ul className={s.cmds}>
+            {commands.map((c) => (
+              <li key={c.id}>
+                <span className={`flag ${CMD_FLAG[c.status]}`}>{COMMAND_LABEL[c.op]}: {CMD_STATUS[c.status]}</span>
+                <span className={s.sub}>{ago(new Date(c.finishedAt ?? c.createdAt))}{c.message ? ` · ${c.message}` : ''}{resultLine(c) ? ` · ${resultLine(c)}` : ''}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         {!up && (
           <p className={s.hint} style={{ paddingTop: 10 }}>
             {runner.heartbeatAt ? `The runner last polled ${ago(new Date(runner.heartbeatAt))}.` : 'The runner has never polled.'} Queued runs wait until it is

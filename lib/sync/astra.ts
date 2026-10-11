@@ -7,12 +7,15 @@ import type { PushAnswer } from './push';
  * reports with an Admin's token. Juan, 10 Oct 2026: "should not go through claude, should be able to have a UI
  * and trigger astra automatically". Counts only, never a name; the server launches nothing.
  *
- *   POST { op: "poll", host, workflows?, inWindow, night, free, held: [jobId], slots: [{slot, job}], capacityUntil, note }
- *        → 200 { paused, batchSize, window, jobs: [{ id, workflow, size }], cancel: [jobId] }
+ *   POST { op: "poll", host, workflows?, commands?, commit?, startedAt?, inWindow, night, free, held: [jobId], slots: [{slot, job}],
+ *        capacityUntil, note } → 200 { paused, batchSize, window, jobs: [{ id, workflow, size }], cancel: [jobId], commands: [{ id, op }] }
  *   POST { op: "report", id, status: "running" | "done" | "failed", batch?, slot?, model?, counts?, message? }
  *   POST { op: "queue", workflow, size, count, runNow } → 200 { queued }: what Queue runs does on the page, for the
  *        Astra menu-bar app (desktop/astra), queued as the token's holder.
- *   POST { op: "status" } → 200 { runner, up, jobs }: the page's runner state and recent runs (counts, no names).
+ *   POST { op: "status" } → 200 { runner, up, jobs, commands }: the page's runner state, recent runs and commands (counts, no names).
+ *   POST { op: "command", command: "diagnose" | "restart" | "update" } → 200 { id, existing }: what Check, Restart and Update
+ *        do on the page (Juan, 11 Oct 2026: "built some RC type thing for the runner on the Mac so you can help admin it").
+ *   POST { op: "command-report", id, status: "done" | "failed", result?, message? }: the runner answers a command it took.
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
@@ -38,10 +41,15 @@ export async function astraCall(caller: SyncCaller, request: Request, o: { db?: 
     const capacity = typeof input.capacityUntil === 'string' && Number.isFinite(Date.parse(input.capacityUntil)) ? new Date(input.capacityUntil).toISOString() : null;
     const free = Number.isSafeInteger(input.free) ? Math.max(0, input.free as number) : 0;
     const workflows = Array.isArray(input.workflows) ? astra.ASTRA_WORKFLOWS.filter((w) => (input.workflows as unknown[]).includes(w)) : undefined;
-    const result = await astra.poll(db, { host: text(input.host, 60) ?? 'mac', workflows, inWindow: input.inWindow, night, free, held, slots,
+    const commands = Array.isArray(input.commands) ? astra.ASTRA_COMMANDS.filter((c) => (input.commands as unknown[]).includes(c)) : undefined;
+    const code = typeof input.commit === 'string' && /^[0-9a-f]{7,40}$/.test(input.commit) ? input.commit : null;
+    const codeStartedAt = typeof input.startedAt === 'string' && Number.isFinite(Date.parse(input.startedAt)) ? new Date(input.startedAt).toISOString() : null;
+    const result = await astra.poll(db, { host: text(input.host, 60) ?? 'mac', workflows, commands, code, codeStartedAt, inWindow: input.inWindow, night, free, held, slots,
       capacityUntil: capacity, note: text(input.note, 300) });
     // Polls come every minute; only those that hand out or cancel work go in the audit log.
-    if (result.jobs.length || result.cancel.length) await auditSync(caller, 'astra', 'ok', { op: 'poll', claimed: result.jobs.length, cancelled: result.cancel.length });
+    if (result.jobs.length || result.cancel.length || result.commands.length) {
+      await auditSync(caller, 'astra', 'ok', { op: 'poll', claimed: result.jobs.length, cancelled: result.cancel.length, commands: result.commands.map((c) => c.op) });
+    }
     return { status: 200, body: { ok: true, ...result } };
   }
   if (input?.op === 'report') {
@@ -66,7 +74,22 @@ export async function astraCall(caller: SyncCaller, request: Request, o: { db?: 
   }
   if (input?.op === 'status') {
     const runner = await astra.readRunner(db);
-    return { status: 200, body: { ok: true, runner, up: astra.runnerUp(runner), jobs: await astra.recentJobs(db, 20) } };
+    return { status: 200, body: { ok: true, runner, up: astra.runnerUp(runner), jobs: await astra.recentJobs(db, 20), commands: await astra.recentCommands(db) } };
   }
-  return answer(422, 'invalid', { error: 'op must be poll, report, queue or status.' }, { reason: 'op' });
+  if (input?.op === 'command') {
+    const op = astra.ASTRA_COMMANDS.find((c) => c === input.command);
+    if (!op) return answer(422, 'invalid', { error: 'command must be diagnose, restart or update.' }, { op: 'command', reason: 'shape' });
+    const issued = await astra.issueCommand(db, caller.user.id, op);
+    return answer(200, 'ok', issued, { op: 'command', command: op, existing: issued.existing });
+  }
+  if (input?.op === 'command-report') {
+    const id = typeof input.id === 'string' && UUID.test(input.id) ? input.id : null;
+    const status = input.status === 'done' || input.status === 'failed' ? input.status : null;
+    if (!id || !status) return answer(422, 'invalid', { error: 'A command report needs an id and a status of done or failed.' }, { op: 'command-report', reason: 'shape' });
+    const result = input.result && typeof input.result === 'object' && !Array.isArray(input.result) ? input.result as Record<string, unknown> : undefined;
+    const ok = await astra.reportCommand(db, { id, status, result, message: text(input.message, 300) ?? undefined });
+    if (!ok) return answer(409, 'refused', { error: 'That command was not sent to the runner, or was already answered.' }, { op: 'command-report', reason: 'state' });
+    return answer(200, 'ok', {}, { op: 'command-report', status });
+  }
+  return answer(422, 'invalid', { error: 'op must be poll, report, queue, status, command or command-report.' }, { reason: 'op' });
 }
