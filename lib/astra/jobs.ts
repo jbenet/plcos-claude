@@ -6,9 +6,12 @@ import type { Db, Queryable } from '@/lib/db';
  * trigger astra automatically"). The server queues and records only; the runner cuts each batch on the Mac,
  * so no name or record content ever reaches these tables, and nothing here launches anything.
  */
-export const ASTRA_WORKFLOWS = ['w1w5', 'w1', 'w5'] as const;
+export const ASTRA_WORKFLOWS = ['w1w5', 'w1', 'w5', 'w5t'] as const;
 export type AstraWorkflow = (typeof ASTRA_WORKFLOWS)[number];
-export const WORKFLOW_LABEL: Record<AstraWorkflow, string> = { w1w5: 'Profile, then strategy (W1+W5)', w1: 'Profile (W1)', w5: 'Strategy (W5)' };
+export const WORKFLOW_LABEL: Record<AstraWorkflow, string> = { w1w5: 'Profile, then strategy (W1+W5)', w1: 'Profile (W1)', w5: 'Strategy (W5)',
+  w5t: 'Shorten strategies (W5)' };
+/** What a runner from before w5t can run: one that names no workflows in its poll is handed only these. */
+export const FIRST_WORKFLOWS: readonly AstraWorkflow[] = ['w1w5', 'w1', 'w5'];
 export type AstraStatus = 'queued' | 'claimed' | 'running' | 'done' | 'failed' | 'cancelled';
 const COUNT_KEYS = ['selected', 'written', 'valid', 'failed', 'pushed', 'strategies'] as const;
 /** The runner is up when it has polled within this long (it polls every minute). */
@@ -93,7 +96,7 @@ export async function saveSettings(db: Queryable, actor: string, s: Partial<Pick
 }
 
 export interface Poll {
-  host: string; inWindow: boolean; night: string; free: number; held: string[];
+  host: string; inWindow: boolean; night: string; free: number; held: string[]; workflows?: readonly AstraWorkflow[];
   slots: Array<{ slot: string; job: string | null }>; capacityUntil: string | null; note: string | null;
 }
 export interface PollAnswer { paused: boolean; batchSize: number; window: [number, number]; jobs: Array<Pick<AstraJob, 'id' | 'workflow' | 'size'>>; cancel: string[] }
@@ -101,7 +104,8 @@ export interface PollAnswer { paused: boolean; batchSize: number; window: [numbe
 /**
  * The runner's poll, every minute: record its heartbeat and slots; on the first poll of a night window with
  * Auto on, queue that night's runs (once: the night and sequence are unique); tell it which held jobs were
- * cancelled; mark any job it no longer holds as lost; and hand it up to `free` queued jobs it may start now.
+ * cancelled; mark any job it no longer holds as lost; and hand it up to `free` queued jobs it may start now, of the
+ * workflows it says it can run (a runner that names none is an older one: the first three only).
  */
 export async function poll(db: Db, p: Poll): Promise<PollAnswer> {
   return db.transaction(async (tx) => {
@@ -123,8 +127,9 @@ export async function poll(db: Db, p: Poll): Promise<PollAnswer> {
       message = 'The runner no longer holds this run (it restarted or lost it).' where status in ('claimed','running') and not (id::text = any($1::text[]))`, [p.held]);
     const jobs = r.paused || p.free <= 0 ? [] : await tx.query<{ id: string; workflow: AstraWorkflow; size: number }>(
       `update platform.astra_job set status = 'claimed', claimed_at = clock_timestamp(), updated_at = clock_timestamp()
-       where id in (select id from platform.astra_job where status = 'queued' and (run_now or $1) order by created_at limit $2)
-       returning id::text, workflow, size`, [p.inWindow, Math.min(p.free, 12)]);
+       where id in (select id from platform.astra_job where status = 'queued' and (run_now or $1) and workflow = any($3::text[])
+         order by created_at limit $2)
+       returning id::text, workflow, size`, [p.inWindow, Math.min(p.free, 12), [...(p.workflows ?? FIRST_WORKFLOWS)]]);
     return { paused: r.paused, batchSize: r.batchSize, window: [r.windowStart, r.windowEnd], jobs, cancel: cancelled };
   });
 }

@@ -7,7 +7,7 @@ import type { PushAnswer } from './push';
  * reports with an Admin's token. Juan, 10 Oct 2026: "should not go through claude, should be able to have a UI
  * and trigger astra automatically". Counts only, never a name; the server launches nothing.
  *
- *   POST { op: "poll", host, inWindow, night, free, held: [jobId], slots: [{slot, job}], capacityUntil, note }
+ *   POST { op: "poll", host, workflows?, inWindow, night, free, held: [jobId], slots: [{slot, job}], capacityUntil, note }
  *        → 200 { paused, batchSize, window, jobs: [{ id, workflow, size }], cancel: [jobId] }
  *   POST { op: "report", id, status: "running" | "done" | "failed", batch?, slot?, model?, counts?, message? }
  *   POST { op: "queue", workflow, size, count, runNow } → 200 { queued }: what Queue runs does on the page, for the
@@ -37,7 +37,8 @@ export async function astraCall(caller: SyncCaller, request: Request, o: { db?: 
     if (!night || typeof input.inWindow !== 'boolean') return answer(422, 'invalid', { error: 'A poll needs night (YYYY-MM-DD) and inWindow.' }, { reason: 'poll' });
     const capacity = typeof input.capacityUntil === 'string' && Number.isFinite(Date.parse(input.capacityUntil)) ? new Date(input.capacityUntil).toISOString() : null;
     const free = Number.isSafeInteger(input.free) ? Math.max(0, input.free as number) : 0;
-    const result = await astra.poll(db, { host: text(input.host, 60) ?? 'mac', inWindow: input.inWindow, night, free, held, slots,
+    const workflows = Array.isArray(input.workflows) ? astra.ASTRA_WORKFLOWS.filter((w) => (input.workflows as unknown[]).includes(w)) : undefined;
+    const result = await astra.poll(db, { host: text(input.host, 60) ?? 'mac', workflows, inWindow: input.inWindow, night, free, held, slots,
       capacityUntil: capacity, note: text(input.note, 300) });
     // Polls come every minute; only those that hand out or cancel work go in the audit log.
     if (result.jobs.length || result.cancel.length) await auditSync(caller, 'astra', 'ok', { op: 'poll', claimed: result.jobs.length, cancelled: result.cancel.length });

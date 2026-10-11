@@ -28,17 +28,29 @@ permission check refused. The runner takes Claude out of the launch path entirel
 
 1. Cut one batch with `enrich-batch.ts <w1|w5> astra-<job>- <size> --max 1` (whole firms; keys already in an open
    batch are skipped, so two runs never take the same LPs). Nobody left means the run is done with 0 LPs.
-2. Fill the fixed brief from `scripts/astra/templates/` (W1, W5 or W1+W5), with three recent findings and two recent
-   strategies as example paths.
+   **Shorten strategies (W5)**, `w5t` (11 Oct 2026), adds `--tighten`: strategies written before W5 1.13 whose
+   vehicle's pursuit is Committed, then Discussing, Connecting and Selected, in either layout (Juan: "start further
+   down the pipeline and work way back to selected ones. (Don't need to go beyond that for now)").
+2. Fill the fixed brief from `scripts/astra/templates/` (W1, W5, W1+W5 or the shortening pass), with three recent
+   findings and two recent strategies as example paths.
 3. Begin a ledger run (`source: chatgpt`, agent `astra-runner`).
 4. Run `codex exec` in a free slot (the `plcos-codex-bN` worktrees beside the live checkout when present, else plain
    folders), sandboxed to write only in its folder and `enrich/`, with web search. `gpt-6-astra` first; `gpt-6-sol`
    only when the first says "at capacity" and wrote no final message. Stopped after 3 hours.
-5. Push each finding and strategy the run wrote with `cloud-push.sh` (the importer's checks run first; the server
+5. Push each finding and strategy the run wrote (strategies in vehicle folders too) with `cloud-push.sh` (the importer's checks run first; the server
    queues the import). Finish the ledger run with usage estimated from codex's own session logs. Report counts.
 
 A run that wrote nothing gives its LPs back (the batch file is renamed `.unrun`). When both models are at capacity
 the runner claims nothing for 30 minutes. Briefs and logs stay under `plcos-data/real/workflows/astra/`.
+
+## Keeping the runner current
+
+Each poll names the workflows the runner can run (`workflows`); the server hands it only those, and a runner that
+names none (one from before `w5t`) gets only W1+W5, W1 and W5. A runner started by launchd or the Astra app (both
+restart it; `ASTRA_SUPERVISED=1`) checks every ten minutes while idle: on `master` with no local changes, it
+fast-forwards the live checkout to `origin/master` and exits so it comes back on the new code. It never updates
+when the dependencies changed (`package.json`, `package-lock.json`); it logs that `npm ci` and a restart are
+needed. Started by hand (`npm run astra`), it never updates itself.
 
 ## Not yet
 

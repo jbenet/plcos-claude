@@ -70,6 +70,7 @@ impl Runner {
             .args(["-lc", "exec npm run astra"])
             .current_dir(live())
             .env("PATH", PATH)
+            .env("ASTRA_SUPERVISED", "1")
             .stdin(Stdio::null())
             .stdout(log.try_clone().map_err(|e| e.to_string())?)
             .stderr(log)

@@ -326,3 +326,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [The LP page, shorter: status in the header, explainers behind an "i"](entries/lp-header.md)
 - [The LP page in tabs, each with its own address](entries/lp-tabs.md)
 - [Strategies come out short: W5's length limits are enforced](entries/w5-short.md)
+- [Astra shortens the long strategies, Committed back to Selected](entries/astra-shorten.md)

@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import { astraSettingsAction, queueAstraAction } from './actions';
 import s from './astra.module.css';
 
-const WORKFLOWS: Array<[string, string]> = [['w1w5', 'Profile, then strategy (W1+W5)'], ['w1', 'Profile (W1)'], ['w5', 'Strategy (W5)']];
+const WORKFLOWS: Array<[string, string]> = [['w1w5', 'Profile, then strategy (W1+W5)'], ['w1', 'Profile (W1)'], ['w5', 'Strategy (W5)'], ['w5t', 'Shorten strategies (W5)']];
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const hour = (h: number) => `${String(h).padStart(2, '0')}:00`;
 

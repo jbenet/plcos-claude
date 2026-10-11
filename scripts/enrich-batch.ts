@@ -19,6 +19,10 @@
  *        With `--revise` (W5 v1.5): strategies written before version 1.3, or that the critic's
  *        gates flag, or with a next step over 300 characters — and every colleague at their firm,
  *        so a firm is rewritten together.
+ *        With `--tighten` (W5 1.13, the Astra "Shorten strategies" run): strategies written before 1.13
+ *        whose vehicle's pursuit is Committed, Discussing, Connecting or Selected, furthest first (Juan,
+ *        11 Oct 2026: "start further down the pipeline and work way back to selected ones"), in either
+ *        layout (strategy/<key>.json or strategy/<vehicle>/<key>.json), colleagues in the same firm together.
  *
  * Writes batches/<prefix>NN.jsonl (w1: identity lines from research-set.jsonl) or .txt (w5: keys),
  * and prints counts only.
@@ -30,7 +34,7 @@ import { candidateKey } from '../lib/enrich/candidate-key';
 import type { Candidate } from '../lib/enrich/candidates';
 import { norm } from '../lib/enrich/connect';
 import { pagesOnly, type Finding } from '../lib/enrich/schema';
-import { bestTiers, contextAtFor, gates, isStale, nextOverLimit, versionBefore, type Strategy } from '../lib/enrich/strategy';
+import { bestTiers, contextAtFor, gates, isStale, nextOverLimit, TIGHT_FROM, versionBefore, type Strategy } from '../lib/enrich/strategy';
 import type { Path } from '../lib/enrich/connect';
 import type { Triage } from '../lib/enrich/triage';
 
@@ -47,6 +51,25 @@ async function jsonDir<T extends { key: string }>(dir: string): Promise<Map<stri
   return out;
 }
 
+/** Every strategy file in either layout, read loosely: only its key, version and vehicle are needed. */
+async function strategyFiles(dir: string): Promise<Array<{ key: string; version: unknown; vehicle: string; folder: string | null }>> {
+  const out: Array<{ key: string; version: unknown; vehicle: string; folder: string | null }> = [];
+  const read = async (file: string, folder: string | null) => {
+    try {
+      const x = JSON.parse(await readFile(file, 'utf8')) as Partial<Strategy>;
+      if (typeof x.key === 'string') out.push({ key: x.key, version: x.made?.version, vehicle: folder ?? String(x.ask?.vehicle ?? ''), folder });
+    } catch { /* the checker reports it */ }
+  };
+  for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+    if (e.isFile() && e.name.endsWith('.json')) await read(join(dir, e.name), null);
+    else if (e.isDirectory()) for (const f of (await readdir(join(dir, e.name)).catch(() => [])).filter((x) => x.endsWith('.json'))) await read(join(dir, e.name, f), e.name);
+  }
+  return out;
+}
+
+/** `--tighten`: the furthest pursuit status first, back to Selected and no further. */
+const TIGHTEN: Record<string, number> = { committed: 0, discussing: 1, connecting: 2, selected: 3 };
+
 async function main() {
   // `--keys <file>`: listed LPs eligible for new/revised strategies, plus their firms' strategies.
   const keysAt = process.argv.indexOf('--keys');
@@ -56,10 +79,11 @@ async function main() {
   if (!(max >= 1)) { console.error('--max takes a positive number.'); process.exit(2); }
   const [mode, prefix, sizeArg] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !['--keys', '--max'].includes(all[i - 1]!));
   const withSearch = process.argv.includes('--search');
-  const revise = process.argv.includes('--revise') || Boolean(keysFile);
+  const tighten = process.argv.includes('--tighten');
+  const revise = !tighten && (process.argv.includes('--revise') || Boolean(keysFile));
   const only = keysFile ? new Set((await readFile(keysFile, 'utf8')).split('\n').map((k) => k.trim()).filter(Boolean)) : null;
-  if ((mode !== 'w1' && mode !== 'w5') || !prefix) {
-    console.error('usage: enrich-batch.ts w1|w5 <prefix> [size] [--search]');
+  if ((mode !== 'w1' && mode !== 'w5') || !prefix || (tighten && (mode !== 'w5' || keysFile))) {
+    console.error('usage: enrich-batch.ts w1|w5 <prefix> [size] [--search] (--tighten: w5 only, without --keys)');
     process.exit(2);
   }
   const size = Number(sizeArg ?? 15);
@@ -105,7 +129,8 @@ async function main() {
     // A batch is open for a few hours after it is cut, never for good (W5 after the search pass): a
     // strategy re-pinned without a new `made.at` stayed "in an open batch" long after that batch had
     // finished, and 28 stale strategies went unbatched. Batches finish within the hour.
-    if (mode === 'w5' && /^[suv]\d+\.txt$/.test(f)) {
+    // The Astra runner's W5 batches (astra-<job>-NN.txt) hold their keys the same way, so two runs never share LPs.
+    if (mode === 'w5' && /^([suv]\d+|astra-[\w-]+)\.txt$/.test(f)) {
       const cut = (await stat(join(dir, 'batches', f))).mtime.getTime();
       if (Date.now() - cut < OPEN_HOURS * 3_600_000) for (const k of lines(text).map((x) => x.trim())) openW5.add(`${k} ${cut}`);
     }
@@ -134,7 +159,21 @@ async function main() {
   const LANE: Record<string, number> = { 'warm now': 0, 'research first': 1, 'long process': 2, cold: 3 };
   // The lead is who has had one-to-ones with us: a meeting on a group date is an event (v02's learning).
   const contact = (c: Candidate) => Math.max(0, c.contact.meetings - c.contact.groupMeetings) * 10 + (c.contact.lastFromThem ? 5 : 0) + (c.contact.lastTouch ? 1 : 0);
-  const rank = (c: Candidate) => (STATUS[c.pursuits[0]?.status ?? ''] ?? 9) * 10 + (LANE[triage.get(c.key)?.lane ?? ''] ?? 4);
+  // `--tighten`: each LP ranks by the furthest status among the vehicles whose strategy is still long.
+  const tightRank = new Map<string, number>();
+  if (tighten) {
+    const byKey = new Map(cands.map((c) => [c.key, c]));
+    for (const f of await strategyFiles(join(dir, 'strategy'))) {
+      if (!versionBefore(f.version as string, TIGHT_FROM)) continue;
+      const c = byKey.get(aliases[f.key] ?? f.key);
+      const v = vehicleOf(f.vehicle);
+      const names = [f.vehicle, v?.name, v?.slug].filter(Boolean).map((n) => n!.trim().toLowerCase());
+      const p = c?.pursuits.find((x) => names.includes((x.vehicle ?? '').trim().toLowerCase()));
+      const r = TIGHTEN[p?.status ?? ''];
+      if (c && r !== undefined) tightRank.set(c.key, Math.min(r, tightRank.get(c.key) ?? 9));
+    }
+  }
+  const rank = (c: Candidate) => (tighten ? tightRank.get(c.key) ?? 9 : STATUS[c.pursuits[0]?.status ?? ''] ?? 9) * 10 + (LANE[triage.get(c.key)?.lane ?? ''] ?? 4);
 
   const best = new Map<string, 'A' | 'B' | 'C' | 'D'>();
   const paths = lines(await readFile(join(dir, 'connections.jsonl'), 'utf8').catch(() => '')).map((l) => JSON.parse(l) as Path);
@@ -157,6 +196,7 @@ async function main() {
   let wanted = cands.filter((c) => {
     const f = findings.get(c.key);
     if (mode === 'w5' && inOpenBatch(c.key)) return false;
+    if (tighten) return tightRank.has(c.key);
     if (batched.has(c.key) && (mode === 'w1' ? !f : !strategies.has(c.key))) return false;
     if (mode === 'w1') return !f || (withSearch && pagesOnly(f));
     const resolved = f && (f.identity.match === 'confirmed' || f.identity.match === 'probable');
@@ -210,6 +250,6 @@ async function main() {
     else await writeFile(join(dir, 'batches', `${name}.txt`), b.map((c) => c.key).join('\n') + '\n', 'utf8');
   }
   const multi = ordered.filter((f) => f.length > 1).length;
-  console.log(`${mode}: ${wanted.length} LPs in ${ordered.length} firms (${multi} with colleagues) → ${batches.length} batches of ~${size} (${prefix}${String(existing + 1).padStart(2, '0')}…)`);
+  console.log(`${mode}${tighten ? ' --tighten' : ''}: ${wanted.length} LPs in ${ordered.length} firms (${multi} with colleagues) → ${batches.length} batches of ~${size} (${prefix}${String(existing + 1).padStart(2, '0')}…)`);
 }
 main();
