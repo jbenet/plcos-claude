@@ -4,6 +4,7 @@ import { usdM } from '@/lib/money';
 import { PASSED_BY_LABEL, RUNG_LABEL, STATUSES, type LadderRung, type Pursuit } from '@/lib/authz/read/strategy';
 import type { CloseTrack } from '@/modules/pipeline';
 import type { OnFile } from '@/lib/reconcile';
+import { Info } from '@/components/ui/Info';
 
 /**
  * Where this stands (N60): the seven statuses, and, once an LP has committed, the close track —
@@ -101,9 +102,9 @@ export function StatusStepper({ pursuit: p, onFile, proposalId, track }: {
       )}
 
       <p className="stepkey">
-        <span className="proof ok">✓ confirmed</span> on the ladder ·{' '}
-        <span className="proof seen">on record</span> but not yet confirmed{unconfirmed && proposalId ? <> — <Link href={`/approvals?t=${proposalId}`}>confirm it</Link></> : ''}
-        {' '}· the status is our plan; the evidence is what the records show.
+        <span className="proof ok">✓ confirmed</span> ·{' '}
+        <span className="proof seen">on record</span>, not confirmed{unconfirmed && proposalId ? <> · <Link href={`/approvals?t=${proposalId}`}>confirm it</Link></> : ''}
+        <Info>The status is our plan; the ladder is what the records show.</Info>
       </p>
     </div>
   );

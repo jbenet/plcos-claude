@@ -88,7 +88,7 @@ export function StatusForm(props: {
       <button className="btn p" type="submit" disabled={pending} style={{ marginTop: 10 }}>
         {pending ? 'Saving…' : 'Save status'}
       </button>
-      <span className="muted" style={{ fontSize: 11.5, marginLeft: 10 }}>No ticket: a status claims nothing about the LP and moves neither the ladder nor the money.</span>
+      <span className="muted" style={{ fontSize: 11.5, marginLeft: 10 }}>Moves neither the ladder nor the money.</span>
     </form>
   );
 }

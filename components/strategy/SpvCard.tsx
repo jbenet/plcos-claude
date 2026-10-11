@@ -6,6 +6,7 @@ import {
 } from '@/lib/authz/read/strategy';
 import { SpvControl } from './SpvControl';
 import s from './spv.module.css';
+import { Info } from '@/components/ui/Info';
 
 /**
  * SPV stance (Juan, 27 Sep 2026): on the LP page, what we know about whether this LP does SPVs — the
@@ -21,7 +22,7 @@ export async function SpvCard({ entityId, entityName, spvVehicle }: { entityId: 
     <div className="card" style={spvVehicle && r.stance === 'does-not' ? { boxShadow: 'inset 3px 0 0 var(--clay)' } : undefined}>
       <div className="chead">
         <h2>SPVs</h2>
-        <span className="lbl">{SPV_BASIS_LABEL[r.basis]}</span>
+        <span className="lbl">{SPV_BASIS_LABEL[r.basis]} <Info>A person&rsquo;s setting wins over research and derived signals. Withdrawing it returns the LP to the evidence; both are in the log. Research, Dakota and our own SPVs are read by Derive SPV stance.</Info></span>
       </div>
       <div className="cbody">
         <div className={s.now}>
@@ -48,7 +49,7 @@ export async function SpvCard({ entityId, entityName, spvVehicle }: { entityId: 
 }
 
 function lede(r: SpvReading, name: string) {
-  if (r.basis === 'none') return <>Nothing on file says whether {name} does SPVs, so they are read as likely open. Research, Dakota and our own SPVs are checked by Derive SPV stance.</>;
+  if (r.basis === 'none') return <>Nothing on file either way.</>;
   if (r.basis === 'person') return <>A person’s setting. It stands over what the evidence says{r.conflict ? ', which disagrees' : ''} until it is withdrawn.</>;
   const w = r.winner!;
   return <>{r.basis === 'research' ? 'From research' : 'Derived from our records'}: {w.label.replace(/^Research: /, '')}.{' '}

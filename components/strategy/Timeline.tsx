@@ -19,6 +19,7 @@ import { EntryBox } from './EntryBox';
 import { TIMELINE_PAGE, TimelineRows, type TimelineOption, type TimelineRow } from './TimelineRows';
 import { TagControl, TagVehicles, type TagVehicle } from './TagControl';
 import { SOURCE_LABEL, type SameAs } from '@/lib/comms/trace';
+import { Info } from '@/components/ui/Info';
 
 /** A status change from the audit log (N61): what it was, what it became, who, and why. */
 export interface StatusEvent {
@@ -642,17 +643,20 @@ export function Timeline(props: {
         <span className="lbl">
           {touches.length} {touches.length === 1 ? 'touchpoint' : 'touchpoints'}, {counted.length} about {props.vehicleName} · {notes.length} {notes.length === 1 ? 'note' : 'notes'}
           {updates.length ? ` · ${updates.length} ${updates.length === 1 ? 'update' : 'updates'}` : ''}
+          <Info>
+            <span className="ip">The comms trace: touchpoints logged here, those Affinity has (each list entry&rsquo;s last email and meetings, the calendar, and meeting, call and email notes) as of the last translation, and the Gmail messages juanmail reported, one row per message. One Affinity also has is matched by Message-ID, else by date and participants, and says how sure the match is. With the team&rsquo;s notes here and in Affinity, and Linear issues linked to this pursuit.</span>
+            <span className="ip">Each row says which vehicle it is about: named in it, or tagged by Claude or a person. Only rows tagged with {props.vehicleName}, inside its raise window, count for this pursuit and its ladder. A meeting nobody logged and no calendar saw is not here.</span>
+            {notes.length > 0 && <span className="ip">The notes are the team&rsquo;s, as written in Affinity{onOrg ? `, ${onOrg} of them on their firm` : ''}: a record of what was said, not evidence for the ladder, copied by the <Link href="/dev/affinity/notes">notes read</Link> {ago(notesRead)}.</span>}
+          </Info>
         </span>
       </div>
       <div className="cbody">
-        <p className="p2 tl-scope">Counted for {props.vehicleName} — the rows tagged with it:</p>
-        <div className="fact"><span>Meetings</span><span>{meetingLine(s)}</span></div>
         <div className="fact">
-          <span>Last touch</span>
-          <span>{s.lastTouch ? `${shortDate(s.lastTouch)}${s.lastTouchChannel ? ` · ${CHANNEL_LABEL[s.lastTouchChannel].toLowerCase()}` : ''}` : 'none on record'}</span>
+          <span>For {props.vehicleName}</span>
+          <span>{meetingLine(s)} · last touch {s.lastTouch ? `${shortDate(s.lastTouch)}${s.lastTouchChannel ? `, ${CHANNEL_LABEL[s.lastTouchChannel].toLowerCase()}` : ''}` : 'none'}</span>
         </div>
-        {s.awaitingSince && <div className="fact"><span>Waiting on them</span><span>since {shortDate(s.awaitingSince)} — we reached out, nothing from them since</span></div>}
-        {s.lastFromThem && !s.awaitingSince && <div className="fact"><span>We owe a reply</span><span>since {shortDate(s.lastFromThem)} — they wrote last</span></div>}
+        {s.awaitingSince && <div className="fact"><span>Waiting on them</span><span>since {shortDate(s.awaitingSince)}</span></div>}
+        {s.lastFromThem && !s.awaitingSince && <div className="fact"><span>We owe a reply</span><span>since {shortDate(s.lastFromThem)}</span></div>}
         {s.nextMeeting && <div className="fact"><span>Next meeting</span><span>{shortDate(s.nextMeeting)}</span></div>}
         {(props.mismatches?.length ?? 0) > 0 && (
           <div className="fact" data-mismatch>
@@ -670,7 +674,7 @@ export function Timeline(props: {
             <span>With their firm</span>
             <span className="muted">
               {s.withFirm.total} more, not counted above{s.withFirm.lastTouch ? ` · last ${shortDate(s.withFirm.lastTouch)}` : ''}
-              {s.withFirm.nextMeeting ? ` · next ${shortDate(s.withFirm.nextMeeting)}` : ''} — they may be with a colleague
+              {s.withFirm.nextMeeting ? ` · next ${shortDate(s.withFirm.nextMeeting)}` : ''}
             </span>
           </div>
         )}
@@ -685,7 +689,7 @@ export function Timeline(props: {
         )}
         <div className="timeline">
           <EntryBox pursuitId={props.pursuitId} entityId={props.entityId} vehicleId={props.vehicleId} vehicleName={props.vehicleName} status={props.status} today={props.today} />
-          {items.length === 0 && <p className="muted" style={{ marginTop: 8 }}>Nothing on record yet: no touchpoint, and no note in Affinity.</p>}
+          {items.length === 0 && <p className="muted" style={{ marginTop: 8 }}>Nothing on record yet.</p>}
           <TagVehicles vehicles={tagVehicles}>
             <TimelineRows rows={rows} options={options} filter={props.filter ?? 'all'} limit={props.limit ?? TIMELINE_PAGE} path={props.path} />
           </TagVehicles>
@@ -696,24 +700,7 @@ export function Timeline(props: {
           </div>
         )}
       </div>
-      <p className="cover">
-        <b>What this covers:</b> the comms trace — touchpoints logged here, those Affinity has (each list
-        entry&rsquo;s last email and meetings, the calendar, and meeting, call and email notes) as of the
-        last translation, and the Gmail messages juanmail reported, one row per message: one Affinity also
-        has is matched by Message-ID, else by date and participants, and says how sure the match is. With
-        the team&rsquo;s notes here and in Affinity, and Linear issues linked to this pursuit. About anything. Each row says which vehicle it is about: named in it,
-        or tagged by Claude or a person. Only rows tagged with {props.vehicleName}, inside its raise
-        window, count for this pursuit and its ladder; a row about a raise that doesn&rsquo;t say which
-        counts for none until someone tags it. A meeting nobody logged and no calendar saw is not here.
-        {props.calendarPartial && <> <b>The calendar read stopped at its cap,</b> so some meetings Affinity has are not here yet.</>}
-        {notes.length > 0 && (
-          <>
-            {' '}<b>The notes</b> are the team&rsquo;s, as written in Affinity{onOrg ? `, ${onOrg} of them on their firm` : ''} — a
-            record of what was said, not evidence for the ladder — copied by the{' '}
-            <Link href="/dev/affinity/notes">notes read</Link> {ago(notesRead)}; Affinity is unchanged.
-          </>
-        )}
-      </p>
+      {props.calendarPartial && <p className="cover"><b>The calendar read stopped at its cap,</b> so some meetings Affinity has are not here yet.</p>}
     </div>
   );
 }

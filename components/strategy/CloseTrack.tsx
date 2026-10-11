@@ -4,6 +4,7 @@ import { shortDate } from '@/lib/time';
 import { usdM } from '@/lib/money';
 import { CLOSE_STATES, CLOSE_STATE_LABEL, STEP_LABEL, type CloseTrack as Track } from '@/modules/pipeline';
 import { CloseTrackForm } from './CloseTrackForm';
+import { Info } from '@/components/ui/Info';
 
 /**
  * How far the money has got (N52, docs/17 §3): soft → signed → hard → closed, with wires
@@ -26,7 +27,7 @@ export function CloseTrack({ track: t, pursuitId }: { track: Track; pursuitId: s
     <div className="card">
       <div className="chead">
         <h2>Close track</h2>
-        <span className="lbl">{CLOSE_STATE_LABEL[t.state]} · {usdM(x.amount)} · {x.vehicleName}</span>
+        <span className="lbl">{CLOSE_STATE_LABEL[t.state]} · {usdM(x.amount)} · {x.vehicleName} <Info>Hard means countersigned, through a MONEY ticket on <Link href="/soft-hard">Soft → Hard</Link>: the only step that moves a number into a headline (rule 1). A signature, a closing and a wire are events; the state is read from them, and cash is never the same check mark as the countersignature.</Info></span>
       </div>
       <div className="cbody">
         <div className="closesteps" aria-label="Close track">
@@ -67,12 +68,6 @@ export function CloseTrack({ track: t, pursuitId }: { track: Track; pursuitId: s
           </details>
         )}
       </div>
-      <p className="cover">
-        <b>Hard means countersigned</b>, through a MONEY ticket on <Link href="/soft-hard">Soft → Hard</Link> —
-        the only step that moves a number into a headline (rule 1). A signature, a closing and a
-        wire are events; the state is read from them, and cash is never the same check mark as
-        the countersignature.
-      </p>
     </div>
   );
 }

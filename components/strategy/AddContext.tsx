@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { addContextAction } from '@/app/targets/actions';
+import { Info } from '@/components/ui/Info';
 
 /**
  * Add context, or correct what we know (issue 0016, real): Juan — "a box to add context or make
@@ -22,7 +23,7 @@ export function AddContext(props: {
     <div className="card addcontext">
       <div className="chead">
         <h2>Add context</h2>
-        <span className="lbl">more information, or a correction</span>
+        <span className="lbl">or a correction <Info>Your words, kept as research on this LP with your name and the date. It moves no status, no rung and no money. The strategy says when it was written before the newest context, and its next pass reads this first.</Info></span>
       </div>
       <div className="cbody">
         <form
@@ -60,11 +61,6 @@ export function AddContext(props: {
           </div>
         )}
       </div>
-      <p className="cover">
-        <b>What this keeps:</b> your words, as research on this LP, with your name and the date. It
-        moves no status, no rung and no money. The suggested strategy says when it was written before
-        the newest context, and the next pass of the strategy workflow reads this first.
-      </p>
     </div>
   );
 }

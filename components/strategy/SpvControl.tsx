@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { setSpvStanceAction, withdrawSpvStanceAction } from '@/app/targets/spv-actions';
 import type { SpvStance } from '@/modules/strategy/client';
 import s from './spv.module.css';
+import { Info } from '@/components/ui/Info';
 
 const CHOICES: Array<{ id: SpvStance; label: string }> = [
   { id: 'does', label: 'Does SPVs' }, { id: 'does-not', label: 'Doesn’t' }, { id: 'unknown', label: 'Unknown' },
@@ -78,9 +79,6 @@ export function SpvControl({ entityId, current }: {
       {badCount && <p className={s.err}>The count is a whole number from 1 to 10,000, or blank.</p>}
       {msg && <p role="status" className={s.msg}>{msg}</p>}
       {error && <p role="alert" className={s.err}>{error}</p>}
-      <p className="muted" style={{ margin: '8px 0 0', fontSize: 11.5 }}>
-        A person’s setting wins over research and derived signals. Withdrawing it returns the LP to the evidence; both are in the log.
-      </p>
     </form>
   );
 }

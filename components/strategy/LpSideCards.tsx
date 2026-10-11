@@ -4,6 +4,7 @@ import type { RouteSearch } from '@/lib/authz/read/network';
 import { pipelineData } from '@/lib/authz/read/pipeline';
 import { STATUS_LABEL } from '@/lib/authz/read/strategy';
 import s from './lp-tables.module.css';
+import { Info } from '@/components/ui/Info';
 
 /**
  * Warm intro, on the LP page (issue 0093): how many ways in the network holds, how strong the best
@@ -56,13 +57,12 @@ export function WarmIntroBox({ search, entityId }: { search: RouteSearch | null;
               </ol>
             )}
             {usable.length === 0 && (
-              <p className={s.warmLede}>No usable route in the {search.coverage.edges.toLocaleString('en-US')} relationship edges inspected. That is not the same as no route existing: the routes page can look further.</p>
+              <p className={s.warmLede}>No usable route in {search.coverage.edges.toLocaleString('en-US')} relationship edges. <Info>Not the same as no route existing: the routes page can look further.</Info></p>
             )}
           </>
         )}
         <Link className={`btn p ${s.warmCta}`} href={href}>Find a Warm Intro</Link>
-        <p className={s.warmNote}><Link href={`${href}&mode=through`}>Routes through them</Link>: who they could introduce us to, and the gaps in their records.</p>
-        {usable.length > 0 && <p className={s.warmNote}>Route scores are the network scorer&rsquo;s estimates, 0–100, not chances. Opens this LP on the warm intro routes page.</p>}
+        <p className={s.warmNote}><Link href={`${href}&mode=through`}>Routes through them</Link>{usable.length > 0 && <Info>Route scores are the network scorer&rsquo;s estimates, 0–100, not chances.</Info>}</p>
       </div>
     </div>
   );
