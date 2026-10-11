@@ -40,7 +40,6 @@ import { laterFacts, shownRead } from '@/lib/reads';
 import { onFile } from '@/lib/reconcile';
 import { ConnectionFeedback } from '@/components/routes/ConnectionFeedback';
 import { PublicProfile } from '@/components/entity/PublicProfile';
-import { VehicleInvestments } from '@/components/entity/VehicleInvestments';
 import { SuggestedStrategy } from '@/components/strategy/SuggestedStrategy';
 import { AddContext } from '@/components/strategy/AddContext';
 import { OrgPeople, WarmIntroBox } from '@/components/strategy/LpSideCards';
@@ -52,10 +51,6 @@ import { findOpenTicket } from '@/modules/governance';
 import { EmailDrafts } from '@/components/email/EmailDrafts';
 import { OutreachContext } from '@/components/outreach/OutreachContext';
 import { linearFor, traceFor } from '@/lib/comms/read';
-import { traceState } from '@/lib/comms/trace';
-import { LpBrief, LpSections, type BriefFlag } from '@/components/strategy/LpBrief';
-import brief from '@/components/strategy/lp-brief.module.css';
-import type { Strategy } from '@/lib/enrich/strategy';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,8 +71,7 @@ async function TargetWorkspace({ params, searchParams }: {
   const [user, vehicles, [entity]] = await Promise.all([(async () => (await auth()).currentUser())(), listVehicles(), listEntities([pursuit.entityId])]);
   // The routes page's own search — team scope, three hops, this vehicle — so the warm intro box
   // and the page it opens agree (issue 0093).
-  const thisVehicle = vehicles.find((v) => v.id === pursuit.vehicleId);
-  const vehicleKind = thisVehicle?.kind ?? 'fund';
+  const vehicleKind = vehicles.find((v) => v.id === pursuit.vehicleId)?.kind ?? 'fund';
   const [claims, notes, restrictions, routes, signals, affinityNotes, tracks, calendar, readings, logged, updates, statusLog] = await Promise.all([
     claimsFor(pursuit.entityId),
     notesFor(pursuit.entityId),
@@ -146,8 +140,7 @@ async function TargetWorkspace({ params, searchParams }: {
   const everSummary = summarize(everything);
   const bestRoute = (routes?.routes ?? []).filter((r) => r.foldedUnder == null && r.verdict === 'recommend')
     .sort((a, b) => routeReading(b).score - routeReading(a).score)[0] ?? null;
-  const suggestions = await suggestionsFor(pursuit.pursuitId);
-  const openSuggestion = suggestions.find((x) => x.status !== 'dismissed' && x.status !== 'withdrawn');
+  const openSuggestion = (await suggestionsFor(pursuit.pursuitId)).find((x) => x.status !== 'dismissed' && x.status !== 'withdrawn');
   const emailPlan = chooseFirstEmail({
     firstMessage: (openSuggestion?.data as { firstMessage?: unknown } | null)?.firstMessage ?? null,
     best: bestRoute ? {
@@ -195,49 +188,6 @@ async function TargetWorkspace({ params, searchParams }: {
   const questions = notes.filter((n) => n.kind === 'open_question');
   // Public-source facts (N64) are in their own card, with their pages; these are the rest.
   const ownClaims = claims.filter((c) => !c.field.startsWith('public.'));
-
-  // The plan (docs/strategy/lp-pages.md): what the cards below say, in the order a person acts on it.
-  const now = new Date();
-  const latestStrategy = suggestions[0] ?? null;
-  const contextNotes = notes.filter((n) => n.kind === 'context');
-  const owes = traceState({ ...trace, touches }).owes;
-  const since = latestStrategy ? (() => {
-    const after = everything.filter((t) => t.on && t.on.getTime() > latestStrategy.madeAt.getTime() && t.on.getTime() <= now.getTime() && t.channel !== 'research');
-    return {
-      touches: after.length, fromThem: after.filter((t) => t.direction === 'theirs').length,
-      latest: after.reduce<Date | null>((m, t) => (!m || t.on!.getTime() > m.getTime() ? t.on! : m), null),
-      notes: contextNotes.filter((n) => n.createdAt.getTime() > latestStrategy.madeAt.getTime()).length,
-    };
-  })() : null;
-  const money = [
-    ...(indicated ? [`Indicated ${indicated.low === indicated.high ? usdM(indicated.low) : `${usdM(indicated.low)}–${usdM(indicated.high)}`}, ${shortDate(indicated.on)}: an indication, added to neither soft nor hard`] : []),
-    ...(tracks[0] ? [`Close track: ${CLOSE_STATE_LABEL[tracks[0].state]} · ${usdM(tracks[0].exposure.amount)}${tracks[0].exposure.track === 'hard' ? ` · ${usdM(tracks[0].wired)} wired` : ''}`] : []),
-  ];
-  const needsEvidence = statusNeedsEvidence(pursuit.status, pursuit.rung);
-  // Which of their pursuits carry a strategy: this vehicle's first, then the others in vehicle order.
-  const strategyOf = new Map(await Promise.all(strategyPursuits.filter((x) => x.pursuitId !== pursuit.pursuitId)
-    .map(async (x) => [x.pursuitId, (await suggestionsFor(x.pursuitId))[0] ?? null] as const)));
-  strategyOf.set(pursuit.pursuitId, latestStrategy);
-  const withStrategy = [...strategyPursuits].filter((x) => strategyOf.get(x.pursuitId))
-    .sort((a, b) => Number(b.pursuitId === pursuit.pursuitId) - Number(a.pursuitId === pursuit.pursuitId));
-  const otherStrategies = withStrategy.filter((x) => x.pursuitId !== pursuit.pursuitId
-    && ['proposed', 'accepted'].includes(strategyOf.get(x.pursuitId)!.status));
-  const briefFlags: BriefFlag[] = [
-    ...restrictions.map((r): BriefFlag => ({ tone: 'stop', text: `Restriction on file: ${r.scope === 'blanket' ? 'do not approach, by any channel' : r.scope === 'channel' ? `not by ${r.channel ?? 'this channel'}` : `not through ${r.connectorName ?? 'a connector'}`}. Read it under Before you send; no other route gets round it (rule 8).` })),
-    ...(vehicleKind === 'spv' && spvHere?.stance === 'does-not' ? [{ tone: 'warn' as const, text: 'Doesn’t do SPVs, and this is an SPV' }] : []),
-    ...((pursuit.status === 'new' || pursuit.status === 'sourcing' || pursuit.status === 'selected' || pursuit.status === 'connecting') && touchSummary.meetingDates.length > 0
-      ? [{ tone: 'warn' as const, text: `A meeting is on record and the status is still ${STATUS_LABEL[pursuit.status]}`, href: '#status' }] : []),
-    ...(needsEvidence ? [{ tone: 'info' as const, text: `Needs evidence: ${STATUS_LABEL[pursuit.status]} claims ${RUNG_LABEL[needsEvidence]}`, href: '#status' }] : []),
-    ...(((latestStrategy?.status === 'proposed' || latestStrategy?.status === 'accepted') ? (latestStrategy.data as unknown as Strategy).risks ?? [] : []).slice(0, 2).map((r) => ({ tone: 'info' as const, text: r }))),
-    ...otherStrategies.map((x) => ({ tone: 'info' as const, text: `Also a strategy for ${x.vehicleName}`, href: '#strategy' })),
-    ...(questions.length ? [{ tone: 'info' as const, text: `${questions.length} open ${questions.length === 1 ? 'question' : 'questions'}`, href: '#questions' }] : []),
-  ];
-  const slug = thisVehicle?.slug ?? null;
-  const sections = [
-    { id: 'plan', label: 'Plan' }, { id: 'status', label: 'Status' }, { id: 'email', label: 'Email' }, { id: 'timeline', label: 'Timeline' },
-    ...(withStrategy.length ? [{ id: 'strategy', label: 'Strategy' }] : []),
-    { id: 'research', label: 'Research' }, { id: 'routes', label: 'Routes' }, { id: 'known', label: 'What we know' },
-  ];
 
   return (
     <Page
@@ -342,40 +292,20 @@ async function TargetWorkspace({ params, searchParams }: {
         </div>
       )}
       <p className="sublede">{pursuit.headline}</p>
-      <div className={brief.page}>
-      <LpSections sections={sections} />
-
-      <LpBrief
-        pursuitId={pursuit.pursuitId}
-        vehicleName={pursuit.vehicleName}
-        nextStep={pursuit.nextStep ? { what: pursuit.nextStep, on: pursuit.nextStepOn } : null}
-        strategy={latestStrategy ? {
-          suggestionId: latestStrategy.suggestionId, status: latestStrategy.status, madeBy: latestStrategy.madeBy, madeAt: latestStrategy.madeAt,
-          decidedByName: latestStrategy.decidedByName, data: latestStrategy.data as unknown as Strategy,
-        } : null}
-        route={bestRoute ? {
-          path: `${bestRoute.fromName ?? routes?.fromName ?? 'Us'} → ${bestRoute.hops.map((h) => h.toName).join(' → ')}`,
-          tier: bestRoute.weakestTier, href: `/routes?target=${pursuit.entityId}`,
-        } : null}
-        routesHref={`/routes?target=${pursuit.entityId}`}
-        owes={owes}
-        lastTouch={touchSummary.lastTouch}
-        since={since}
-        money={money}
-        flags={briefFlags}
-        links={[
-          ...(slug ? [{ label: 'Account plan', href: `/${slug}/strategy/${pursuit.entityId}` }, { label: 'Fit reading', href: `/${slug}/fit/${pursuit.entityId}` }] : []),
-          { label: 'Every vehicle', href: `/orgs/${pursuit.entityId}` },
-        ]}
-        today={now}
-      />
+      <p className="muted" style={{ marginTop: -6 }}>
+        <a href="#email">Draft an email ↓</a>
+        {/* The compared shorter designs (11 Oct 2026, docs/strategy/lp-pages.md), until one is picked. */}
+        {' · '}Try a shorter page: <Link href={`/targets/${pursuit.pursuitId}/a`}>A</Link>
+        {' · '}<Link href={`/targets/${pursuit.pursuitId}/b`}>B</Link>
+        {' · '}<Link href={`/targets/${pursuit.pursuitId}/c`}>C</Link>
+      </p>
 
       {(() => {
         const p = pursuit;
         const claimed = impliedRung(p.implied);
         const differs = p.statusSource === 'us' && p.statusSaid && p.statusSaid !== p.status;
         return (
-          <div className="statuspanel" id="status">
+          <div className="statuspanel">
             <div className="now">
               <span className="lbl">Status</span>
               <b>{STATUS_LABEL[p.status]}</b>
@@ -471,7 +401,6 @@ async function TargetWorkspace({ params, searchParams }: {
         <div>
           {tracks.map((t) => <CloseTrack key={t.exposure.exposureId} track={t} pursuitId={pursuit.pursuitId} />)}
 
-          <BeforeOutreach entityId={pursuit.entityId} />
           {/* What the sender needs to decide, in place of an approval (Juan, 5 Oct 2026). */}
           <OutreachContext entityId={pursuit.entityId} vehicleId={pursuit.vehicleId} pursuitId={pursuit.pursuitId} trace={trace}
             connectorId={emailPlan.purpose === 'intro_ask' ? emailPlan.connector?.entityId ?? null : null}
@@ -492,18 +421,6 @@ async function TargetWorkspace({ params, searchParams }: {
               ? { label: 'Draft the first message to them instead', create: { purpose: 'first_message', vehicleId: pursuit.vehicleId, pursuitId: pursuit.pursuitId } }
               : null}
           />
-
-          {signals.length > 0 && (
-            <div className="card">
-              <div className="chead">
-                <h2>What changed</h2>
-                <span className="lbl">signals concerning this target</span>
-              </div>
-              {signals.map((s) => (
-                <SignalRow key={s.signalId} signal={s} />
-              ))}
-            </div>
-          )}
 
           <Timeline
             touches={shown}
@@ -534,17 +451,13 @@ async function TargetWorkspace({ params, searchParams }: {
             path={`/targets/${pursuit.pursuitId}`}
           />
 
-          {/* The strategies, whole, right after what happened (11 Oct 2026); the plan at the top leads with this vehicle's. */}
-          {withStrategy.length > 0 && <div id="strategy">
-            {withStrategy.map((p) => <SuggestedStrategy key={p.pursuitId} pursuitId={p.pursuitId} vehicleName={p.vehicleName} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />)}
-          </div>}
-          <div id="research">
-            <DakotaClaims entityId={pursuit.entityId} />
-            <PublicProfile entityId={pursuit.entityId} />
-            {thisVehicle && <VehicleInvestments entityId={pursuit.entityId} vehicle={thisVehicle} />}
-          </div>
+          <BeforeOutreach entityId={pursuit.entityId} />
+          {strategyPursuits.map((p) => <SuggestedStrategy key={p.pursuitId} pursuitId={p.pursuitId} vehicleName={p.vehicleName} context={notes.filter((n) => n.kind === 'context').map((n) => ({ by: n.author, at: n.createdAt, body: n.body }))} />)}
+          <DakotaClaims entityId={pursuit.entityId} />
+          <PublicProfile entityId={pursuit.entityId} />
+          <ConnectionFeedback key={pursuit.entityId} lp={pursuit.entityId} />
 
-          <div className="card" id="routes">
+          <div className="card">
             <div className="chead">
               <h2>Routes in</h2>
               <span className="lbl">ranked by what the evidence can carry</span>
@@ -585,26 +498,39 @@ async function TargetWorkspace({ params, searchParams }: {
             )}
           </div>
 
-          <ConnectionFeedback key={pursuit.entityId} lp={pursuit.entityId} />
+          {signals.length > 0 && (
+            <div className="card">
+              <div className="chead">
+                <h2>What changed</h2>
+                <span className="lbl">signals concerning this target</span>
+              </div>
+              {signals.map((s) => (
+                <SignalRow key={s.signalId} signal={s} />
+              ))}
+            </div>
+          )}
 
-          {/* A plan recorded on the pursuit; the strategy's next step is in the plan at the top. Shown only when there is one. */}
-          {pursuit.plan.length > 0 && <div className="card">
+          <div className="card">
             <div className="chead">
               <h2>Next moves</h2>
               <span className="lbl">plan · each with its reason</span>
             </div>
             <div className="cbody">
-              <ol className="moves">
-                {pursuit.plan.map((step) => (
-                  <li key={step.move}>
-                    {step.move}
-                    <small>{step.because}</small>
-                    {step.blockedBy && <span className="block">Blocked: {step.blockedBy}</span>}
-                  </li>
-                ))}
-              </ol>
+              {pursuit.plan.length === 0 ? (
+                <p className="muted">No plan recorded.</p>
+              ) : (
+                <ol className="moves">
+                  {pursuit.plan.map((step) => (
+                    <li key={step.move}>
+                      {step.move}
+                      <small>{step.because}</small>
+                      {step.blockedBy && <span className="block">Blocked: {step.blockedBy}</span>}
+                    </li>
+                  ))}
+                </ol>
+              )}
             </div>
-          </div>}
+          </div>
 
           {pursuit.nextRung && (
             <div className="card">
@@ -647,7 +573,7 @@ async function TargetWorkspace({ params, searchParams }: {
           })()}
           {/* Whether they do SPVs (Juan, 27 Sep 2026): the stance, its evidence, and a person's setting. */}
           <SpvCard entityId={pursuit.entityId} entityName={pursuit.entityName} spvVehicle={vehicleKind === 'spv'} />
-          <div className="card" id="known">
+          <div className="card">
             <div className="chead">
               <h2>What we know</h2>
             </div>
@@ -668,8 +594,7 @@ async function TargetWorkspace({ params, searchParams }: {
             </div>
           </div>
 
-          {/* Shown when there is one: the plan at the top counts them, and the strategy has its own "To find out". */}
-          {questions.length > 0 && <div className="card" id="questions">
+          <div className="card">
             <div className="chead">
               <h2>Open questions</h2>
               <span className="lbl">{questions.length}</span>
@@ -688,11 +613,10 @@ async function TargetWorkspace({ params, searchParams }: {
                 ))
               )}
             </div>
-          </div>}
+          </div>
 
         </div>
       </div></div>
-      </div>
     </Page>
   );
 }

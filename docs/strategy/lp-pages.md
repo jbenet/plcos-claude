@@ -1,7 +1,7 @@
 # LP pages and LP strategy: review and revamp
 
 Written 11 Oct 2026 for Juan's ask "revamping LP pages + strategy", while he was away. It records what the
-review found, what shipped with it, the strategy the pages should serve, and the larger calls left for him.
+review found, the three designs built to compare, the strategy the pages should serve, and the calls left for him.
 Everything here was checked on the demo data (invented LPs); no real record was read.
 
 ## 1. What an LP page is for
@@ -29,31 +29,35 @@ research, the routes, the close track) is the evidence behind those answers, and
 - **Stale copy.** The demo's Next moves step read "Blocked: No SEND ticket has been opened", which a person has
   not needed since 5 Oct (domain rule 3).
 
-## 3. What shipped with this note
+## 3. Three designs to compare
 
-On the LP workspace (`app/targets/[id]/page.tsx`, `components/strategy/LpBrief.tsx`):
+Juan, 11 Oct, on the live pages: "super verbose and not very useful ... way way way to much writing and info ...
+humans get overloaded with noise", then "plan out some versions ... under different routes i can visit to
+compare, and we can decide which ones we pick tomorrow". A first pass (a plan card added on top of the page)
+was withdrawn because it added text instead of removing it. In its place, three trial pages read the same
+records as the current one, and the current page stays as it is until one is picked:
 
-- **The plan, first.** One card under the name: why they'd care, the next step (a person's leads; the strategy's
-  is shown as suggested, with its date and "past its date" when it has passed), the way in (the route search's
-  best recommended route, else the strategy's, else "no supported route ... not the same as none"), the ask and
-  where the money stands, and who owes the last word, from the comms trace. Restrictions show in red at the top
-  of it, always.
-- **"Written before the latest."** When touches or team notes postdate the strategy, the plan says how many,
-  how many came from them, and the latest date.
-- **Flags as chips**: doesn't do SPVs on an SPV, a meeting on record while the status is still early, needs
-  evidence, the strategy's first two risks, a strategy on another vehicle (fund first, either end), open
-  questions. Each links to the card that has the detail.
-- **Actions in one row**: draft an email, add an update, accept the suggested next step (the same action as the
-  strategy card: it writes the next step and nothing else), and links to the full strategy, the account plan,
-  the fit reading and every vehicle.
-- **Section anchors** under the name (Plan, Status, Email, Timeline, Strategy, Research, Routes, What we know),
-  sticky on a desktop.
-- **The order follows the work**: triage and Before you send, Email, What changed, Timeline, then the strategies
-  (this vehicle's first), the research, Routes in with connection feedback under it, and the ladder last.
-  Next moves and Open questions show only when they have something in them.
-- The demo seed's blocked step no longer mentions a SEND ticket.
+| Route | Design | What leads | Where the rest goes |
+| --- | --- | --- | --- |
+| `/targets/<pursuit>/a` | **A · Brief and tabs** | Four lines: why, next, way in, ask; three buttons | Tabs: Activity, Strategy, Email, Research, Routes, People |
+| `/targets/<pursuit>/b` | **B · Conversation first** | The thread with them, one line per touch, and the email box | A narrow side column: plan, who owes, three routes, five facts |
+| `/targets/<pursuit>/c` | **C · Dossier** | The same twelve rows on every LP, one line each | Each row opens its detail in place |
 
-Nothing changed in what any card computes, what is recorded, or what any guard allows.
+The rules all three share (`app/targets/[id]/_lp/`):
+
+- **One line per answer.** Long text is cut to a line with the full text on hover; explainer paragraphs become
+  an "i" with the paragraph as its tooltip; a strategy shows Why, Next, Ask and one line of scores, with the
+  full W5 card behind "Full strategy".
+- **Nothing empty is shown.** No "None recorded" cards.
+- **Chips, not sentences**, for status with its ladder, money (hard and soft never blended), who owes a reply,
+  needs evidence, doesn't do SPVs, and the LP's other vehicles. Restrictions are always shown, in red.
+- **A person's next step wins**; the strategy's is marked suggested, with an Accept button that writes the next
+  step and nothing else.
+- **The email trail is the record**: one line per touch, newest first, other vehicles' touches faded; health
+  details lend no text (N56).
+
+Nothing in what is computed, recorded or allowed changed. A small "Try a shorter page: A · B · C" line on the
+current page links to them. When one is picked, it replaces the current page and the other two are deleted.
 
 ## 4. The strategy the pages serve
 
@@ -71,7 +75,7 @@ Nothing changed in what any card computes, what is recorded, or what any guard a
 
 ## 5. Calls for Juan
 
-Each has a recommendation; none has been started.
+Each has a recommendation; only E is built, as the three trial pages.
 
 | # | Question | Recommendation |
 | --- | --- | --- |
@@ -79,10 +83,10 @@ Each has a recommendation; none has been started.
 | B | Make the organisation page the cross-vehicle hub, with one plan card per vehicle? | **Yes, next.** It fits "either end" and reuses the plan card. |
 | C | Refresh a strategy automatically when it is written before a reply from them, as a nightly Astra batch with a cap? | **Yes**, once the Astra runner is launching on its own; it costs no Claude usage. |
 | D | Fold the long "What this covers" notes under each card into a one-line coverage note with the rest behind a disclosure? | **Yes.** Rule 7 needs the disclosure, not the paragraph. |
-| E | Tabs instead of one long page? | **Not yet.** The anchors and the plan may be enough; tabs hide things. |
+| E | Which design replaces the current page: A, B or C? | **A.** It is the shortest above the fold and gives each kind of detail its own address; B suits people working mostly from mail. |
 
 ## 6. How it was checked
 
-Demo server, the Vetchling Wagtail Capital and Mirela Barrowcliff LPs, with one invented W5 strategy added
-locally to Vetchling for the screenshots (not committed), at desktop and phone widths and in dark mode;
-`tsc`, `boundaries` and `props`.
+Demo server (invented LPs), on Vetchling Wagtail Capital, Mirela Barrowcliff and Solveig Quaresma (a
+restriction), with one invented W5 strategy added locally to Vetchling for the screenshots (not committed), at
+desktop and phone widths and in dark mode; `tsc`, `boundaries` and `props`.
