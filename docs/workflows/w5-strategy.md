@@ -1,5 +1,5 @@
 # W5 — Strategy for an LP: fit, scores, angle, route, next step and ask, as a proposal for a person
-The rules in force, amendments 1.1–1.12 folded in; `docs/19-enrichment-workflows.md` keeps the design and the history.
+The rules in force, amendments 1.1–1.13 folded in; `docs/19-enrichment-workflows.md` keeps the design and the history.
 
 ## Read set for a batch
 
@@ -52,7 +52,7 @@ read the companion strategies when coordinating overlapping asks.
 The shape:
 
     key, name
-    made    { at, by: "claude (sub-agent)", workflow: "W5", version: "1.12",
+    made    { at, by: "claude (sub-agent)", workflow: "W5", version: "1.13",
               inputs: { finding, money, bestPath, lead? }, revised?: [{ at, by, rule }] }
     fit     { <vehicle>: { verdict: strong | good | possible | weak | unknown, why,
                            gates: [{ gate, answer: yes | no | unknown, basis }] } }
@@ -258,22 +258,26 @@ its `made.at`. `made.revised` lists each change made by rule after writing, with
   rule dates and in the same way; `--skip <file>` leaves the stale list alone, since those LPs have
   something new and are rewritten instead. A step that is not a park stays overdue: a person owes it.
 
-## Tight (1.12)
+## Tight (1.12, enforced from 1.13)
 
 Juan, 8 Oct 2026, reading a strategy through an MCP client: "far too wordy ... write much more tightly, more
-signal"; "could be crisper, maybe bulleted". A person reads the angle, the route, the next step and the risks
-in a few seconds; the analysis lives in the bases and the fit, which nobody reads first.
+signal"; "could be crisper, maybe bulleted". Juan, 11 Oct 2026, picking the LP page's design A: "set W5's length
+limits so new strategies come out short". The LP page shows the angle, the next step, the way in and the ask one
+line each, the risks as chips and the scores on one line; a person reads them in a few seconds.
 
 - **`angle`:** one sentence, 25 words at most — why they'd care, in their record's terms. No route, no
   history of touches, no ask: each has its own field.
-- **`route.why`:** 15 words at most. **`next.what`:** 200 characters at most, one action.
-- **`risks` and `openQuestions`:** three each at most, each a clause of 15 words at most. The one that
-  matters most first: it is the one a reader sees.
+- **`next.what`:** 15 words at most (and under 200 characters), one action; who and when are their own fields.
+- **`route.why`:** 15 words at most.
+- **`risks`:** three at most, each a chip of 8 words at most. **`openQuestions`:** three at most, 15 words each.
+  The one that matters most first: it is the one a reader sees.
+- **Each score's `basis`:** 20 words at most. **Each `fit.why`:** 25 words at most. A quote belongs in the
+  finding, not here.
 - **No field repeats another.** A fact appears once, in the field it belongs to.
-- The bases and `fit.why` stay as short as the evidence allows; a quote belongs in the finding, not here.
 
-The checker counts strategies over these caps and lists them with `--wordy <file>`, for a tightening pass;
-it refuses nothing. MCP clients get the strategy first as short bullets (`brief`: the ask, the route, why,
+A strategy written to 1.13 or later over any cap is refused by the checker (`too long: …`), by the server's
+import and by cloud W5: rewrite the field shorter. Earlier strategies are only counted, listed with
+`--wordy <file>` for a tightening pass. MCP clients get the strategy first as short bullets (`brief`: the ask, the route, why,
 the next step, the first risk), built from these fields.
 
 ## The first message (1.11)
@@ -364,7 +368,8 @@ Fix what it reports for your keys. It refuses a strategy whose key doesn't match
 fit; a score without a basis; no angle; a next step without what and who, or one that reads as an
 automatic send; an ask without a vehicle; a list other than this year, 2027 or not now; a route tier
 outside A–D; a `firstMessage` that fails docs/email-guidelines.md (wrong recipient for its kind, a greeting
-to someone else, analysis or private detail in the words, two vehicles, over 200 words). Its gates, counted by name and listed by `--gated`:
+to someone else, analysis or private detail in the words, two vehicles, over 200 words); and, written to 1.13 or
+later, a field over its cap in "Tight". Its gates, counted by name and listed by `--gated`:
 
 - "this year, without the evidence gate" — no word from them in the last 90 days and no meeting in the
   contact counted for any of their pursuits (the relationship's one-to-ones where the export has none),

@@ -79,7 +79,10 @@ Juan, 11 Oct 2026, on "Pick A and apply the rules above, in three steps": "SGTM 
    open questions), **Research** (what we know, Dakota, public profile), **Routes** (warm intro, routes in,
    connection feedback) and **People** (the organisation's people or the LP unit, SPVs). Only the open tab's
    cards render. The A, B and C trial pages were removed.
-3. **W5 length limits** so new strategies come out short — after.
+3. **W5 length limits** (W5 1.13, `lib/enrich/strategy.ts`, `docs/workflows/w5-strategy.md`): the angle in 25
+   words, the next step in 15 (who and when are their own fields), the route's why in 15, up to three risks of 8
+   words each, three open questions of 15, each score's basis in 20 and each fit reason in 25. A strategy written
+   to 1.13 or later over a cap is refused by the checker, the import and cloud W5; earlier ones are only counted.
 
 ## 4. The strategy the pages serve
 
