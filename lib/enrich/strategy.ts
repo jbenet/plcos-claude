@@ -139,20 +139,35 @@ export const nextOverLimit = (s: Pick<Strategy, 'next'>) => `${s.next.what} — 
 
 /**
  * W5 1.12 (Juan, 8 Oct 2026, feedback 0141: "far too wordy ... write much more tightly, more signal"): the
- * fields a reader sees, held to a few short lines. Advisory: the checker counts and lists them, nothing is refused.
+ * fields a reader sees, held to a few short lines. W5 1.13 (Juan, 11 Oct 2026, picking LP page design A: "set
+ * W5's length limits so new strategies come out short"): the next step in 15 words, risks as up to three short
+ * chips, each basis and fit reason on a line; and a strategy written to 1.13 or later over any cap is refused
+ * (`checkStrategy`). Earlier ones are counted, as before, and never refused.
  */
-export const TIGHT = { angle: 25, routeWhy: 15, next: 200, item: 15, items: 3 } as const; // GUESS: caps from the 0141 example.
-export function wordyParts(s: Partial<Pick<Strategy, 'angle' | 'route' | 'next' | 'risks' | 'openQuestions'>>): string[] {
+export const TIGHT = { angle: 25, routeWhy: 15, nextWords: 15, next: 200, risk: 8, item: 15, items: 3, basis: 20, fitWhy: 25 } as const; // GUESS: caps from the 0141 example and the design A rules.
+/** The version from which the caps are enforced. */
+export const TIGHT_FROM = '1.13';
+export function wordyParts(s: Partial<Pick<Strategy, 'angle' | 'route' | 'next' | 'risks' | 'openQuestions' | 'scores' | 'fit'>>): string[] {
   const out: string[] = [];
   if (s.angle && wordCount(s.angle) > TIGHT.angle) out.push('angle');
   if (s.route?.why && wordCount(s.route.why) > TIGHT.routeWhy) out.push('route');
-  if (s.next?.what && s.next.what.length > TIGHT.next) out.push('next');
-  for (const k of ['risks', 'openQuestions'] as const) {
-    const xs = s[k] ?? [];
-    if (xs.length > TIGHT.items || xs.some((x) => wordCount(x) > TIGHT.item)) out.push(k);
-  }
+  if (s.next?.what && (s.next.what.length > TIGHT.next || wordCount(s.next.what) > TIGHT.nextWords)) out.push('next');
+  const risks = s.risks ?? [];
+  if (risks.length > TIGHT.items || risks.some((x) => wordCount(x) > TIGHT.risk)) out.push('risks');
+  const qs = s.openQuestions ?? [];
+  if (qs.length > TIGHT.items || qs.some((x) => wordCount(x) > TIGHT.item)) out.push('openQuestions');
+  if (s.scores && Object.values(s.scores).some((x) => wordCount((x as { basis?: string })?.basis ?? '') > TIGHT.basis)) out.push('scores');
+  if (s.fit && Object.values(s.fit).some((f) => wordCount(f?.why ?? '') > TIGHT.fitWhy)) out.push('fit');
   return out;
 }
+
+/** What each cap allows, for the checker's refusal: "angle over 25 words". */
+const CAP_TEXT: Record<string, string> = {
+  angle: `angle over ${TIGHT.angle} words`, route: `route.why over ${TIGHT.routeWhy} words`,
+  next: `next.what over ${TIGHT.nextWords} words or ${TIGHT.next} characters`, risks: `risks: over ${TIGHT.items}, or one over ${TIGHT.risk} words`,
+  openQuestions: `openQuestions: over ${TIGHT.items}, or one over ${TIGHT.item} words`, scores: `a score's basis over ${TIGHT.basis} words`,
+  fit: `a fit reason over ${TIGHT.fitWhy} words`,
+};
 
 /** The strategy as four short bullets — the ask, the route, why, the next step — and its first risk (0141). */
 export function strategyBrief(s: Partial<Pick<Strategy, 'angle' | 'route' | 'next' | 'risks' | 'ask'>>): string[] {
@@ -443,6 +458,8 @@ export function checkStrategy(s: unknown, expectKey?: string): string[] {
   if (!['this year', '2027', 'not now'].includes(x.list ?? '')) p.push('list must be this year, 2027 or not now');
   if (x.route && !['A', 'B', 'C', 'D'].includes(x.route.tier)) p.push('route tier must be A–D');
   if (x.firstMessage !== undefined && x.firstMessage !== null) p.push(...checkFirstMessage(x));
+  // W5 1.13: short from the start. Only a strategy written to 1.13 or later is held to the caps.
+  if (x.made && !versionBefore(x.made.version, TIGHT_FROM)) p.push(...wordyParts(x).map((k) => `too long: ${CAP_TEXT[k]}`));
   return p;
 }
 
