@@ -32,10 +32,11 @@ const SCROLL_KEY = 'capitalos.nav.scroll';
  * preference that resets on every reload is not a preference.
  */
 export function NavList({
-  vehicles, current: cookieVehicle, asked, approvals, issues,
+  vehicles, asked, approvals, issues,
 }: {
   vehicles: NavVehicle[];
-  current: string | null;
+  /** The remembered vehicle (cookie). Kept for callers; the rail selects from the address alone (issue 0148). */
+  current?: string | null;
   /** The address the browser asked for, when the proxy rewrote it (null otherwise). */
   asked?: string | null;
   approvals: number;
@@ -61,7 +62,12 @@ export function NavList({
   // Every vehicle module carries its vehicle in the path now (N65), and so does the overview.
   const isModule = (s: string | undefined) => Boolean(s) && (s === 'overview' || modulesForKind('fund').some((mod) => mod.path === s) || s === 'spv' || s === 'grants');
   const fromPath = isModule(seg2) ? (seg1 === 'all' ? null : seg1 ?? null) : undefined;
-  const current = fromPath === undefined ? cookieVehicle : fromPath;
+  /**
+   * Only a vehicle's own pages select a vehicle (issue 0148). Elsewhere (Developer, Settings, Today)
+   * nothing is selected, so the remembered cookie vehicle is not shown as if the page were about it.
+   * `undefined` = no vehicle page; `null` = All vehicles.
+   */
+  const current: string | null | undefined = fromPath;
   const [, start] = useTransition();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(STATIC_SECTIONS.filter((s) => s.defaultCollapsed).map((s) => [s.id, true])),
@@ -95,7 +101,24 @@ export function NavList({
     const el = scroller.current;
     if (!el) return;
     if (scrollTop.current === null) {
-      try { scrollTop.current = Number(window.sessionStorage.getItem(SCROLL_KEY)) || 0; } catch { scrollTop.current = 0; }
+      let stored: string | null = null;
+      try { stored = window.sessionStorage.getItem(SCROLL_KEY); } catch { /* blocked storage */ }
+      scrollTop.current = Number(stored) || 0;
+      // A first load in this tab (an outside link): nothing remembered, so bring the current page's
+      // link into view. Waits for the stored section state, as the link may be in a closed section.
+      if (stored === null) {
+        if (!hydrated) { scrollTop.current = null; return; }
+        const link = el.querySelector<HTMLElement>('[aria-current="page"], .subsub.on, .sub.on:not(.vehicle)');
+        if (link) {
+          const box = el.getBoundingClientRect();
+          const at = link.getBoundingClientRect();
+          const top = Math.max(0, Math.round(el.scrollTop + (at.top - box.top) - (box.height - at.height) / 2));
+          scrollTop.current = top;
+          el.scrollTop = top;
+          remember();
+          return;
+        }
+      }
     }
     if (Math.abs(el.scrollTop - scrollTop.current) > 1) el.scrollTop = scrollTop.current;
   }, [path, hydrated]);
