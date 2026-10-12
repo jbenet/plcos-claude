@@ -112,12 +112,24 @@ async function writtenSince(dir: string, keys: string[], since: number, folders 
   return out;
 }
 
-/** Push each file on its own, so one that fails the importer's checks costs only itself. */
+/**
+ * Push each file on its own, so one that fails the importer's checks costs only itself. The server takes one push at a
+ * time and answers others "Another push is being taken" (409): runs finishing together collided on the first night
+ * (10 of 237 files), so that answer is retried with a growing wait; a refusal on the file's merits is not.
+ */
+const BUSY_WAITS_MS = [5_000, 15_000, 30_000, 60_000, 120_000];
 async function push(workflow: 'W1' | 'W5', runId: string, files: string[]): Promise<number> {
   let ok = 0;
   for (const f of files) {
-    try { await run('bash', ['scripts/cloud-push.sh', '--workflow', workflow, '--run', runId, f], { cwd: REPO, timeout: 180_000 }); ok++; }
-    catch { log(`push refused for one ${workflow} file of run ${runId}`); }
+    for (let attempt = 0; ; attempt++) {
+      try { await run('bash', ['scripts/cloud-push.sh', '--workflow', workflow, '--run', runId, f], { cwd: REPO, timeout: 180_000 }); ok++; break; }
+      catch (e) {
+        const out = e && typeof e === 'object' ? `${(e as { stdout?: string }).stdout ?? ''}${(e as { stderr?: string }).stderr ?? ''}` : '';
+        if (/Another push is being taken/.test(out) && attempt < BUSY_WAITS_MS.length) { await new Promise((r) => setTimeout(r, BUSY_WAITS_MS[attempt])); continue; }
+        log(`push refused for one ${workflow} file of run ${runId}`);
+        break;
+      }
+    }
   }
   return ok;
 }
