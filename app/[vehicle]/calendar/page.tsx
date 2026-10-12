@@ -7,6 +7,7 @@ import { shortDate } from '@/lib/time';
 import { timeline, LANE_LABEL, type Lane } from '@/lib/timeline';
 import type { DatedRow } from '@/lib/lanes';
 import { DatedList } from '@/components/calendar/DatedList';
+import { packRows } from '@/lib/packed-rows';
 import { CalendarWindow } from '@/components/calendar/CalendarWindow';
 import { CalendarStats } from '@/components/calendar/CalendarStats';
 import { Relabel } from '@/components/calendar/Relabel';
@@ -148,7 +149,7 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
             </span>
           </div>
 
-          <CalendarWindow rows={rows} first={weeks[0]!.start.toISOString()} weeks={weeks.length} now={now.toISOString()} look={windowLook} />
+          <CalendarWindow rows={rows.filter(r => new Date(r.to ?? r.from).getTime() >= first && new Date(r.from).getTime() <= last + 86_400_000)} lanes={[...new Set(rows.map(r => r.lane))]} first={weeks[0]!.start.toISOString()} weeks={weeks.length} now={now.toISOString()} look={windowLook} />
 
         </div>
       )}
@@ -160,7 +161,7 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
           <h2>Every dated thing, in order</h2>
           <span className="lbl">search, lanes and standing filter as you type</span>
         </div>
-        <DatedList rows={rows} vehicles={vehicleNames} />
+        <DatedList packed={packRows(rows)} vehicles={vehicleNames} />
         {feeds && feeds.hidden.length > 0 && (
           <div className="cbody" style={{ borderTop: '1px solid var(--line)' }}>
             <div className="lbl">Marked as meetings here ({feeds.hidden.length})</div>

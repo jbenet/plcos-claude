@@ -16,7 +16,6 @@ import { needsSignIn, warmDecision, warmPaths, type WarmState } from '../../lib/
 const REVIEWED = new Set([
   'modules/content/repo.ts:77 order by instrument', // a dozen wrap rules; text order is the display order
   'modules/network/repo.ts:160 order by tier', // four aggregated rows
-  'modules/strategy/repo.ts:115 order by rung', // one LP's ladder events; callers regroup them
 ]);
 
 export async function pageSpeedProperties(check: Check) {

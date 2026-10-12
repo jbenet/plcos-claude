@@ -268,7 +268,7 @@ export async function recordSignals(ctx: Ctx, raw: Record<string, unknown>) {
   const pursuitIds = [...new Set(resolved.map((r) => r.pursuitId).filter((x): x is string => !!x))];
   const state = new Map((await db.query<{ pursuit_id: string; status: Status; name: string; low: string | null; high: string | null }>(`
     select p.pursuit_id::text, p.status::text status, e.display_name name, i.low, i.high
-      from strategy.pursuit p join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
+      from strategy.pursuit p join identity.entity p_e on p_e.entity_id = p.entity_id join identity.entity e on e.entity_id = case when p_e.merged_into is null then p.entity_id else identity.canonical_entity_id(p.entity_id) end
       left join lateral (select low, high from pipeline.indication x where x.pursuit_id = p.pursuit_id and x.superseded_at is null
                           order by recorded_at desc limit 1) i on true
      where p.pursuit_id = any($1::uuid[])`, [pursuitIds])).map((r) => [r.pursuit_id, r]));
@@ -375,10 +375,10 @@ export async function insights(u: AppUser, a: z.infer<typeof insightsInput>) {
       and ($3::text is null or s.role = $3) order by s.sent_at desc, s.signal_id limit 5000`, [v.id, since, a.role ?? null]);
   const n = a.examples ?? 3;
   const byKind = new Map<SignalKind, Row[]>();
-  for (const r of rows) byKind.set(r.kind, [...(byKind.get(r.kind) ?? []), r]);
+  for (const r of rows) { const l = byKind.get(r.kind); if (l) l.push(r); else byKind.set(r.kind, [r]); }
   const kinds = [...byKind].sort((x, y) => y[1].length - x[1].length).map(([kind, list]) => {
     const topics = new Map<string, Row[]>();
-    for (const r of list) { const t = (r.topic ?? '').trim().toLowerCase() || '(no topic)'; topics.set(t, [...(topics.get(t) ?? []), r]); }
+    for (const r of list) { const t = (r.topic ?? '').trim().toLowerCase() || '(no topic)'; { const l = topics.get(t); if (l) l.push(r); else topics.set(t, [r]); } }
     return {
       kind, label: SIGNAL_LABEL[kind], signals: list.length, entities: new Set(list.map((r) => r.entity_id)).size,
       topics: [...topics].sort((x, y) => y[1].length - x[1].length || x[0].localeCompare(y[0])).slice(0, 25).map(([topic, t]) => ({

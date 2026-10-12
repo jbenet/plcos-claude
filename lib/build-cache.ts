@@ -15,6 +15,18 @@ async function readRevisions(db: Db): Promise<{ revision: string; foreground: st
   return row!;
 }
 
+/**
+ * For a cache of touchpoints only (network 020): the touch revision, which a status move or a score
+ * leaves alone, with the same foreground as every other cache, so an import's meetings still answer
+ * from the last build and rebuild behind it while a person's own change rebuilds first.
+ */
+export async function touchRevisions(db: Db): Promise<{ revision: string; foreground: string }> {
+  const row = await db.one<{ revision: string; foreground: string }>(`select 't' || touch::text || ':' || current_date::text as revision,
+    foreground::text || ':' || current_date::text as foreground from network.read_revision where singleton`);
+  return row!;
+}
+type Revisions = (db: Db) => Promise<{ revision: string; foreground: string }>;
+
 // GUESS — the oldest build a page may answer with while only imports have written since. Each such
 // answer starts a rebuild behind it, so in practice a build is as old as one rebuild; this bounds the
 // case where rebuilds keep failing.
@@ -49,7 +61,7 @@ interface State<T> {
  * through a half-hour import that commits every few seconds; the import's results show a rebuild later.
  * A person's own change moves the foreground revision, so the page they open next is rebuilt first.
  */
-export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 16) {
+export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 16, revisions: Revisions = readRevisions) {
   const databases = new WeakMap<Db, State<T>>();
   const keep = (state: State<T>, key: string, built: Built<T>) => {
     const prior = state.latest.get(key);
@@ -70,7 +82,7 @@ export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 1
       try {
         const result = await building.run(true, () => load(...args));
         keep(state, key, { value: result, foreground, started });
-        const holds = (await readRevision(db)) === revision && state.revision === revision;
+        const holds = (await revisions(db)).revision === revision && state.revision === revision;
         if (behind && holds && !state.entries.has(key)) state.entries.set(key, Promise.resolve(result));
         if (!holds && state.entries.get(key) === value) state.entries.delete(key);
         return result;
@@ -87,7 +99,7 @@ export function buildCache<T>(load: (...args: string[]) => Promise<T>, limit = 1
   };
   const answer = async (args: string[], recentMs: number | null): Promise<T> => {
     const db = await getDb();
-    const { revision, foreground } = await readRevisions(db);
+    const { revision, foreground } = await revisions(db);
     let state = databases.get(db);
     if (!state) { state = { revision, entries: new Map(), latest: new Map(), behind: new Set() }; databases.set(db, state); }
     if (state.revision !== revision) { state.revision = revision; state.entries = new Map(); }

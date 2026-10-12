@@ -135,7 +135,7 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
     return { score: provisionalScore(suggestion?.data.scores), kind: strategy?.stale ? 'Provisional · stale' : 'Provisional', at: iso(suggestion ? new Date(suggestion.made_at) : null) };
   };
   const readsOf = new Map<string, NoteReading[]>();
-  for (const r of readings) readsOf.set(r.entityId, [...(readsOf.get(r.entityId) ?? []), r]);
+  for (const r of readings) { const list = readsOf.get(r.entityId); if (list) list.push(r); else readsOf.set(r.entityId, [r]); }
   const sum = (p: Pursuit) => sums.get(`${p.entityId}:${p.vehicleId}`)!;
 
   // Furthest along first: by evidence, then meetings held, then what the source's word says

@@ -147,7 +147,7 @@ export async function boardState(scopeSlug: string | null, floor: FloorState, vi
       }
       const next = walk[i + 1];
       if (!next) return;
-      dwellsByRung.set(ev.rung, [...(dwellsByRung.get(ev.rung) ?? []), daysBetween(ev.occurredAt, next.occurredAt)]);
+      { const l = dwellsByRung.get(ev.rung); if (l) l.push(daysBetween(ev.occurredAt, next.occurredAt)); else dwellsByRung.set(ev.rung, [daysBetween(ev.occurredAt, next.occurredAt)]); }
       if (daysBetween(next.occurredAt, now) <= 30) {
         outByRung.set(ev.rung, (outByRung.get(ev.rung) ?? 0) + 1);
       }

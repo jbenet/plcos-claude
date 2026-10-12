@@ -8,7 +8,7 @@ import { usdM, multiple } from '@/lib/money';
 import { shortDate, formatDate } from '@/lib/time';
 import { CLOSE_PAGE_SIZE, INSTRUMENT_LABEL, indicatedTotals, vehicleCloseStatus, vehicleStatusCounts, vehicleTotals } from '@/modules/pipeline';
 import { conditionsFor, listCycles } from '@/modules/close';
-import { listMeetings } from '@/modules/meetings';
+import { meetingsOn } from '@/modules/meetings';
 import { STATUSES } from '@/lib/authz/read/strategy';
 import s from './status.module.css';
 
@@ -32,7 +32,7 @@ async function Vehicles({ searchParams }: { searchParams: Promise<{ closePage?: 
   const now = new Date();
   const [totals, counts, close, cycles, meetings, indicatedBy] = await Promise.all([
     vehicleTotals(), vehicleStatusCounts(vehicleId), vehicleCloseStatus(vehicleId, Number(sp.closePage ?? 1)),
-    listCycles(), listMeetings(vehicleId), indicatedTotals(vehicleId ? [vehicleId] : null),
+    listCycles(), meetingsOn(vehicleId ?? ''), indicatedTotals(vehicleId ? [vehicleId] : null),
   ]);
   // What LPs indicated (docs/27 §1): its own figure, beside soft and hard and added to neither.
   const indicated = vehicleId ? indicatedBy.get(vehicleId) ?? null : null;

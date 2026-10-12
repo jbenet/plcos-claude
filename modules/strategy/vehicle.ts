@@ -4,15 +4,16 @@ import { getDb } from '@/lib/db';
 import { CONTEXT_BY_RULE, isStale, type Strategy } from '@/lib/enrich/strategy';
 import { vehicleTotals, listExposures } from '@/modules/pipeline';
 import { touchpointSummaries, touchpointsByPair } from '@/modules/meetings';
-import { buildCache } from '@/lib/build-cache';
+import { buildCache, touchRevisions } from '@/lib/build-cache';
 import { strategyRouteSummaries, type RecordedRoute } from '@/modules/network';
 import { listPursuits } from './repo';
 
 /** One vehicle's pursuits and their touchpoints, read once per revision for both the list and the
  * vehicle's plan, which each read them in full (performance pass, 8 Oct 2026). Immutable to callers. */
 export const pursuitsOn = buildCache((vehicleId: string) => listPursuits(vehicleId));
+/** Kept by the touch revision (network 020): moving an LP's status leaves its vehicle's touchpoints standing. */
 export const touchesOn = buildCache(async (vehicleId: string) =>
-  touchpointsByPair((await pursuitsOn(vehicleId)).map((p) => ({ entityId: p.entityId, vehicleId }))));
+  touchpointsByPair((await pursuitsOn(vehicleId)).map((p) => ({ entityId: p.entityId, vehicleId }))), 16, touchRevisions);
 import { STATUSES, type PursuitStatus } from './types';
 
 const rules = config.strategyRanking;

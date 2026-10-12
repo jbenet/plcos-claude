@@ -7,6 +7,7 @@
  */
 import type { StrategyTableRow } from './StrategyTable';
 import type { SpvRowMark } from '@/modules/strategy/client';
+import { packRows as packColumns, unpackRows as unpackColumns, type PackedRows } from '@/lib/packed-rows';
 
 type S = number;
 export interface PackedRow {
@@ -22,7 +23,18 @@ export interface PackedRow {
     plan: Array<[S, S]>;
   };
 }
-export interface PackedTable { rows: PackedRow[]; strings: string[]; views: string[]; hrefBase: string }
+/** Rows travel by column (lib/packed-rows, performance pass 12 Oct 2026), so no key repeats per row; the basis as a tuple. */
+type FlatRow = Omit<PackedRow, 'basis'> & { b: [
+  S | null, S, S | null, S | null, S | null, [number, number, number], Array<[S, number]>, S | null, S | null, S | null, Array<[S, S]>,
+] };
+export interface PackedTable { rows: PackedRows; strings: string[]; views: string[]; hrefBase: string }
+
+const flat = ({ basis: b, ...r }: PackedRow): FlatRow =>
+  ({ ...r, b: [b.angle, b.capacity, b.likelihood, b.route, b.decision, b.conversion, b.work, b.due, b.proposed, b.strategy, b.plan] });
+const nested = ({ b, ...r }: FlatRow): PackedRow => ({ ...r, basis: {
+  angle: b[0], capacity: b[1], likelihood: b[2], route: b[3], decision: b[4], conversion: b[5], work: b[6], due: b[7],
+  proposed: b[8], strategy: b[9], plan: b[10],
+} });
 
 export function packRows(rows: StrategyTableRow[], views: string[], hrefBase: string): PackedTable {
   const strings: string[] = []; const index = new Map<string, number>();
@@ -31,7 +43,7 @@ export function packRows(rows: StrategyTableRow[], views: string[], hrefBase: st
   if (views.length > 31) throw new Error('Too many coverage views for a bitmask.');
   return {
     strings, views, hrefBase,
-    rows: rows.map(r => {
+    rows: packColumns(rows.map((r): PackedRow => {
       if (r.href !== hrefBase + r.id) throw new Error('A row link does not follow the shared prefix.');
       const b = r.basis;
       return {
@@ -47,14 +59,14 @@ export function packRows(rows: StrategyTableRow[], views: string[], hrefBase: st
           strategy: n(b.strategy), plan: b.plan.map(([m, why]) => [s(m), s(why)]),
         },
       };
-    }),
+    }).map(flat)),
   };
 }
 
 export function unpackRows({ rows, strings, views, hrefBase }: PackedTable): StrategyTableRow[] {
   const s = (i: S) => strings[i]!;
   const n = (i: S | null) => i === null ? null : strings[i]!;
-  return rows.map(r => ({
+  return unpackColumns<FlatRow>(rows).map(nested).map(r => ({
     id: r.id, name: r.name, href: hrefBase + r.id, action: r.action, group: s(r.group), status: s(r.status), owner: s(r.owner), rank: r.rank,
     priority: r.priority, expected: r.expected, evidencePriority: r.evidencePriority,
     capacity: r.capacity, likelihood: r.likelihood, route: r.route, days: r.days,

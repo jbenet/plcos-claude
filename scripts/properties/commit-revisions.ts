@@ -86,6 +86,53 @@ export async function commitRevisionProperties(check: Check) {
     check('REVISIONS keep the contact signature through a status move and move it for a contact or affiliation',
       g0 === g1 && g2 !== g1 && g3 === g0 && g4 !== g3, `${g0} → move ${g1} → contact ${g2} → removed ${g3} → affiliation ${g4}`);
 
+    // Touchpoints keep their own revision (network 020): a status, next step or plan leaves it; a meeting,
+    // a contact, an affiliation, a merge, a new pursuit, a vehicle's name or a person's address moves it, at commit.
+    const touch = async () => (await db.one<{ t: string }>('select touch::text t from network.read_revision'))!.t;
+    const moved: Record<string, boolean> = {};
+    const step = async (name: string, sql: string, params: unknown[]) => {
+      const t0 = await touch();
+      await db.query(sql, params);
+      moved[name] = (await touch()) !== t0;
+    };
+    await step('status', `update strategy.pursuit set status = 'committed', next_step = 'Invented step' where pursuit_id = $1`, [pursuit]);
+    await step('meeting', `insert into meetings.meeting (entity_id, owner_id, held_on, channel) values ($1, $2, current_date, 'meeting')`, [org, user]);
+    await step('contact', `insert into strategy.pursuit_contact (pursuit_id, person_entity, role, origin_pursuit_id, source)
+      values ($1, $2, 'Invented contact', $1, 'us')`, [pursuit, person]);
+    await step('affiliation', `update identity.affiliation set role = 'Invented role 2' where person_entity = $1`, [person]);
+    await step('rename', `update identity.entity set display_name = 'Invented Org 5' where entity_id = $1`, [org]);
+    await step('vehicle', `update platform.vehicle set name = 'Invented Fund 2' where id = $1`, [vehicle]);
+    await step('pursuit', `insert into strategy.pursuit (entity_id, vehicle_id, owner_id) values ($1, $2, $3)`, [person, vehicle, user]);
+    await step('address', `insert into platform.user_address (user_id, address, kind) values ($1, 'rev-alias@example.invalid', 'alias')`, [user]);
+    await step('membership', `update strategy.pursuit set vehicle_id = vehicle_id where pursuit_id = $1`, [pursuit]);
+    check('REVISIONS keep the touch revision through a status move and move it for what the touchpoint read joins',
+      !moved.status && moved.meeting! && moved.contact! && moved.affiliation! && moved.rename! && moved.vehicle! && moved.pursuit! && moved.address! && moved.membership!,
+      JSON.stringify(moved));
+
+    // The cache behind every LP list's touchpoints (touchesOn) answers from its build through a status move,
+    // and reads a new meeting the moment it is committed (here the firm's and its person's pursuits both see it).
+    const { touchesOn } = await import('../../modules/strategy/vehicle');
+    const touches = () => withDb(db, () => touchesOn(vehicle));
+    const first = await touches();
+    await db.query(`update strategy.pursuit set status = 'discussing' where pursuit_id = $1`, [pursuit]);
+    const kept = await touches();
+    await db.query(`insert into meetings.meeting (entity_id, owner_id, held_on, channel, summary) values ($1, $2, current_date, 'call', 'Invented call')`, [org, user]);
+    const fresh = await touches();
+    const count = (m: Map<string, unknown[]>) => [...m.values()].reduce((n, l) => n + l.length, 0);
+    check('REVISIONS keep a vehicle\'s touchpoints through a status move and read a new meeting at once',
+      kept === first && fresh !== first && count(fresh) > count(first), `${count(first)} → ${count(kept)} → ${count(fresh)}`);
+
+    // The meetings list (meetingsOn) is kept the same way: a status move leaves it, a new meeting is in it at once.
+    const { meetingsOn } = await import('../../modules/meetings/repo');
+    const listed = () => withDb(db, () => meetingsOn(vehicle));
+    const m0 = await listed();
+    await db.query(`update strategy.pursuit set status = 'selected' where pursuit_id = $1`, [pursuit]);
+    const m1 = await listed();
+    await db.query(`insert into meetings.meeting (entity_id, owner_id, vehicle_id, held_on, channel, summary) values ($1, $2, $3, current_date, 'meeting', 'Invented meeting')`, [org, user, vehicle]);
+    const m2 = await listed();
+    check('REVISIONS keep a vehicle\'s meetings list through a status move and list a new meeting at once',
+      m1 === m0 && m2 !== m0 && m2.length === m0.length + 1, `${m0.length} → ${m1.length} → ${m2.length}`);
+
     if (db.kind === 'postgres' && process.env.DATABASE_URL) {
       // Two connections: a long writer to research notes and identities, and a status change meanwhile.
       const { openPostgres } = await import('../../lib/db/postgres');

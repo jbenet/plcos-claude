@@ -1,6 +1,7 @@
 import { cache } from 'react';
 import { teamLabels } from '@/modules/identity/team';
 import { getDb } from '@/lib/db';
+import { buildCache, touchRevisions } from '@/lib/build-cache';
 import type { LadderRung } from '@/modules/strategy/client';
 import type {
   Channel, DiligenceQuestion, DirectContact, Direction, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
@@ -20,7 +21,10 @@ const MEETING_SELECT = `
          v.name as vehicle_name, m.kind, m.scheduled_for, m.held_on, m.attendees,
          u.name as owner_name, m.source, m.summary, m.justifies_rung, m.justification
     from meetings.meeting m
-    join identity.entity e on e.entity_id = identity.canonical_entity_id(m.entity_id)
+    -- Only a merged record walks its chain: canonical_entity_id() on every meeting was most of a
+    -- calendar's read (performance pass, 12 Oct 2026; as TOUCH_SELECT, 8 Oct).
+    join identity.entity m_e on m_e.entity_id = m.entity_id
+    join identity.entity e on e.entity_id = case when m_e.merged_into is null then m.entity_id else identity.canonical_entity_id(m.entity_id) end
     left join platform.vehicle v on v.id = m.vehicle_id
     join platform.app_user u on u.id = m.owner_id`;
 
@@ -63,6 +67,13 @@ export async function listMeetings(vehicleId: string | null = null): Promise<Mee
     )
   ).map(r => toMeeting(r, project));
 }
+
+/**
+ * The meetings page's list, kept by the touch revision (network 020): it reads only what that revision
+ * watches, so moving an LP's status leaves it standing and a new meeting rebuilds it. '' is every vehicle.
+ * Shared between requests: read it, never change it.
+ */
+export const meetingsOn = buildCache((vehicleId: string) => listMeetings(vehicleId || null), 8, touchRevisions);
 
 export async function upcomingMeetings(): Promise<Meeting[]> {
   const db = await getDb();
@@ -344,7 +355,8 @@ export async function touchpointsByPair(
   const project = await teamLabels(db);
   const rows = (await db.query<TouchRow>(TOUCH_SELECT, [[...new Set(pairs.map((p) => p.entityId))]])).map((r) => ({ r, t: toTouch(r, project) }));
   const byEntity = new Map<string, Touchpoint[]>();
-  for (const { r, t } of rows) byEntity.set(r.for_entity, [...(byEntity.get(r.for_entity) ?? []), t]);
+  // Appended in place: copying each LP's list per row was quadratic in an LP's touchpoints (12 Oct 2026).
+  for (const { r, t } of rows) { const list = byEntity.get(r.for_entity); if (list) list.push(t); else byEntity.set(r.for_entity, [t]); }
   const windows = await raiseWindows();
   for (const p of pairs) {
     const w = windows.get(p.vehicleId);
@@ -364,7 +376,8 @@ export async function touchpointsByEntity(entityIds: string[]): Promise<Map<stri
   const db = await getDb();
   const project = await teamLabels(db);
   for (const r of await db.query<TouchRow>(TOUCH_SELECT, [[...new Set(entityIds)]])) {
-    out.set(r.for_entity, [...(out.get(r.for_entity) ?? []), toTouch(r, project)]);
+    const list = out.get(r.for_entity), t = toTouch(r, project);
+    if (list) list.push(t); else out.set(r.for_entity, [t]);
   }
   for (const list of out.values()) list.sort((a, b) => when(b) - when(a));
   return out;

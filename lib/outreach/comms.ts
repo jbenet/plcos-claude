@@ -55,7 +55,7 @@ const keyOf = (messageId: string | undefined, gid: string) => {
 async function pursuitFor(ctx: Ctx, pursuitId: string, q: Queryable, write: boolean) {
   const p = await q.one<{ pursuit_id: string; entity_id: string; vehicle_id: string; vehicle: string; slug: string; name: string }>(
     `select p.pursuit_id::text, identity.canonical_entity_id(p.entity_id)::text entity_id, p.vehicle_id::text, v.name vehicle, v.slug, e.display_name name
-       from strategy.pursuit p join platform.vehicle v on v.id = p.vehicle_id join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
+       from strategy.pursuit p join platform.vehicle v on v.id = p.vehicle_id join identity.entity p_e on p_e.entity_id = p.entity_id join identity.entity e on e.entity_id = case when p_e.merged_into is null then p.entity_id else identity.canonical_entity_id(p.entity_id) end
       where p.pursuit_id = strategy.canonical_pursuit_id($1::uuid)`, [pursuitId]);
   if (!p || !can(ctx.env.principal, write ? 'mutate' : 'read', { vehicle: p.vehicle_id })) throw new OutreachRefused(404, 'No such LP on your vehicles.');
   return p;
