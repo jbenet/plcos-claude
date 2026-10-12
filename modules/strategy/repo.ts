@@ -113,8 +113,8 @@ export async function visualizationPursuits(vehicleId: string | null): Promise<V
   const ordered = await db.query<PursuitRow>(`${PURSUIT_SELECT} order by p.opened_at`);
   const rows = vehicleId ? ordered.filter(row => row.vehicle_id === vehicleId) : ordered;
   const events = rows.length ? await db.query<{ pursuit_id: string; rung: LadderRung; occurred_at: Date }>(
-    `select pursuit_id, rung::text as rung, occurred_at from strategy.ladder_event
-      where pursuit_id = any($1::uuid[]) order by rung`, [rows.map(r => r.pursuit_id)],
+    `select l.pursuit_id, l.rung::text as rung, l.occurred_at from strategy.ladder_event l
+      where l.pursuit_id = any($1::uuid[]) order by l.rung`, [rows.map(r => r.pursuit_id)],
   ) : [];
   const byPursuit = new Map<string, VisualizationPursuit['events']>();
   for (const event of events) {
