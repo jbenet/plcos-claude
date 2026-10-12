@@ -11,11 +11,14 @@
  * A column is shared only when every value in it is plain JSON (strings, finite numbers, booleans,
  * null, arrays and plain objects of those), so equal text always means equal values; any other column
  * (a Date, say) is sent as it is, which the page's own serialiser already handles.
+ *
+ * A column whose every value is a list of objects (a row's people, its firms) is itself packed: all
+ * rows' items as one packed list, and each row's count. Each row reads back its own new array.
  */
 export interface PackedRows {
   n: number;
   /** Column → its values in row order, or `[distinct values, index per row]`. */
-  c: Record<string, { v: unknown[] } | { d: unknown[]; i: number[] }>;
+  c: Record<string, { v: unknown[] } | { d: unknown[]; i: number[] } | { l: PackedRows; k: number[] }>;
 }
 
 function plain(value: unknown): boolean {
@@ -30,6 +33,9 @@ function plain(value: unknown): boolean {
 }
 
 /** Keyed by type and text, so a string and a number that print alike stay apart. */
+const record = (value: unknown) => typeof value === 'object' && value !== null && !Array.isArray(value)
+  && [Object.prototype, null].includes(Object.getPrototypeOf(value));
+
 const keyOf = (value: unknown) => `${Array.isArray(value) ? 'a' : typeof value}${JSON.stringify(value)}`;
 
 export function packRows<T extends object>(rows: readonly T[]): PackedRows {
@@ -39,6 +45,11 @@ export function packRows<T extends object>(rows: readonly T[]): PackedRows {
   for (const k of columns) {
     // A row without the key reads back without it: `undefined` stands for missing.
     const values = rows.map((row) => (Object.prototype.hasOwnProperty.call(row, k) ? (row as Record<string, unknown>)[k] : undefined));
+    if (values.length && values.every((v) => Array.isArray(v) && v.every(record)) && values.some((v) => (v as unknown[]).length)) {
+      const lists = values as object[][];
+      c[k] = { l: packRows(lists.flat()), k: lists.map((list) => list.length) };
+      continue;
+    }
     if (!values.every((v) => v === undefined || plain(v))) { c[k] = { v: values }; continue; }
     const d: unknown[] = [], at = new Map<string, number>(), i: number[] = [];
     let rawLength = 0, dictLength = 0;
@@ -58,7 +69,11 @@ export function packRows<T extends object>(rows: readonly T[]): PackedRows {
 export function unpackRows<T>(packed: PackedRows): T[] {
   const rows: Record<string, unknown>[] = Array.from({ length: packed.n }, () => ({}));
   for (const [k, col] of Object.entries(packed.c)) {
-    if ('v' in col) col.v.forEach((v, r) => { if (v !== undefined) rows[r]![k] = v; });
+    if ('l' in col) {
+      const items = unpackRows<unknown>(col.l);
+      let at = 0;
+      col.k.forEach((count, r) => { rows[r]![k] = items.slice(at, at + count); at += count; });
+    } else if ('v' in col) col.v.forEach((v, r) => { if (v !== undefined) rows[r]![k] = v; });
     else col.i.forEach((index, r) => { const v = col.d[index]; if (v !== undefined) rows[r]![k] = v; });
   }
   return rows as T[];

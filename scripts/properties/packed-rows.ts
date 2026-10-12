@@ -22,5 +22,14 @@ export async function packedRowsProperties(check: Check) {
     back.every((row, i) => row.odd === rows[i]!.odd), '');
   check('PACKED ROWS are smaller than the rows as JSON', JSON.stringify(packed).length < JSON.stringify(rows).length * 0.6,
     `${JSON.stringify(packed).length} vs ${JSON.stringify(rows).length}`);
+  // A list-of-objects column is packed as one list (people, firms): each row gets its own items back, in order.
+  const listed = Array.from({ length: 50 }, (_, i) => ({ id: `lp-${i}`, people: Array.from({ length: i % 4 }, (_, j) => ({
+    id: `person-${(i + j) % 9}`, name: `Invented Person ${(i + j) % 9}`, role: j ? 'Invented role' : '', contact: j === 0,
+    individual: j === 2 ? `row-${i}` : null, ...(j === 1 ? { since: when } : {}) })) }));
+  const nested = packRows(listed), again = unpackRows<typeof listed[number]>(nested);
+  check('PACKED ROWS pack a column of object lists as one list, and give each row its own items back',
+    'l' in nested.c.people! && again.every((row, i) => isDeepStrictEqual(row, listed[i]))
+      && again[1]!.people !== again[5]!.people && JSON.stringify(nested).length < JSON.stringify(listed).length * 0.7,
+    `${JSON.stringify(nested).length} vs ${JSON.stringify(listed).length}`);
   check('PACKED ROWS of no rows read back as no rows', unpackRows(packRows([])).length === 0, '');
 }
