@@ -87,7 +87,7 @@ export async function commitRevisionProperties(check: Check) {
       g0 === g1 && g2 !== g1 && g3 === g0 && g4 !== g3, `${g0} → move ${g1} → contact ${g2} → removed ${g3} → affiliation ${g4}`);
 
     // Touchpoints keep their own revision (network 020): a status, next step or plan leaves it; a meeting,
-    // a contact, an affiliation, a merge, a new pursuit or a vehicle's name moves it, at commit.
+    // a contact, an affiliation, a merge, a new pursuit, a vehicle's name or a person's address moves it, at commit.
     const touch = async () => (await db.one<{ t: string }>('select touch::text t from network.read_revision'))!.t;
     const moved: Record<string, boolean> = {};
     const step = async (name: string, sql: string, params: unknown[]) => {
@@ -103,9 +103,10 @@ export async function commitRevisionProperties(check: Check) {
     await step('rename', `update identity.entity set display_name = 'Invented Org 5' where entity_id = $1`, [org]);
     await step('vehicle', `update platform.vehicle set name = 'Invented Fund 2' where id = $1`, [vehicle]);
     await step('pursuit', `insert into strategy.pursuit (entity_id, vehicle_id, owner_id) values ($1, $2, $3)`, [person, vehicle, user]);
+    await step('address', `insert into platform.user_address (user_id, address, kind) values ($1, 'rev-alias@example.invalid', 'alias')`, [user]);
     await step('membership', `update strategy.pursuit set vehicle_id = vehicle_id where pursuit_id = $1`, [pursuit]);
     check('REVISIONS keep the touch revision through a status move and move it for what the touchpoint read joins',
-      !moved.status && moved.meeting! && moved.contact! && moved.affiliation! && moved.rename! && moved.vehicle! && moved.pursuit! && moved.membership!,
+      !moved.status && moved.meeting! && moved.contact! && moved.affiliation! && moved.rename! && moved.vehicle! && moved.pursuit! && moved.address! && moved.membership!,
       JSON.stringify(moved));
 
     // The cache behind every LP list's touchpoints (touchesOn) answers from its build through a status move,

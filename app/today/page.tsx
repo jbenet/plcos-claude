@@ -7,7 +7,7 @@ import { auth } from '@/lib/auth';
 import { issues as issueSink } from '@/lib/issues';
 import { auditLog } from '@/modules/platform';
 import { describeAudit } from '@/lib/audit-words';
-import { touchpointSummaries } from '@/modules/meetings';
+import { touchpointSummaries, touchpointsByPair } from '@/modules/meetings';
 import { vehicleSelection } from '@/lib/session';
 import { ago, dateLabel, shortDate } from '@/lib/time';
 import { usdM, multiple } from '@/lib/money';
@@ -61,7 +61,11 @@ async function todayContent() {
   const connecting = pursuits.filter((p) => p.status === 'connecting');
   // Each vehicle's touchpoints from the cache its pipeline keeps (network 020), not a fresh read of them all.
   const touches = new Map((await Promise.all([...new Set(connecting.map((p) => p.vehicleId))].map((id) => touchesOn(id)))).flatMap((m) => [...m]));
-  const heard = await touchpointSummaries(connecting.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId })), new Date(), touches);
+  // A pair the cache has no entry for (no touchpoints yet, or an import's new pursuit the build predates) is read fresh.
+  const pairs = connecting.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
+  const unseen = pairs.filter((p) => !touches.has(`${p.entityId}:${p.vehicleId}`));
+  if (unseen.length) for (const [k, v] of await touchpointsByPair(unseen)) touches.set(k, v);
+  const heard = await touchpointSummaries(pairs, new Date(), touches);
   const waitingOn = connecting
     .map((p) => ({ p, s: heard.get(`${p.entityId}:${p.vehicleId}`) }))
     .filter((x) => !x.s?.lastFromThem)

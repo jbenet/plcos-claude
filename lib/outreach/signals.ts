@@ -268,7 +268,7 @@ export async function recordSignals(ctx: Ctx, raw: Record<string, unknown>) {
   const pursuitIds = [...new Set(resolved.map((r) => r.pursuitId).filter((x): x is string => !!x))];
   const state = new Map((await db.query<{ pursuit_id: string; status: Status; name: string; low: string | null; high: string | null }>(`
     select p.pursuit_id::text, p.status::text status, e.display_name name, i.low, i.high
-      from strategy.pursuit p join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
+      from strategy.pursuit p join identity.entity p_e on p_e.entity_id = p.entity_id join identity.entity e on e.entity_id = case when p_e.merged_into is null then p.entity_id else identity.canonical_entity_id(p.entity_id) end
       left join lateral (select low, high from pipeline.indication x where x.pursuit_id = p.pursuit_id and x.superseded_at is null
                           order by recorded_at desc limit 1) i on true
      where p.pursuit_id = any($1::uuid[])`, [pursuitIds])).map((r) => [r.pursuit_id, r]));

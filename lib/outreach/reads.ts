@@ -277,7 +277,7 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
   const [meta, strategies, others, restrictions, accreditation, asks, assets, orgContacts] = await Promise.all([
     db.query<{ id: string; set_at: Date | string | null; set_by: string | null; source: string; type: string }>(`select p.pursuit_id::text id,
       p.status_set_at set_at, u.name set_by, p.status_source source, e.entity_type::text type
-      from strategy.pursuit p join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
+      from strategy.pursuit p join identity.entity p_e on p_e.entity_id = p.entity_id join identity.entity e on e.entity_id = case when p_e.merged_into is null then p.entity_id else identity.canonical_entity_id(p.entity_id) end
       left join platform.app_user u on u.id = p.status_set_by where p.pursuit_id = any($1::uuid[])`, [ids]),
     // The latest strategy that was not dismissed or withdrawn; never one written from licensed (Dakota) data.
     db.query<{ pursuit_id: string; data: Record<string, unknown>; made_at: Date | string }>(`select distinct on (s.pursuit_id) s.pursuit_id::text pursuit_id, s.data, s.made_at

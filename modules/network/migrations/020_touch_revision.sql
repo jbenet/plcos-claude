@@ -7,7 +7,8 @@
 --
 -- `touch` moves only on writes that can change what that read returns: the touchpoints themselves,
 -- the people and firms they are joined through (entities, merges, affiliations, source records, a
--- pursuit's contacts), which pursuits a vehicle has, and the names it prints (vehicles, users). A
+-- pursuit's contacts), which pursuits a vehicle has, and the names it prints (vehicles, users, and
+-- the addresses that make an attendee one of us). A
 -- status, a next step or a score leaves it where it was. It moves at commit, like every revision here
 -- (016), on an import worker's writes and a person's alike; the cache tells them apart by the shared
 -- foreground revision (017).
@@ -56,7 +57,7 @@ declare relation text;
 begin
   foreach relation in array array[
     'meetings.meeting', 'identity.entity', 'identity.affiliation', 'identity.source_record',
-    'strategy.pursuit_contact', 'platform.vehicle', 'platform.app_user'
+    'strategy.pursuit_contact', 'platform.vehicle', 'platform.app_user', 'platform.user_address'
   ] loop
     if to_regclass(relation) is not null and not exists (
       select 1 from pg_trigger where tgrelid = to_regclass(relation) and tgname = 'network_touches_changed'
