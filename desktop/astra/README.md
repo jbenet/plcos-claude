@@ -5,7 +5,7 @@ Tauri that has the workflow processing with Astra and connects to the server".
 
 - **Menu bar:** a sparkles icon whose menu shows the runner's state and the server's, and has Run Now, Queue for
   Tonight, Open Developer → Astra, Open in Browser, Send Feedback…, Start or Stop Runner, Open Runner Logs, Open at
-  Login and Quit.
+  Login, Restart Astra (stops the runner, relaunches the app, which starts it again) and Quit.
 - **Window:** the server's Developer → Astra page (`<app-url>/dev/astra`). The URL is the Keychain item the runner
   uses (`plcos-railway` / `app-url`), else `~/.plcos-helpers/cloud-url`. Closing the window hides it.
 - **Workflow processing:** the app runs `npm run astra` in the live checkout (`$PLCOS_LIVE`, default
