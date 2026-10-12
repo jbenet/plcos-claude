@@ -14,6 +14,7 @@ import { usdM, multiple } from '@/lib/money';
 import { KIND_CLASS, listOpenTickets } from '@/modules/governance';
 import { listAsks, listConflicts } from '@/modules/coordination';
 import { listPursuits } from '@/lib/authz/read/strategy';
+import { touchesOn } from '@/modules/strategy';
 import { listExposures, vehicleTotals } from '@/modules/pipeline';
 import { sprintStrip, urgency } from '@/modules/calendar';
 import { actionableSignals, heldBack } from '@/modules/signals';
@@ -58,7 +59,9 @@ async function todayContent() {
   // Waiting on a first reply (N62, issue 0008): LPs at Connecting with nothing from them on
   // record — the status's view of what "stuck at rung one" used to count. Longest wait first.
   const connecting = pursuits.filter((p) => p.status === 'connecting');
-  const heard = await touchpointSummaries(connecting.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId })));
+  // Each vehicle's touchpoints from the cache its pipeline keeps (network 020), not a fresh read of them all.
+  const touches = new Map((await Promise.all([...new Set(connecting.map((p) => p.vehicleId))].map((id) => touchesOn(id)))).flatMap((m) => [...m]));
+  const heard = await touchpointSummaries(connecting.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId })), new Date(), touches);
   const waitingOn = connecting
     .map((p) => ({ p, s: heard.get(`${p.entityId}:${p.vehicleId}`) }))
     .filter((x) => !x.s?.lastFromThem)

@@ -20,7 +20,10 @@ const MEETING_SELECT = `
          v.name as vehicle_name, m.kind, m.scheduled_for, m.held_on, m.attendees,
          u.name as owner_name, m.source, m.summary, m.justifies_rung, m.justification
     from meetings.meeting m
-    join identity.entity e on e.entity_id = identity.canonical_entity_id(m.entity_id)
+    -- Only a merged record walks its chain: canonical_entity_id() on every meeting was most of a
+    -- calendar's read (performance pass, 12 Oct 2026; as TOUCH_SELECT, 8 Oct).
+    join identity.entity m_e on m_e.entity_id = m.entity_id
+    join identity.entity e on e.entity_id = case when m_e.merged_into is null then m.entity_id else identity.canonical_entity_id(m.entity_id) end
     left join platform.vehicle v on v.id = m.vehicle_id
     join platform.app_user u on u.id = m.owner_id`;
 

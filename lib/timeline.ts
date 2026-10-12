@@ -5,9 +5,9 @@ import { conditionsFor, listCycles, spvRooms } from '@/modules/close';
 import { listAsks } from '@/modules/coordination';
 import { listOpenTickets } from '@/modules/governance';
 import { listFunders } from '@/modules/grants';
-import { listMeetings, listQuestions, raiseWindows, touchpointsByPair } from '@/modules/meetings';
+import { listMeetings, listQuestions, raiseWindows } from '@/modules/meetings';
 import { listUsers } from '@/modules/platform';
-import { listPursuits } from '@/modules/strategy';
+import { touchesOn } from '@/modules/strategy';
 import { listAccreditation } from '@/modules/compliance';
 
 /**
@@ -59,9 +59,9 @@ const day = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 
 async function raiseMeetings(vehicleName: string): Promise<Array<{ id: string; who: string; owner: string; source: string; attendees: string[]; entityId: string; kind: string | null; heldOn: Date | null; scheduledFor: Date | null }>> {
   const w = [...(await raiseWindows()).values()].find((x) => x.name === vehicleName);
   if (!w) return [];
-  const pairs = (await listPursuits(w.vehicleId)).map((p) => ({ entityId: p.entityId, vehicleId: w.vehicleId }));
   const seen = new Map<string, { id: string; who: string; owner: string; source: string; attendees: string[]; entityId: string; kind: string | null; heldOn: Date | null; scheduledFor: Date | null }>();
-  for (const touches of (await touchpointsByPair(pairs)).values()) {
+  // The vehicle's touchpoints as its pipeline reads them, from the same cache (network 020).
+  for (const touches of (await touchesOn(w.vehicleId)).values()) {
     for (const t of touches) {
       if (t.channel !== 'meeting' && t.channel !== 'call') continue;
       if (!seen.has(t.touchpointId)) seen.set(t.touchpointId, { id: t.touchpointId, who: t.entityName, owner: t.ownerName, source: t.source, attendees: t.attendees, entityId: t.entityId, kind: t.kind, heldOn: t.on, scheduledFor: t.scheduledFor });
