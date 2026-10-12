@@ -118,7 +118,7 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
 | `DAKOTA_USERNAME` | optional |  | Leave unset: enter it in Settings → Connections, encrypted with PLCOS_SECRET (decision C: Dakota moves to the cloud). An env value still wins. |
 | `DAKOTA_PASSWORD` | optional | yes | Leave unset: enter it in Settings → Connections, encrypted with PLCOS_SECRET. An env value still wins. |
 | `CLOUDSDK_AUTH_ACCESS_TOKEN` | never |  | **Never set** on Railway. |
-| `MAILGUARD_URL` | optional |  | Leave unset: enter it in Settings → Connections. An env value still wins. |
+| `MAILGUARD_URL` | never |  | A setting, not a variable: an Admin enters it in Settings → Connections → Mailguard address. Set here it would win over the setting; only the Mac's Keychain script sets it. |
 | `MAILGUARD_TOKEN` | never | yes | **Never set** on Railway. |
 | `ANTHROPIC_API_KEY` | optional | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
 | `ANTHROPIC_MODEL` | optional |  | Leave unset (the default works). |

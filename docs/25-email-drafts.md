@@ -244,8 +244,10 @@ mailguard token only lets you draft, and error when connecting it if it lets you
   by `scripts/with-mailguard-token.sh` as `MAILGUARD_TOKEN` and belongs to the handle in
   `config.email.mailguard.keychainTokenFor` (`juan`); a pasted key wins over it. Forgetting here does not
   revoke the key at mailguard: revoke it there.
-- **Where mailguard is:** `config.email.mailguard.url`, or `MAILGUARD_URL` in the live server's environment
-  (the same script reads an optional Keychain item `mailguard-url`). https only, except `localhost`.
+- **Where mailguard is:** a setting. On the live server an Admin enters it in Settings → Connections → Mailguard
+  address (Juan, 12 Oct 2026: "should be a setting not an env var"). On the Mac, `scripts/with-mailguard-token.sh`
+  sets `MAILGUARD_URL` from the optional Keychain item `mailguard-url`, which wins over the setting;
+  `config.email.mailguard.url` is the last fallback. https only, except `localhost`.
 - **Config:** `config.email.provider = 'mailguard'` (or `'off'`). Previews never see the key or the URL.
 - **Threading.** A follow-up reads the earlier draft's Gmail thread through mailguard (`format=metadata`),
   takes the latest message that is not a draft, and sends its id as `replyTo`; mailguard sets the thread and
@@ -282,7 +284,8 @@ existed), and keeping it would keep a `gmail.compose` grant — which can send �
 
 ### 12.5 What Juan does
 
-1. `npm run secret:store -- mailguard-url` with mailguard's address (or set `config.email.mailguard.url`).
+1. On the live server, enter mailguard's address in Settings → Connections → Mailguard address. On the Mac,
+   `npm run secret:store -- mailguard-url` (or set `config.email.mailguard.url`).
 2. The key is already stored. Make sure its tool policy in mailguard grants `draft` and `read.metadata` only
    (the Drafts template plus `read.metadata`; `read.body` is not needed).
 3. Restart `npm run dev:real`. The log says whether the Keychain key is drafts-only; Preferences → Email shows
