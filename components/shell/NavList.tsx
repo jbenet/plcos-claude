@@ -77,11 +77,22 @@ export function NavList({
   // Read the stored preference after mount: the server cannot know it, and rendering the
   // default first avoids a hydration mismatch.
   useEffect(() => {
+    let stored: Record<string, boolean> | null = null;
     try {
       const raw = window.localStorage.getItem(STORE_KEY);
-      if (raw) setCollapsed(JSON.parse(raw) as Record<string, boolean>);
+      if (raw) stored = JSON.parse(raw) as Record<string, boolean>;
     } catch {
       /* private window, blocked storage — defaults are fine */
+    }
+    // A first load in this tab (an outside link) opens the closed section that holds the current page,
+    // so its link can be brought into view (issue 0148). Only on screen: the remembered state is not
+    // written, and every other section keeps it.
+    let firstLoad = false;
+    try { firstLoad = window.sessionStorage.getItem(SCROLL_KEY) === null; } catch { /* blocked storage */ }
+    const here = window.location.pathname;
+    const holds = firstLoad ? STATIC_SECTIONS.find((sec) => sec.links.some((l) => here === l.href || here.startsWith(l.href + '/'))) : undefined;
+    if (stored || holds) {
+      setCollapsed((prev) => ({ ...(stored ?? prev), ...(holds ? { [holds.id]: false } : {}) }));
     }
     setHydrated(true);
   }, []);
