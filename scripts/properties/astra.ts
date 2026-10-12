@@ -3,7 +3,7 @@ import { syncGuard } from '../../lib/sync/auth';
 import { SYNC_ADMIN, SYNC_PUSH } from '../../lib/sync/scopes';
 import { astraCall } from '../../lib/sync/astra';
 import { ASTRA_WORKFLOWS, cancel, cancelQueued, enqueue, inWindow, readRunner, recentJobs, saveSettings } from '../../lib/astra/jobs';
-import { batchPrefix, codexArgs, fill, nightOf, shouldFallBack } from '../../lib/astra/runner';
+import { batchPrefix, codexArgs, fill, nightOf, RUN_LIMIT_MS, shouldFallBack, WEB_WORKFLOWS } from '../../lib/astra/runner';
 import { createMcpToken, type AppUser } from '../../modules/platform';
 import { freshDb, type Check } from './harness';
 
@@ -22,6 +22,9 @@ export async function astraProperties(check: Check) {
   const args = codexArgs({ model: 'gpt-6-astra', worker: '/w', enrich: '/d/enrich', last: '/l.md' });
   check('astra codex runs sandboxed with web search and the brief on stdin', args.includes('workspace-write') && args.includes('tools.web_search=true')
     && args.at(-1) === '-' && !args.includes('danger-full-access'), args.join(' '));
+  const local = codexArgs({ model: 'gpt-6-astra', worker: '/w', enrich: '/d/enrich', last: '/l.md', web: false });
+  check('astra strategy-only runs get no web search, and every workflow has a time limit', local.includes('tools.web_search=false')
+    && !WEB_WORKFLOWS.includes('w5t') && ASTRA_WORKFLOWS.every((w) => RUN_LIMIT_MS[w]! > 0 && RUN_LIMIT_MS[w]! <= 2 * 3600_000), local.join(' '));
   check('astra falls back only on capacity with no final message', shouldFallBack('', 'model is at capacity') && !shouldFallBack('done', 'model is at capacity') && !shouldFallBack('', 'error'), 'fallback');
   check('astra batch prefix is short and the runner\'s', batchPrefix('0123456789abcdef') === 'astra-01234567-', batchPrefix('0123456789abcdef'));
 

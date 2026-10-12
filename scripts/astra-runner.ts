@@ -30,11 +30,13 @@ import { basename, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { beginRun, realRoot } from '../lib/workflows/ledger';
 import { finishWithUsage } from '../lib/workflows/usage';
-import { batchPrefix, CAPACITY_WAIT_MS, CODEX, codexArgs, fill, MODELS, nightOf, RUN_LIMIT_MS, shouldFallBack } from '../lib/astra/runner';
+import { batchPrefix, CAPACITY_WAIT_MS, CODEX, codexArgs, fill, MODELS, nightOf, RUN_LIMIT_MS, shouldFallBack, WEB_WORKFLOWS } from '../lib/astra/runner';
 
 const run = promisify(execFile);
 const REPO = process.cwd();
-const SLOTS = Math.max(1, Math.min(6, Number(process.env.ASTRA_SLOTS ?? 4)));
+// Juan, 12 Oct 2026: "run many more astra runs in parallel". 8 by default (guessed; codex's own rate limit is the
+// real ceiling, and "at capacity" pauses claiming); slots past the codex worktrees use plain folders.
+const SLOTS = Math.max(1, Math.min(12, Number(process.env.ASTRA_SLOTS ?? 8)));
 const POLL_MS = 60_000;
 const WORKFLOWS = ['w1w5', 'w1', 'w5', 'w5t'] as const;
 type Job = { id: string; workflow: (typeof WORKFLOWS)[number]; size: number };
@@ -139,12 +141,12 @@ async function codex(slot: Slot, brief: string, base: string, enrich: string): P
   for (const model of MODELS) {
     await writeFile(last, '');
     const out = createWriteStream(`${base}-${model}.log`);
-    const child = spawn(process.env.ASTRA_CODEX ?? CODEX, codexArgs({ model, worker: slot.folder, enrich, last, git: slot.git }), { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(process.env.ASTRA_CODEX ?? CODEX, codexArgs({ model, worker: slot.folder, enrich, last, git: slot.git, web: WEB_WORKFLOWS.includes(slot.job?.workflow ?? 'w1') }), { stdio: ['pipe', 'pipe', 'pipe'] });
     slot.child = child;
     child.stdout!.pipe(out); child.stderr!.pipe(out);
     child.stdin!.on('error', () => undefined); // a worker that exits before reading its brief
     child.stdin!.end(brief);
-    const timer = setTimeout(() => child.kill('SIGTERM'), RUN_LIMIT_MS);
+    const timer = setTimeout(() => child.kill('SIGTERM'), RUN_LIMIT_MS[slot.job?.workflow ?? ''] ?? 2 * 3600_000);
     await new Promise<void>((done) => { child.on('close', () => done()); child.on('error', (e) => { out.write(`spawn failed: ${e.message}\n`); done(); }); });
     clearTimeout(timer);
     slot.child = null;
