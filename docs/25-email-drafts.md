@@ -3,6 +3,9 @@
 **Status:** phase 1 merged 2 Oct 2026. **Since 3 Oct 2026 drafts reach Gmail through mailguard, not
 direct Gmail OAuth** (§12, which supersedes §1, §2 and §4). The demo uses a fake mailguard.
 
+**Drafting in PLC OS is off** by Juan's decision of 12 Oct 2026 (JuanMail drafts instead); set
+`config.email.drafting: true` to bring it back.
+
 Juan, 2 Oct 2026, in summary: email boxes where the tool suggests an email (to target LPs, to
 introducers); WYSIWYG tuned for email with no weird formatting, plus plain text; images and files; move a
 draft into the user's own Gmail to review and send from there; "do this safely (don't want a client that

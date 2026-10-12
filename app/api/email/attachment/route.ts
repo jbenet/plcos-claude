@@ -3,10 +3,12 @@ import { withRoute } from '@/lib/authz/route';
 /**
  * A draft's files (docs/25 §Attachment storage). POST adds one — a form with draftId, file and
  * inline — and GET returns one's bytes, to its owner only: the editor's picture, or a download.
+ * Both refuse while drafting is off in PLC OS (config.email.drafting, Juan, 12 Oct 2026).
  */
 export const POST = withRoute('app/api/email/attachment/route.ts#POST', async (request, _context, user) => {
   if (user.access === 'viewer') return Response.json({ error: 'Viewers do not write drafts.' }, { status: 403 });
-  const { addAttachment, draftWithChecks, DraftRefused } = await import('@/modules/email');
+  const { addAttachment, draftWithChecks, DraftRefused, DRAFTING_OFF, draftingOn } = await import('@/modules/email');
+  if (!draftingOn()) return Response.json({ error: DRAFTING_OFF }, { status: 403 });
   const { config } = await import('@/config/deployment');
   // GUESS: a little over the file limit covers the form's own fields.
   if (Number(request.headers.get('content-length') ?? 0) > config.email.maxAttachmentBytes + 64 * 1024) {
@@ -31,7 +33,8 @@ export const POST = withRoute('app/api/email/attachment/route.ts#POST', async (r
 });
 
 export const GET = withRoute('app/api/email/attachment/route.ts#GET', async (request, _context, user) => {
-  const { readAttachment, DraftRefused } = await import('@/modules/email');
+  const { readAttachment, DraftRefused, DRAFTING_OFF, draftingOn } = await import('@/modules/email');
+  if (!draftingOn()) return new Response(DRAFTING_OFF, { status: 403, headers: { 'content-type': 'text/plain; charset=utf-8' } });
   const id = new URL(request.url).searchParams.get('id') ?? '';
   if (!/^[0-9a-f-]{36}$/i.test(id)) return new Response('Not found', { status: 404 });
   try {

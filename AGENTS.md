@@ -136,6 +136,8 @@ Half of what went wrong in the alternate designs was building the wrong layer fi
   (decided 2 Oct 2026, `docs/25-email-drafts.md`): drafts go into each person's own Gmail to
   send themselves. Since 3 Oct 2026 only through mailguard (docs/25 §12): only
   `lib/connectors/mailguard/` talks to it, it cannot send, and it refuses a key that can.
+  Drafting in PLC OS is off since 12 Oct 2026 (Juan: "i don't think I need drafting of emails in PLCOS
+  anymore. Juanmail takes care of it."), behind `config.email.drafting`.
   Google Calendar, **read only**, through the same mailguard key (decided 8 Oct 2026, issue 0021,
   `docs/25-email-drafts.md` §13): meetings land next to LPs, and each entry is sorted into the Calendar page's Travel
   and Events lanes or left a meeting (§14.1); no event is written or answered, and a key holding `calendar.invite` or

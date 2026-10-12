@@ -6,6 +6,7 @@ import { Page } from '@/components/shell/Page';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { EmailDrafts } from '@/components/email/EmailDrafts';
+import { draftingOn } from '@/modules/email';
 import { OutreachContext } from '@/components/outreach/OutreachContext';
 import { RouteNames } from '@/components/routes/RouteNames';
 import { ConnectionFeedback } from '@/components/routes/ConnectionFeedback';
@@ -543,7 +544,7 @@ async function Routes({
                       startLabel={`Draft the intro ask to ${route.connectorNames[0]}`}
                     />
                     </>
-                  ) : <p className="muted" style={{ fontSize: 12 }}>Pick a fund or SPV in the vehicle switcher to draft the intro ask as an email.</p>)}
+                  ) : draftingOn() && <p className="muted" style={{ fontSize: 12 }}>Pick a fund or SPV in the vehicle switcher to draft the intro ask as an email.</p>)}
                 </div>
               </div>
               </details>

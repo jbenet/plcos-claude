@@ -513,6 +513,49 @@ export async function emailProperties(check: Check, db: Db) {
       check('Email: forgetting the key removes it here; a move after that is refused and asks for a drafts-only token',
         (await store.get(juan.handle)) === null && !!afterForget && /drafts-only mailguard token/.test(afterForget), afterForget ?? 'moved');
     }
+
+    // ── Drafting off in PLC OS (config.email.drafting, Juan, 12 Oct 2026) ─────────────────────
+    {
+      const { config } = await import('../../config/deployment');
+      const { DRAFTING_OFF } = await import('../../modules/email');
+      const { USER_COOKIE } = await import('../../lib/auth/cookie');
+      const { withDb } = await import('../../lib/db');
+      const { workAsyncStorage } = await import('next/dist/server/app-render/work-async-storage.external');
+      const { workUnitAsyncStorage } = await import('next/dist/server/app-render/work-unit-async-storage.external');
+      const { createRequestStore } = await import('next/dist/server/async-storage/request-store');
+      const { actionAsyncStorage } = await import('next/dist/server/app-render/action-async-storage.external');
+      const { createDraftAction } = await import('../../app/email/actions');
+      const { POST: attach } = await import('../../app/api/email/attachment/route');
+      const juan = (await db.one<{ id: string; handle: string }>("select id::text, handle from platform.app_user where handle = 'juan'"))!;
+      const pursuit = (await db.one<{ id: string; vehicle: string }>('select pursuit_id::text id, vehicle_id::text vehicle from strategy.active_pursuit order by pursuit_id limit 1'))!;
+      const drafts = async () => (await db.one<{ n: number }>('select count(*)::int n from email.draft'))!.n;
+      const was = config.email.drafting;
+      // The config is read-only by type; a property sets it the way railway-setup sets config.data.
+      Object.assign(config.email, { drafting: false });
+      try {
+        const before = await drafts();
+        const headers = new Headers({ host: 'localhost:3211', origin: 'http://localhost:3211', 'sec-fetch-site': 'same-origin', cookie: `${USER_COOKIE}=${juan.handle}` });
+        const store = createRequestStore({ phase: 'action', headers, url: { pathname: '/targets' },
+          rootParams: {}, implicitTags: { tags: [], expirationsByCacheKind: new Map() },
+          resumeDataCache: null, onUpdateCookies: undefined, previewProps: undefined, isHmrRefresh: false,
+          serverComponentsHmrCache: undefined, hmrRefreshHash: undefined, fallbackParams: null });
+        const form = new FormData();
+        form.set('purpose', 'first_message'); form.set('vehicleId', pursuit.vehicle); form.set('pursuitId', pursuit.id);
+        const r = await withDb(db, () => workAsyncStorage.run({ route: '/targets', isStaticGeneration: false } as Parameters<typeof workAsyncStorage.run>[0],
+          () => workUnitAsyncStorage.run(store, () => actionAsyncStorage.run({ isAction: true }, () => createDraftAction(form)))));
+        const file = new FormData();
+        file.set('draftId', '00000000-0000-4000-8000-000000000001'); file.set('file', new File(['invented'], 'invented.txt', { type: 'text/plain' }));
+        const routed = await withDb(db, () => attach(new Request('http://localhost:3211/api/email/attachment', {
+          method: 'POST', headers: { origin: 'http://localhost:3211', cookie: `${USER_COOKIE}=${juan.handle}` }, body: file,
+        })));
+        const routedError = routed.status === 403 ? (await routed.json()).error : `HTTP ${routed.status}`;
+        check('Email: with config.email.drafting off, the draft action and the attachment route refuse in words and write nothing',
+          !r.ok && r.error === DRAFTING_OFF && routedError === DRAFTING_OFF && (await drafts()) === before,
+          JSON.stringify({ action: r.ok ? 'drafted' : r.error, route: routedError }));
+      } finally {
+        Object.assign(config.email, { drafting: was });
+      }
+    }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

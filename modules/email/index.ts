@@ -6,7 +6,7 @@ export {
   type CheckInput, type EmailPlan, type FirstMessageInput, type PrefillInput, type RouteHint,
 } from './rules';
 export {
-  addAttachment, connectDemoMailguard, connectMailguard, createDraft, discardDraft, draftsOn, draftWithChecks, DraftRefused, forgetMailguard,
+  addAttachment, connectDemoMailguard, DRAFTING_OFF, draftingOn, connectMailguard, createDraft, discardDraft, draftsOn, draftWithChecks, DraftRefused, forgetMailguard,
   mailStatus, mimeFor, moveBlocks, moveDraft, previewDraft, readAttachment, recipientFor, removeAttachment, saveDraft, saveVoice, testMailguard,
   voiceOf, VOICE_LIMITS, warningsFor,
   type Actor, type DraftEdit, type MailStatus, type Moved, type NewDraft, type Preview, type Saved, type ThreadSource, type Voice,
