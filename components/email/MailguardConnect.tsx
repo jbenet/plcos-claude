@@ -43,6 +43,8 @@ export async function MailguardConnect() {
   if (user.access === 'viewer') return null;
   const g = await mailStatus(user);
   const drafting = draftingOn();
+  // While drafting is off the key only reads the calendar: it needs calendar.read, and one that can send is refused.
+  const fit = drafting ? 'drafts-only' : 'calendar-read';
   // Your own key, never anyone else's, and never in full: •••• and the last four of a long one.
   const rt = mailguardRuntime();
   const mine = rt.mode === 'off' ? null : await keyFor(rt, user.handle).catch(() => null);
@@ -55,7 +57,7 @@ export async function MailguardConnect() {
     <div className="card" id="email">
       <div className="chead">
         <h2>Email</h2>
-        <span className="lbl">your Gmail, through {where} · drafts only</span>
+        <span className="lbl">your Gmail, through {where} · {drafting ? 'drafts only' : 'calendar, read only'}</span>
       </div>
       <div className="cbody">
         {g.mode === 'off' ? (
@@ -93,16 +95,16 @@ export async function MailguardConnect() {
           <>
             <p role="alert" style={{ marginTop: 0, color: g.transient ? 'var(--amber)' : 'var(--clay)' }}><b>{g.transient ? 'Could not check the token.' : 'Refused.'}</b> {g.reason}</p>
             <p>{g.transient
-              ? 'Drafts wait until mailguard answers and says the token is drafts-only. Test the connection to ask again.'
-              : `${drafting ? 'Email drafting' : 'Reading your calendar'} is off for you until a drafts-only token is connected.${drafting ? ' Nothing was moved with this one.' : ''}${g.mailbox ? ` (It is for ${g.mailbox}.)` : ''}`}</p>
+              ? `${drafting ? 'Drafts wait' : 'The calendar read waits'} until mailguard answers and says the token is ${drafting ? 'drafts-only' : 'safe to use'}. Test the connection to ask again.`
+              : `${drafting ? 'Email drafting' : 'Reading your calendar'} is off for you until a ${fit} token is connected.${drafting ? ' Nothing was moved with this one.' : ''}${g.mailbox ? ` (It is for ${g.mailbox}.)` : ''}`}</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
               <TestConnection />
               {g.source === 'pasted' && (
                 <form action={forgetMailguardAction} style={{ marginTop: 8 }}><button className="btn" type="submit">Forget this token</button></form>
               )}
             </div>
-            {g.source === 'keychain' && <p className="muted" style={{ fontSize: 11.5 }}>It is the Keychain item plcos-claude / mailguard-token: replace it with <code>npm run secret:store -- mailguard-token</code> and restart, or paste a drafts-only token here.</p>}
-            <PasteToken label="Connect a drafts-only token" />
+            {g.source === 'keychain' && <p className="muted" style={{ fontSize: 11.5 }}>It is the Keychain item plcos-claude / mailguard-token: replace it with <code>npm run secret:store -- mailguard-token</code> and restart, or paste a {fit} token here.</p>}
+            <PasteToken label={`Connect a ${fit} token`} />
           </>
         ) : (
           <>
@@ -116,7 +118,7 @@ export async function MailguardConnect() {
             ) : (
               <p style={{ marginTop: 0 }}>
                 Your meetings appear next to the LPs they were with, read through mailguard. In mailguard, create a tool whose
-                policy grants <b>draft</b> and <b>calendar.read</b>, and paste its token here. A token that can send, invite
+                policy grants <b>calendar.read</b> (read-only contacts are fine too), and paste its token here. A token that can send, invite
                 people or answer invitations is refused and not kept.
               </p>
             )}

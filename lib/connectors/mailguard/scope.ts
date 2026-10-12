@@ -13,11 +13,17 @@ export const KNOWN_CAPABILITIES = [
   'labels.manage',
   'calendar.freebusy', 'calendar.read', 'calendar.read.details',
   'calendar.write.staged', 'calendar.write', 'calendar.edit', 'calendar.invite', 'calendar.respond',
+  // Read only (Juan, 12 Oct 2026: "contacts.photos is read"; mailguard's policy types read from the Mac that day).
+  'contacts.photos', 'filters.read',
+  // Known so the refusal names them: queued sending, and filters, which can forward mail.
+  'send.staged', 'filters.write', 'filters.manage', 'filters.staged',
 ] as const;
 /** What a grant may name besides a capability. */
-const WILDCARDS = ['*', 'read.*', 'organize.*', 'calendar.*'];
-/** Capabilities that put mail in someone else's inbox. Mailguard has one; a new one would be unknown, so refused. */
-export const SENDING = ['send'];
+const WILDCARDS = ['*', 'read.*', 'organize.*', 'calendar.*', 'contacts.*', 'filters.*'];
+/** Capabilities that put mail in someone else's inbox: sending, and queueing a send in mailguard's Outbox. A new one would be unknown, so refused. */
+export const SENDING = ['send', 'send.staged'];
+/** Capabilities that make Gmail filters, which can forward mail: refused as sending. */
+export const FORWARDING = ['filters.write', 'filters.manage', 'filters.staged'];
 /**
  * Capabilities that email someone through the calendar: an invitation, or an answer to one, which Google mails to
  * the organizer (calendar-requirements.md §5; Juan approved reading calendars only, 8 Oct 2026, issue 0021).
@@ -27,9 +33,10 @@ export const NOTIFYING = ['calendar.invite', 'calendar.respond'];
 export const NEEDED = ['draft', 'read.metadata', 'calendar.freebusy', 'calendar.read', 'calendar.read.details'];
 
 export const CAN_SEND = 'This token can send email. Make a drafts-only token in mailguard.';
+export const CAN_FORWARD = 'This token can make Gmail filters, which can forward mail. Take filters.write, filters.manage and filters.staged off its tool in mailguard.';
 export const CAN_NOTIFY = 'This token can email people through the calendar (invitations or answers to them). Take calendar.invite and calendar.respond off its tool in mailguard; reading the calendar needs only calendar.read.';
 
-export type RefusalCode = 'can_send' | 'tool_grants_send' | 'can_notify' | 'unknown_capability' | 'no_draft' | 'expired' | 'malformed';
+export type RefusalCode = 'can_send' | 'tool_grants_send' | 'can_notify' | 'unknown_capability' | 'no_draft' | 'no_calendar' | 'expired' | 'malformed';
 
 /**
  * Whether the calendar can be read with this key (mailguard v0.9 `GET /me` → `calendar`): `ok` when mailguard's
@@ -44,7 +51,11 @@ export type Verdict =
 
 const isStrings = (x: unknown): x is string[] => Array.isArray(x) && x.every((s) => typeof s === 'string');
 
-export function draftOnlyVerdict(answer: unknown, now = Date.now()): Verdict {
+/**
+ * `drafting` is config.email.drafting: while drafting is off in PLC OS (12 Oct 2026) the key is used only to read the
+ * calendar, so it needs calendar.read, not draft. Sending, notifying and unknown permissions are refused either way.
+ */
+export function draftOnlyVerdict(answer: unknown, now = Date.now(), drafting = true): Verdict {
   const a = (answer && typeof answer === 'object' ? answer : {}) as Record<string, unknown>;
   const mailbox = typeof a.mailbox === 'string' && /^[^\s@]+@[^\s@]+$/.test(a.mailbox) ? a.mailbox.toLowerCase() : null;
   const tool = typeof a.tool === 'string' ? a.tool.slice(0, 200) : null;
@@ -56,6 +67,7 @@ export function draftOnlyVerdict(answer: unknown, now = Date.now()): Verdict {
   }
   // Sending first: the clearest reason wins when there are several.
   if (capabilities.some((c) => SENDING.includes(c))) return no('can_send', CAN_SEND);
+  if (capabilities.some((c) => FORWARDING.includes(c))) return no('can_send', CAN_FORWARD);
   if (capabilities.some((c) => NOTIFYING.includes(c)) || a.can_notify_others === true) return no('can_notify', CAN_NOTIFY);
   const unknown = capabilities.filter((c) => !(KNOWN_CAPABILITIES as readonly string[]).includes(c));
   if (unknown.length) return no('unknown_capability', `This token has a permission this tool does not know (${unknown.slice(0, 3).join(', ').slice(0, 80)}), so it might send. Refused; make a drafts-only token in mailguard.`);
@@ -75,12 +87,18 @@ export function draftOnlyVerdict(answer: unknown, now = Date.now()): Verdict {
   if (!toolLayer) return no('malformed', 'Mailguard’s answer did not include the token’s own policy, so its permissions are unknown. Refused.');
   // The token's own policy must not grant sending: then only another layer stops it, and that layer can be widened.
   const own = toolLayer.grant as string[];
-  if (own.includes('send') || own.includes('*')) return no('tool_grants_send', `${CAN_SEND} (Its own policy grants ${own.includes('*') ? 'everything' : 'send'}; only another policy stops it today.)`);
+  const sends = own.find((g) => g === '*' || SENDING.includes(g));
+  if (sends) return no('tool_grants_send', `${CAN_SEND} (Its own policy grants ${sends === '*' ? 'everything' : sends}; only another policy stops it today.)`);
+  const forwards = own.find((g) => g === 'filters.*' || FORWARDING.includes(g));
+  if (forwards) return no('tool_grants_send', `${CAN_FORWARD} (Its own policy grants ${forwards}; only another policy stops it today.)`);
   const notifies = own.filter((g) => g === 'calendar.*' || NOTIFYING.includes(g));
   if (notifies.length) return no('can_notify', `${CAN_NOTIFY} (Its own policy grants ${notifies[0]}; only another policy stops it today.)`);
   const expires = toolLayer.expiresAt;
   if (expires !== undefined && (typeof expires !== 'string' || !(Date.parse(expires) > now))) return no('expired', 'This token’s policy has expired in mailguard. Make a new drafts-only token there.');
-  if (!capabilities.includes('draft')) return no('no_draft', 'This token cannot make drafts. Give its tool the draft permission in mailguard (and read.metadata, for follow-ups).');
+  if (!drafting && !capabilities.includes('calendar.read') && !capabilities.includes('calendar.read.details')) {
+    return no('no_calendar', 'This token cannot read the calendar. Give its tool calendar.read in mailguard.');
+  }
+  if (drafting && !capabilities.includes('draft')) return no('no_draft', 'This token cannot make drafts. Give its tool the draft permission in mailguard (and read.metadata, for follow-ups).');
 
   return { ok: true, mailbox, tool, capabilities, canThread: capabilities.includes('read.metadata'), extras: capabilities.filter((c) => !NEEDED.includes(c)), calendar: calendarAccess(a.calendar, capabilities) };
 }

@@ -66,7 +66,7 @@ export async function calendarProperties(check: Check) {
     const r1 = await rows();
     const pastRows = r1.filter((r) => r.held_on === '2026-09-01');
     check('Calendar: a meeting with an LP on record lands once for the person and once for their firm, however many calendars hold it; past is held, future scheduled; the team and resources are not LPs',
-      first.complete && first.people === 2 && first.added === 4 && pastRows.length === 2 && new Set(pastRows.map((r) => r.entity)).size === 2
+      first.complete && first.people === 2 && first.skipped.every((s) => s.why === 'no key') && first.added === 4 && pastRows.length === 2 && new Set(pastRows.map((r) => r.entity)).size === 2
         && pastRows.every((r) => r.entity === lena || r.entity === firm) && r1.filter((r) => r.scheduled_for).length === 2 && r1.every((r) => r.group_size === 1),
       JSON.stringify({ ...first, skipped: first.skipped.length, rows: r1.map((r) => [r.held_on, r.scheduled_for ? 'future' : '', r.entity === lena ? 'lena' : r.entity === firm ? 'firm' : r.entity]) }));
     check('Calendar: only the date, the team (by name) and what it is about are kept: no title, no description, no outside address; the organizer on the team owns it',
