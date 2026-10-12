@@ -26,7 +26,7 @@ export function Relabel({ entry }: { entry: { key: string; label: keyof typeof N
   };
   return (
     <div className="ddetail" style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-      <span>From a calendar, {entry.by}. Not {entry.label === 'travel' ? 'a trip' : 'an event'}?</span>
+      <span>{entry.label === 'meeting' ? 'Marked a meeting here. Show it again as' : `From a calendar, ${entry.by}. Not ${entry.label === 'travel' ? 'a trip' : 'an event'}?`}</span>
       {(Object.keys(NAMES) as Array<keyof typeof NAMES>).filter((l) => l !== entry.label).map((l) => (
         <button key={l} type="button" className="btn" style={{ padding: '1px 7px', fontSize: 11 }} disabled={busy} onClick={() => to(l)}
           title={l === 'meeting' ? 'Take it off this page; it stays a meeting on the LP' : `Show it as ${NAMES[l] === 'Event' ? 'an event' : 'a trip'}`}>
