@@ -12,6 +12,7 @@ import { CapacityTag, LpWho, units } from './LpWho';
 import { UnitIcon } from './UnitIcon';
 import { useIsCursor, useRowCursor, type CursorStore } from './row-cursor';
 import { cx, Disclose, fmt, fmtShort, FilterLine, Icon, Ladder, n, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
+import { unpackRows, type PackedRows } from '@/lib/packed-rows';
 import s from './lp-tables.module.css';
 import m from './selection.module.css';
 import u from './lp-units.module.css';
@@ -36,7 +37,8 @@ const SORT_LABEL: Partial<Record<SortKey, string>> = {
 const DEFAULT: Status[] = ['new', 'sourcing'];
 
 interface Props {
-  rows: PipelineRow[];
+  /** Every row in scope, packed for the trip (lib/packed-rows.ts). */
+  packed: PackedRows;
   statuses: StatusInfo[];
   rungNames: string[];
   initialFilters?: Record<string, string>;
@@ -44,8 +46,9 @@ interface Props {
   asOf: string;
 }
 
-export function SelectionBoard({ rows: given, statuses, rungNames, initialFilters, showVehicle, asOf }: Props) {
+export function SelectionBoard({ packed, statuses, rungNames, initialFilters, showVehicle, asOf }: Props) {
   const router = useRouter();
+  const given = useMemo(() => unpackRows<PipelineRow>(packed), [packed]);
   // Move to Selected (issue 0104): the ticked LPs when some are ticked, otherwise the one in focus.
   // The list shows a move at once, ahead of the server (useMove).
   const mv = useMove('selection', given);
