@@ -122,6 +122,16 @@ export async function commitRevisionProperties(check: Check) {
     check('REVISIONS keep a vehicle\'s touchpoints through a status move and read a new meeting at once',
       kept === first && fresh !== first && count(fresh) > count(first), `${count(first)} → ${count(kept)} → ${count(fresh)}`);
 
+    // The stored route searches keep their own revision (network 021): a route computation moves it, a status move does not.
+    const routes = async () => (await db.one<{ r: string }>('select routes::text r from network.read_revision'))!.r;
+    const r0 = await routes();
+    await db.query(`update strategy.pursuit set status = 'connecting' where pursuit_id = $1`, [pursuit]);
+    const r1 = await routes();
+    await db.query(`insert into network.route_cache (target_id, vehicle_kind, revision, computed_at, search) values ($1, 'fund', 'invented', now(), '{"routes": []}')`, [org]);
+    const r2 = await routes();
+    check('REVISIONS keep the routes revision through a status move and move it for a stored route search',
+      r0 === r1 && r2 !== r1, `${r0} → move ${r1} → route search ${r2}`);
+
     // The meetings list (meetingsOn) is kept the same way: a status move leaves it, a new meeting is in it at once.
     const { meetingsOn } = await import('../../modules/meetings/repo');
     const listed = () => withDb(db, () => meetingsOn(vehicle));

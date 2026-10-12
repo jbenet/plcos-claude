@@ -25,6 +25,12 @@ export async function touchRevisions(db: Db): Promise<{ revision: string; foregr
     foreground::text || ':' || current_date::text as foreground from network.read_revision where singleton`);
   return row!;
 }
+/** Moves only when a route computation writes network.route_cache (network 021). */
+export async function routesRevisions(db: Db): Promise<{ revision: string; foreground: string }> {
+  const row = await db.one<{ revision: string; foreground: string }>(`select 'r' || routes::text as revision,
+    foreground::text || ':' || current_date::text as foreground from network.read_revision where singleton`);
+  return row!;
+}
 type Revisions = (db: Db) => Promise<{ revision: string; foreground: string }>;
 
 // GUESS — the oldest build a page may answer with while only imports have written since. Each such
