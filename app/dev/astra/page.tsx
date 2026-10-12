@@ -3,9 +3,9 @@ import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { ago } from '@/lib/time';
 import { getDb } from '@/lib/db';
-import { COMMAND_LABEL, readRunner, recentCommands, recentJobs, runnerUp, WORKFLOW_LABEL, type AstraCommand, type AstraJob, type AstraRunner } from '@/lib/astra/jobs';
+import { COMMAND_LABEL, planText, readRunner, recentCommands, recentJobs, runnerUp, WORKFLOW_LABEL, type AstraCommand, type AstraJob, type AstraRunner } from '@/lib/astra/jobs';
 import { cancelAstraAction } from './actions';
-import { AutoForm, CommandButtons, PauseButton, QueueForm } from './AstraForms';
+import { AutoForm, CommandButtons, PauseButton, PlanForm, QueueForm } from './AstraForms';
 import s from './astra.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -132,6 +132,16 @@ async function AstraPage() {
       </div>
 
       <div className="card">
+        <div className="chead"><span className="lbl">Night plan</span></div>
+        <PlanForm keepBusy={runner.keepBusy} plan={planText(runner.plan)} />
+        <p className={s.hint}>
+          With Keep busy on, the server keeps about two runs per slot queued from {hour(runner.windowStart)} to {hour(runner.windowEnd)}, from the first step
+          that still has work tonight. A step is done for the night when a run finds nobody, or its last three runs wrote nothing; then the next step
+          starts. Each night starts again from the first step. Vehicles are slugs or names as on the Mac.
+        </p>
+      </div>
+
+      <div className="card">
         <div className="chead"><span className="lbl">Every night</span></div>
         <AutoForm autoOn={runner.autoOn} autoWorkflow={runner.autoWorkflow} autoBatches={runner.autoBatches} batchSize={runner.batchSize}
           windowStart={runner.windowStart} windowEnd={runner.windowEnd} />
@@ -161,7 +171,7 @@ async function AstraPage() {
                   <tr key={j.id}>
                     <td>
                       {WORKFLOW_LABEL[j.workflow]}
-                      <span className={s.sub}>{j.source === 'auto' ? `Every night, ${j.night}` : j.runNow ? 'Now' : 'Tonight'} · queued {ago(new Date(j.createdAt))}</span>
+                      <span className={s.sub}>{j.source === 'plan' ? `Plan step ${(j.step ?? 0) + 1}, ${j.night}${j.focus.length ? ` · ${j.focus.join(', ')}` : ''}` : j.source === 'auto' ? `Every night, ${j.night}` : j.runNow ? 'Now' : 'Tonight'} · queued {ago(new Date(j.createdAt))}</span>
                     </td>
                     <td>
                       <span className={`flag ${FLAG[j.status]}`}>{STATUS[j.status]}</span>

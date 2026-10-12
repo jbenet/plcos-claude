@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { astraCommandAction, astraSettingsAction, queueAstraAction } from './actions';
+import { astraCommandAction, astraPlanAction, astraSettingsAction, queueAstraAction } from './actions';
 import s from './astra.module.css';
 
 const WORKFLOWS: Array<[string, string]> = [['w1w5', 'Profile, then strategy (W1+W5)'], ['w1', 'Profile (W1)'], ['w5', 'Strategy (W5)'], ['w5t', 'Shorten strategies (W5)']];
@@ -80,6 +80,26 @@ export function CommandButtons() {
         <button className="btn" name="op" value="diagnose" disabled={pending}>Check</button>
         <button className="btn" name="op" value="update" disabled={pending}>Update</button>
         <button className="btn" name="op" value="restart" disabled={pending}>Restart</button>
+      </form>
+      <div aria-live="polite">
+        {state.message && <p role="status" className={s.msg}>{state.message}</p>}
+        {state.error && <p role="alert" className={s.err}>{state.error}</p>}
+      </div>
+    </>
+  );
+}
+
+/** Night plan: one step a line, worked in order; the server keeps the queue topped up from the first step with work left. */
+export function PlanForm({ keepBusy, plan }: { keepBusy: boolean; plan: string }) {
+  const [state, action, pending] = useActionState(astraPlanAction, {});
+  return (
+    <>
+      <form action={action} className={s.form}>
+        <label className={s.check}><input type="checkbox" name="keepBusy" defaultChecked={keepBusy} /> Keep busy through the night window</label>
+        <label className={s.wide}>Steps, one a line: workflow, LPs per run, then vehicles to focus on (optional)
+          <textarea name="plan" rows={6} defaultValue={plan} placeholder={'w5 5 neurotech, spv-netholabs\nw5t 8 neurotech, spv-netholabs\nw5 5'} />
+        </label>
+        <button className="btn" disabled={pending}>{pending ? 'Saving…' : 'Save plan'}</button>
       </form>
       <div aria-live="polite">
         {state.message && <p role="status" className={s.msg}>{state.message}</p>}

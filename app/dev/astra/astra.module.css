@@ -16,6 +16,8 @@ th.num { font-family: inherit; }
 .form label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--muted); }
 .form select, .form input[type=number] { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); }
 .form input[type=number] { width: 64px; }
+.wide { flex: 1 1 100%; }
+.wide textarea { font: 12.5px/1.5 var(--mono, ui-monospace, monospace); padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); resize: vertical; }
 .check { flex-direction: row !important; align-items: center; gap: 6px !important; font-size: 13px !important; color: var(--ink) !important; }
 .hint { font-size: 12px; color: var(--muted); line-height: 1.45; padding: 0 15px 12px; margin: 0; }
 .msg, .err { margin: 0 15px 12px; font-size: 12.5px; }

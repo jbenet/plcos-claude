@@ -69,3 +69,19 @@ export async function astraCommandAction(_prev: State, form: FormData): Promise<
     return { error: e instanceof Error ? e.message : 'Not sent.' };
   }
 }
+
+/** Night plan: Keep busy, and the steps the server works through in the window (migration 027). */
+export async function astraPlanAction(_prev: State, form: FormData): Promise<State> {
+  const user = await requireAction('app/dev/astra/actions.ts#astraPlanAction', _prev, form);
+  const { parsePlan, saveSettings } = await import('@/lib/astra/jobs');
+  try {
+    const plan = parsePlan(String(form.get('plan') ?? ''));
+    const keepBusy = form.get('keepBusy') === 'on';
+    await saveSettings(await getDb(), user.id, { keepBusy, plan });
+    await appendAudit({ actorId: user.id, action: 'astra.plan', subjectType: 'astra_runner', subjectId: null, detail: { keepBusy, steps: plan.length } });
+    revalidatePath('/dev/astra');
+    return { message: keepBusy ? `Saved: ${plan.length} step${plan.length === 1 ? '' : 's'}, worked in order through the night window.` : 'Saved; Keep busy is off.' };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Not saved.' };
+  }
+}

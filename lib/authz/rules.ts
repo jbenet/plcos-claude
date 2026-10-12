@@ -34,6 +34,7 @@ export const actionRules = {
   'app/dev/astra/actions.ts#cancelAstraAction': { action: 'admin', scope: 'global' },
   'app/dev/astra/actions.ts#astraSettingsAction': { action: 'admin', scope: 'global' },
   'app/dev/astra/actions.ts#astraCommandAction': { action: 'admin', scope: 'global' },
+  'app/dev/astra/actions.ts#astraPlanAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#exportResearchSetAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#importFindingsAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#sourceBulkAction': { action: 'admin', scope: 'global' },

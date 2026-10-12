@@ -17,13 +17,25 @@ const COUNT_KEYS = ['selected', 'written', 'valid', 'failed', 'pushed', 'strateg
 /** The runner is up when it has polled within this long (it polls every minute). */
 export const RUNNER_STALE_MS = 3 * 60_000;
 
+/**
+ * One step of the night plan (migration 027): a workflow, LPs per run, and optionally the vehicles to focus on (slugs or
+ * names as vehicles.json on the Mac has them). With Keep busy on, the server works the steps in order through the night
+ * window, keeping the queue topped up, and moves on when a step has nobody left.
+ */
+export interface PlanStep { workflow: AstraWorkflow; size: number; focus: string[] }
+/** Most steps a plan holds, and most vehicles a step focuses on. */
+export const PLAN_MAX = 20, FOCUS_MAX = 8;
+/** A step is done for the night when a run of it finds nobody, or its last this many runs all wrote nothing. */
+const STEP_BARREN = 3;
+
 export interface AstraJob {
-  id: string; workflow: AstraWorkflow; size: number; runNow: boolean; source: 'person' | 'auto'; night: string | null;
+  id: string; workflow: AstraWorkflow; size: number; runNow: boolean; source: 'person' | 'auto' | 'plan'; night: string | null;
+  focus: string[]; step: number | null;
   status: AstraStatus; batch: string | null; slot: string | null; model: string | null; counts: Record<string, number>;
   message: string | null; createdAt: string; claimedAt: string | null; startedAt: string | null; finishedAt: string | null;
 }
 export interface AstraRunner {
-  paused: boolean; autoOn: boolean; autoWorkflow: AstraWorkflow; autoBatches: number; batchSize: number;
+  paused: boolean; keepBusy: boolean; plan: PlanStep[]; autoOn: boolean; autoWorkflow: AstraWorkflow; autoBatches: number; batchSize: number;
   windowStart: number; windowEnd: number; heartbeatAt: string | null; host: string | null;
   slots: Array<{ slot: string; job: string | null }>; inWindow: boolean | null; capacityUntil: string | null; note: string | null;
   /** The commit the runner started on, and when (runners from before 026 send neither). */
@@ -41,19 +53,21 @@ export interface AstraCommand {
 const COMMAND_STALE = '4 hours';
 
 const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
-const JOB_COLUMNS = `id::text, workflow, size, run_now, source, night::text, status, batch, slot, model, counts, message,
+const JOB_COLUMNS = `id::text, workflow, size, run_now, source, night::text, focus, step, status, batch, slot, model, counts, message,
   created_at, claimed_at, started_at, finished_at`;
-type JobRow = { id: string; workflow: AstraWorkflow; size: number; run_now: boolean; source: 'person' | 'auto'; night: string | null;
+type JobRow = { id: string; workflow: AstraWorkflow; size: number; run_now: boolean; source: 'person' | 'auto' | 'plan'; night: string | null;
+  focus: string[] | null; step: number | null;
   status: AstraStatus; batch: string | null; slot: string | null; model: string | null; counts: Record<string, number> | null;
   message: string | null; created_at: Date; claimed_at: Date | null; started_at: Date | null; finished_at: Date | null };
 const job = (r: JobRow): AstraJob => ({ id: r.id, workflow: r.workflow, size: r.size, runNow: r.run_now, source: r.source, night: r.night,
+  focus: r.focus ?? [], step: r.step,
   status: r.status, batch: r.batch, slot: r.slot, model: r.model, counts: r.counts ?? {}, message: r.message,
   createdAt: iso(r.created_at)!, claimedAt: iso(r.claimed_at), startedAt: iso(r.started_at), finishedAt: iso(r.finished_at) });
 
 export async function readRunner(db: Queryable): Promise<AstraRunner> {
   const r = await db.one<Record<string, any>>('select * from platform.astra_runner where id = 1');
   if (!r) throw new Error('The Astra runner row is missing; migration 024 did not apply.');
-  return { paused: r.paused, autoOn: r.auto_on, autoWorkflow: r.auto_workflow, autoBatches: r.auto_batches, batchSize: r.batch_size,
+  return { paused: r.paused, keepBusy: r.keep_busy ?? false, plan: readPlan(r.plan), autoOn: r.auto_on, autoWorkflow: r.auto_workflow, autoBatches: r.auto_batches, batchSize: r.batch_size,
     windowStart: r.window_start, windowEnd: r.window_end, heartbeatAt: iso(r.heartbeat_at), host: r.host,
     slots: Array.isArray(r.slots) ? r.slots : [], inWindow: r.in_window, capacityUntil: iso(r.capacity_until), note: r.note,
     code: r.code ?? null, codeStartedAt: iso(r.code_started_at) };
@@ -98,9 +112,38 @@ export async function cancelQueued(db: Queryable): Promise<number> {
     message = 'Cancelled from the page.' where status = 'queued' returning id`)).length;
 }
 
-export async function saveSettings(db: Queryable, actor: string, s: Partial<Pick<AstraRunner, 'paused' | 'autoOn' | 'autoWorkflow' | 'autoBatches' | 'batchSize' | 'windowStart' | 'windowEnd'>>): Promise<void> {
-  const cols: Record<string, unknown> = { paused: s.paused, auto_on: s.autoOn, auto_workflow: s.autoWorkflow, auto_batches: s.autoBatches,
-    batch_size: s.batchSize, window_start: s.windowStart, window_end: s.windowEnd };
+/** A plan as stored, read loosely: a step the server would not accept is dropped rather than run. */
+export function readPlan(value: unknown): PlanStep[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, PLAN_MAX).flatMap((x) => {
+    const workflow = ASTRA_WORKFLOWS.find((w) => w === x?.workflow);
+    const size = Math.trunc(Number(x?.size));
+    const focus = Array.isArray(x?.focus) ? x.focus.filter((f: unknown) => typeof f === 'string' && /^[\w .&'()-]{1,60}$/.test(f)).slice(0, FOCUS_MAX) : [];
+    return workflow && size >= 1 && size <= 20 ? [{ workflow, size, focus }] : [];
+  });
+}
+
+/** Parse the page's plan text: one step a line, `<workflow> <LPs per run> [vehicle, vehicle…]`; refuses a line it can't read. */
+export function parsePlan(text: string): PlanStep[] {
+  const steps = text.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+  if (steps.length > PLAN_MAX) throw new Error(`A plan holds at most ${PLAN_MAX} steps.`);
+  return steps.map((line, i) => {
+    const m = /^(\S+)\s+(\d+)(?:\s+(.+))?$/.exec(line);
+    const workflow = ASTRA_WORKFLOWS.find((w) => w === m?.[1]);
+    const size = Number(m?.[2]);
+    const focus = (m?.[3] ?? '').split(',').map((f) => f.trim()).filter(Boolean);
+    if (!m || !workflow) throw new Error(`Step ${i + 1}: start with a workflow (${ASTRA_WORKFLOWS.join(', ')}).`);
+    if (!(size >= 1 && size <= 20)) throw new Error(`Step ${i + 1}: LPs per run is 1 to 20.`);
+    if (focus.length > FOCUS_MAX || focus.some((f) => !/^[\w .&'()-]{1,60}$/.test(f))) throw new Error(`Step ${i + 1}: up to ${FOCUS_MAX} vehicles, comma-separated.`);
+    return { workflow, size, focus };
+  });
+}
+
+export const planText = (plan: PlanStep[]) => plan.map((s) => [s.workflow, s.size, s.focus.join(', ')].filter((x) => x !== '').join(' ')).join('\n');
+
+export async function saveSettings(db: Queryable, actor: string, s: Partial<Pick<AstraRunner, 'paused' | 'keepBusy' | 'plan' | 'autoOn' | 'autoWorkflow' | 'autoBatches' | 'batchSize' | 'windowStart' | 'windowEnd'>>): Promise<void> {
+  const cols: Record<string, unknown> = { paused: s.paused, keep_busy: s.keepBusy, plan: s.plan === undefined ? undefined : JSON.stringify(readPlan(s.plan)),
+    auto_on: s.autoOn, auto_workflow: s.autoWorkflow, auto_batches: s.autoBatches, batch_size: s.batchSize, window_start: s.windowStart, window_end: s.windowEnd };
   const set = Object.entries(cols).filter(([, v]) => v !== undefined);
   if (s.autoWorkflow !== undefined && !ASTRA_WORKFLOWS.includes(s.autoWorkflow)) throw new Error('Pick a workflow.');
   const params = set.map(([, v]) => v);
@@ -110,11 +153,13 @@ export async function saveSettings(db: Queryable, actor: string, s: Partial<Pick
 
 export interface Poll {
   host: string; inWindow: boolean; night: string; free: number; held: string[]; workflows?: readonly AstraWorkflow[];
+  /** Runner features beyond the first: `focus` = it can cut a batch for named vehicles. */
+  features?: readonly string[];
   commands?: readonly AstraCommandOp[]; code?: string | null; codeStartedAt?: string | null;
   slots: Array<{ slot: string; job: string | null }>; capacityUntil: string | null; note: string | null;
 }
 export interface PollAnswer {
-  paused: boolean; batchSize: number; window: [number, number]; jobs: Array<Pick<AstraJob, 'id' | 'workflow' | 'size'>>; cancel: string[];
+  paused: boolean; batchSize: number; window: [number, number]; jobs: Array<Pick<AstraJob, 'id' | 'workflow' | 'size' | 'focus'>>; cancel: string[];
   commands: Array<Pick<AstraCommand, 'id' | 'op'>>;
 }
 
@@ -140,15 +185,18 @@ export async function poll(db: Db, p: Poll): Promise<PollAnswer> {
         }
       }
     }
+    if (r.keepBusy && p.inWindow && !r.paused && r.plan.length) await topUp(tx, r, p);
     const cancelled = p.held.length ? (await tx.query<{ id: string }>(
       `select id::text from platform.astra_job where id::text = any($1::text[]) and status = 'cancelled'`, [p.held])).map((x) => x.id) : [];
     await tx.query(`update platform.astra_job set status = 'failed', finished_at = clock_timestamp(), updated_at = clock_timestamp(),
       message = 'The runner no longer holds this run (it restarted or lost it).' where status in ('claimed','running') and not (id::text = any($1::text[]))`, [p.held]);
-    const jobs = r.paused || p.free <= 0 ? [] : await tx.query<{ id: string; workflow: AstraWorkflow; size: number }>(
+    const focusing = (p.features ?? []).includes('focus');
+    const jobs = r.paused || p.free <= 0 ? [] : (await tx.query<{ id: string; workflow: AstraWorkflow; size: number; focus: string[] | null }>(
       `update platform.astra_job set status = 'claimed', claimed_at = clock_timestamp(), updated_at = clock_timestamp()
        where id in (select id from platform.astra_job where status = 'queued' and (run_now or $1) and workflow = any($3::text[])
-         order by created_at limit $2)
-       returning id::text, workflow, size`, [p.inWindow, Math.min(p.free, 12), [...(p.workflows ?? FIRST_WORKFLOWS)]]);
+         and ($4 or coalesce(cardinality(focus), 0) = 0) order by created_at limit $2)
+       returning id::text, workflow, size, focus`, [p.inWindow, Math.min(p.free, 12), [...(p.workflows ?? FIRST_WORKFLOWS)], focusing]))
+      .map((j) => ({ id: j.id, workflow: j.workflow, size: j.size, focus: j.focus ?? [] }));
     await tx.query(`update platform.astra_command set status = 'failed', finished_at = clock_timestamp(), message = 'The runner took it but never answered.'
       where status = 'sent' and sent_at < clock_timestamp() - interval '${COMMAND_STALE}'`);
     const takes = (p.commands ?? []).filter((c) => ASTRA_COMMANDS.includes(c));
@@ -158,6 +206,41 @@ export async function poll(db: Db, p: Poll): Promise<PollAnswer> {
        returning id::text, op`, [takes]) : [];
     return { paused: r.paused, batchSize: r.batchSize, window: [r.windowStart, r.windowEnd], jobs, cancel: cancelled, commands };
   });
+}
+
+/**
+ * Keep busy: in the night window, keep about two runs per slot queued or working, from the first plan step that still
+ * has work tonight. A step is done for the night when one of its runs found nobody, or its last STEP_BARREN runs wrote
+ * nothing (so a step that keeps failing stops costing runs); its leftover queued runs are cancelled. Plan runs left
+ * queued from an earlier night are cancelled, so each night starts from step 1. Steps the runner can't run (a workflow it
+ * doesn't name, or a focus it can't cut) are skipped.
+ */
+async function topUp(tx: Queryable, r: AstraRunner, p: Poll): Promise<void> {
+  await tx.query(`update platform.astra_job set status = 'cancelled', finished_at = clock_timestamp(), updated_at = clock_timestamp(),
+    message = 'Left from an earlier night.' where source = 'plan' and status = 'queued' and night is distinct from $1::date`, [p.night]);
+  const owner = await tx.one<{ updated_by: string | null }>('select updated_by::text from platform.astra_runner where id = 1');
+  if (!owner?.updated_by) return;
+  const tonight = await tx.query<{ step: number; status: AstraStatus; selected: number | null; written: number | null; finished_at: Date | null }>(
+    `select step, status, (counts->>'selected')::int as selected, coalesce((counts->>'pushed')::int, (counts->>'valid')::int, (counts->>'written')::int) as written,
+       finished_at from platform.astra_job where source = 'plan' and night = $1::date order by finished_at desc nulls last`, [p.night]);
+  const runnable = (s: PlanStep) => (p.workflows ?? FIRST_WORKFLOWS).includes(s.workflow) && (!s.focus.length || (p.features ?? []).includes('focus'));
+  const done = (i: number) => {
+    const finished = tonight.filter((j) => j.step === i && (j.status === 'done' || j.status === 'failed'));
+    return finished.some((j) => j.status === 'done' && j.selected === 0) || (finished.length >= STEP_BARREN && finished.slice(0, STEP_BARREN).every((j) => !j.written));
+  };
+  for (let i = 0; i < r.plan.length; i++) if (done(i)) {
+    await tx.query(`update platform.astra_job set status = 'cancelled', finished_at = clock_timestamp(), updated_at = clock_timestamp(),
+      message = 'This plan step is done for tonight.' where source = 'plan' and status = 'queued' and night = $1::date and step = $2`, [p.night, i]);
+  }
+  const at = r.plan.findIndex((s, i) => runnable(s) && !done(i));
+  if (at < 0) return;
+  const pending = await tx.one<{ n: number }>(`select count(*)::int as n from platform.astra_job where status in ('queued','claimed','running')`);
+  const want = Math.max(2, p.slots.length) * 2 - (pending?.n ?? 0);
+  const step = r.plan.at(at)!;
+  for (let k = 0; k < want; k++) {
+    await tx.query(`insert into platform.astra_job(workflow, size, run_now, source, night, step, focus, actor) values ($1, $2, false, 'plan', $3, $4, $5, $6)`,
+      [step.workflow, step.size, p.night, at, step.focus.length ? step.focus : null, owner.updated_by]);
+  }
 }
 
 export interface Report { id: string; status: 'running' | 'done' | 'failed'; batch?: string; slot?: string; model?: string; counts?: Record<string, unknown>; message?: string }
