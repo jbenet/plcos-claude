@@ -234,9 +234,10 @@ fn main() {
                 let logs = MenuItem::with_id(app, "logs", "Open Runner Logs", true, None::<&str>)?;
                 let login = CheckMenuItem::with_id(app, "login", "Open at Login",
                     true, app.autolaunch().is_enabled().unwrap_or(false), None::<&str>)?;
+                let restart = MenuItem::with_id(app, "restart", "Restart Astra", true, None::<&str>)?;
                 let quit = MenuItem::with_id(app, "quit", "Quit Astra", true, Some("CmdOrCtrl+Q"))?;
                 let sep = || PredefinedMenuItem::separator(app);
-                let menu = Menu::with_items(app, &[&status, &server, &sep()?, &run_now, &tonight, &sep()?, &open, &browser, &feedback, &sep()?, &toggle, &logs, &login, &sep()?, &quit])?;
+                let menu = Menu::with_items(app, &[&status, &server, &sep()?, &run_now, &tonight, &sep()?, &open, &browser, &feedback, &sep()?, &toggle, &logs, &login, &sep()?, &restart, &quit])?;
 
                 // Start the runner unless launchd already runs it.
                 if !launchd_runner() {
@@ -297,6 +298,8 @@ fn main() {
                                 let a = app.autolaunch();
                                 let _ = if a.is_enabled().unwrap_or(false) { a.disable() } else { a.enable() };
                             }
+                            // Stop the runner (it hands back claimed work), then relaunch the app, which starts it again.
+                            "restart" => { runner.lock().unwrap().stop(); app.restart(); }
                             "quit" => { runner.lock().unwrap().stop(); app.exit(0); }
                             _ => {}
                         }
