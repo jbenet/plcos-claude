@@ -33,11 +33,13 @@ export const CALENDAR_WINDOW = { pastDays: 548, futureDays: 90 };
 /** GUESS: 40 pages of 250 is 10,000 occurrences a calendar in the window; more is not a person's calendar. */
 const MAX_PAGES = 40;
 const DAY = 86_400_000;
+/** Why a person was not read when they have no mailguard key saved (Preferences → Email). */
+export const NO_KEY = 'no key';
 
 export interface CalendarSyncResult {
   people: number;
   /** People whose calendars were not read, and why: a state, never an address. */
-  skipped: Array<{ handle: string; why: string }>;
+  skipped: Array<{ handle: string; why: string }>;  // NO_KEY for a person with no mailguard key saved
   calendars: number;
   events: number;
   /** LP meetings: an outside guest matched an LP by address or firm domain, or (byName) the entry named one. */
@@ -163,7 +165,8 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
     let i = 0;
     for (const u of users) {
       await o.progress?.('Reading calendars', i++, users.length);
-      if (!(await keyFor(rt, u.handle))) continue;
+      // Listed, not left out silently: a person with no key saved is why a read can find nobody (handle and state only).
+      if (!(await keyFor(rt, u.handle))) { r.skipped.push({ handle: u.handle, why: NO_KEY }); continue; }
       r.people++;
       let client: MailguardClient;
       try {
@@ -172,7 +175,7 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
         client = c.client;
       } catch (e) {
         if (e instanceof KeyRefused) { r.skipped.push({ handle: u.handle, why: e.inspection.code }); r.complete = false; continue; }
-        if (e instanceof NotConnected) continue;
+        if (e instanceof NotConnected) { r.skipped.push({ handle: u.handle, why: NO_KEY }); continue; }
         throw e;
       }
       try {
@@ -197,7 +200,7 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
     }
     for (const k of seen.keys()) cancelled.delete(k);
     // Nobody's calendar read is not a read of every calendar: nothing is removed for being gone.
-    if (!r.people || r.people === r.skipped.length) r.complete = false;
+    if (!r.people || r.people === r.skipped.filter((s) => s.why !== NO_KEY).length) r.complete = false;
     r.events = seen.size;
     await o.progress?.('Matching guests to LPs', users.length, users.length + 1);
 
@@ -304,10 +307,11 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
     });
     if (r.added || r.removed) await (await import('@/lib/reconcile')).reconcile(actor);
 
+    const noKey = r.skipped.filter((s) => s.why === NO_KEY).length;
     const counts = { people: r.people, skipped: r.skipped.length, calendars: r.calendars, events: r.events, matched: r.matched, byName: r.byName, added: r.added, updated: r.updated, affinity: r.affinity, removed: r.removed, complete: r.complete };
     await appendAudit({ actorId: actor, action: 'calendar.read', subjectType: 'source', detail: { ...counts, skippedWhy: r.skipped.map((s) => s.why) } }, db);
     await finishRun(run, { status: 'ok', requests: 0, records: r.events, newRecords: r.added,
-      note: `${r.people} people's calendars (${r.calendars} calendars${r.skipped.length ? `, ${r.skipped.length} people not read` : ''}) · ${r.events} meetings, ${r.matched} with an LP (${r.byName} by name only) · ${r.added} new, ${r.updated} kept, ${r.affinity} already Affinity's, ${r.removed} removed${r.complete ? '' : ' · not every calendar was read whole, so none was removed for being gone'}`,
+      note: `${r.people} people's calendars (${r.calendars} calendars${r.skipped.length ? `, ${r.skipped.length} people not read${noKey ? `, ${noKey} with no key` : ''}` : ''}) · ${r.events} meetings, ${r.matched} with an LP (${r.byName} by name only) · ${r.added} new, ${r.updated} kept, ${r.affinity} already Affinity's, ${r.removed} removed${r.complete ? '' : ' · not every calendar was read whole, so none was removed for being gone'}`,
       detail: counts });
     return r;
   } catch (e) {
