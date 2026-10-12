@@ -115,6 +115,21 @@ async function writtenSince(dir: string, keys: string[], since: number, folders 
 }
 
 /**
+ * The batch's keys and their identity aliases (entity-keys.json, alias → LP): a worker revising an LP's strategy keeps
+ * the file it found, which may sit under an alias (12 Oct 2026: three W5 runs wrote 15 strategies the runner missed).
+ */
+async function withAliases(enrich: string, keys: string[]): Promise<string[]> {
+  const aliases: Record<string, string> = JSON.parse(await readFile(join(enrich, 'entity-keys.json'), 'utf8').catch(() => '{}'));
+  const wanted = new Set(keys);
+  const out = new Set(keys);
+  for (const [from, to] of Object.entries(aliases)) {
+    if (wanted.has(to)) out.add(from);
+    if (wanted.has(from)) out.add(to);
+  }
+  return [...out];
+}
+
+/**
  * Push each file on its own, so one that fails the importer's checks costs only itself. The server takes one push at a
  * time and answers others "Another push is being taken" (409): runs finishing together collided on the first night
  * (10 of 237 files), so that answer is retried with a growing wait; a refusal on the file's merits is not.
@@ -196,7 +211,7 @@ async function work(slot: Slot, job: Job, root: string) {
   const result = await codex(slot, brief, base, enrich);
   if (result.capacity) capacityUntil = Date.now() + CAPACITY_WAIT_MS;
   const raw = mode === 'w1' ? await writtenSince(join(enrich, 'raw'), keys, started) : [];
-  const strategies = job.workflow === 'w1' ? [] : await writtenSince(join(enrich, 'strategy'), keys, started, true);
+  const strategies = job.workflow === 'w1' ? [] : await writtenSince(join(enrich, 'strategy'), await withAliases(enrich, keys), started, true);
   const pushed = (raw.length ? await push('W1', runId, raw) : 0) + (strategies.length ? await push('W5', runId, strategies) : 0);
   const written = raw.length + strategies.length;
   const why = slot.cancelled ? 'Stopped from the page.' : result.capacity ? 'Both models were at capacity.' : !result.finished ? 'The worker ended without a final message.' : null;
