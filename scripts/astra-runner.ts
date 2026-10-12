@@ -34,7 +34,7 @@ import { batchPrefix, CAPACITY_WAIT_MS, CODEX, codexArgs, fill, MODELS, nightOf,
 
 const run = promisify(execFile);
 const REPO = process.cwd();
-const SLOTS = Math.max(1, Math.min(6, Number(process.env.ASTRA_SLOTS ?? 4)));
+const SLOTS = Math.max(1, Math.min(6, Number(process.env.ASTRA_SLOTS ?? 6)));
 const POLL_MS = 60_000;
 const WORKFLOWS = ['w1w5', 'w1', 'w5', 'w5t'] as const;
 type Job = { id: string; workflow: (typeof WORKFLOWS)[number]; size: number };

@@ -34,7 +34,7 @@ permission check refused. The runner takes Claude out of the launch path entirel
 2. Fill the fixed brief from `scripts/astra/templates/` (W1, W5, W1+W5 or the shortening pass), with three recent
    findings and two recent strategies as example paths.
 3. Begin a ledger run (`source: chatgpt`, agent `astra-runner`).
-4. Run `codex exec` in a free slot (the `plcos-codex-bN` worktrees beside the live checkout when present, else plain
+4. Run `codex exec` in a free slot (6 by default, `ASTRA_SLOTS` 1–6; Juan, 12 Oct 2026: "run many more astra runs in parallel"; the `plcos-codex-bN` worktrees beside the live checkout when present, else plain
    folders), sandboxed to write only in its folder and `enrich/`, with web search. `gpt-6-astra` first; `gpt-6-sol`
    only when the first says "at capacity" and wrote no final message. Stopped after 3 hours.
 5. Push each finding and strategy the run wrote (strategies in vehicle folders too) with `cloud-push.sh` (the importer's checks run first; the server
