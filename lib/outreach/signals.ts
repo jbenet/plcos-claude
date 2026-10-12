@@ -375,10 +375,10 @@ export async function insights(u: AppUser, a: z.infer<typeof insightsInput>) {
       and ($3::text is null or s.role = $3) order by s.sent_at desc, s.signal_id limit 5000`, [v.id, since, a.role ?? null]);
   const n = a.examples ?? 3;
   const byKind = new Map<SignalKind, Row[]>();
-  for (const r of rows) byKind.set(r.kind, [...(byKind.get(r.kind) ?? []), r]);
+  for (const r of rows) { const l = byKind.get(r.kind); if (l) l.push(r); else byKind.set(r.kind, [r]); }
   const kinds = [...byKind].sort((x, y) => y[1].length - x[1].length).map(([kind, list]) => {
     const topics = new Map<string, Row[]>();
-    for (const r of list) { const t = (r.topic ?? '').trim().toLowerCase() || '(no topic)'; topics.set(t, [...(topics.get(t) ?? []), r]); }
+    for (const r of list) { const t = (r.topic ?? '').trim().toLowerCase() || '(no topic)'; { const l = topics.get(t); if (l) l.push(r); else topics.set(t, [r]); } }
     return {
       kind, label: SIGNAL_LABEL[kind], signals: list.length, entities: new Set(list.map((r) => r.entity_id)).size,
       topics: [...topics].sort((x, y) => y[1].length - x[1].length || x[0].localeCompare(y[0])).slice(0, 25).map(([topic, t]) => ({

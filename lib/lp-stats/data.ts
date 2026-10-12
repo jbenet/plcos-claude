@@ -119,7 +119,7 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
   const contactTypes = new Map<string, string[]>();
   for (const { org, person, speaks } of orgPeople) {
     const t = speaks ? itypeOf.get(person) : undefined;
-    if (t && t !== 'unknown') contactTypes.set(org, [...(contactTypes.get(org) ?? []), t]);
+    if (t && t !== 'unknown') { const l = contactTypes.get(org); if (l) l.push(t); else contactTypes.set(org, [t]); }
   }
   const mostCommon = (list: string[]) => {
     const c = new Map<string, number>(); for (const x of list) c.set(x, (c.get(x) ?? 0) + 1);
@@ -136,7 +136,7 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
     moneyOf.set(key, m);
   }
   const prospectsOf = new Map<string, typeof prospects>();
-  for (const x of prospects) prospectsOf.set(x.id, [...(prospectsOf.get(x.id) ?? []), x]);
+  for (const x of prospects) { const l = prospectsOf.get(x.id); if (l) l.push(x); else prospectsOf.set(x.id, [x]); }
   /** An entity's own place: Dakota's country (an account's billing, a person's mailing), else research. */
   const placeOf = (id: string, unit: 'organisation' | 'individual'): { country: string; basis: 'dakota' | 'research' } | null => {
     const dakota = countryOf(unit === 'organisation' ? accountOf.get(id)?.country : contactOf.get(id)?.country ?? accountOf.get(id)?.country);
@@ -145,7 +145,7 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
     return research ? { country: research, basis: 'research' } : null;
   };
   const peopleOf = new Map<string, string[]>();
-  for (const { org, person } of orgPeople) peopleOf.set(org, [...(peopleOf.get(org) ?? []), person]);
+  for (const { org, person } of orgPeople) { const l = peopleOf.get(org); if (l) l.push(person); else peopleOf.set(org, [person]); }
   const formal = new Map(assessments.map((a) => [`${a.entityId}:${a.vehicleId}`, a]));
   const readingOf = new Map(readings.map((r) => [r.pursuit_id, r]));
 

@@ -344,7 +344,8 @@ export async function touchpointsByPair(
   const project = await teamLabels(db);
   const rows = (await db.query<TouchRow>(TOUCH_SELECT, [[...new Set(pairs.map((p) => p.entityId))]])).map((r) => ({ r, t: toTouch(r, project) }));
   const byEntity = new Map<string, Touchpoint[]>();
-  for (const { r, t } of rows) byEntity.set(r.for_entity, [...(byEntity.get(r.for_entity) ?? []), t]);
+  // Appended in place: copying each LP's list per row was quadratic in an LP's touchpoints (12 Oct 2026).
+  for (const { r, t } of rows) { const list = byEntity.get(r.for_entity); if (list) list.push(t); else byEntity.set(r.for_entity, [t]); }
   const windows = await raiseWindows();
   for (const p of pairs) {
     const w = windows.get(p.vehicleId);
@@ -364,7 +365,8 @@ export async function touchpointsByEntity(entityIds: string[]): Promise<Map<stri
   const db = await getDb();
   const project = await teamLabels(db);
   for (const r of await db.query<TouchRow>(TOUCH_SELECT, [[...new Set(entityIds)]])) {
-    out.set(r.for_entity, [...(out.get(r.for_entity) ?? []), toTouch(r, project)]);
+    const list = out.get(r.for_entity), t = toTouch(r, project);
+    if (list) list.push(t); else out.set(r.for_entity, [t]);
   }
   for (const list of out.values()) list.sort((a, b) => when(b) - when(a));
   return out;

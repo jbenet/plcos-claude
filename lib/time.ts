@@ -13,13 +13,28 @@ export type DateParts = {
  * Component that formatted a date that way failed to hydrate in Safari (issue 0118). Only the
  * numeric fields come from Intl, which also applies `timeZone` (the runtime's own zone if absent).
  */
+/**
+ * One formatter per time zone, made once: building an Intl.DateTimeFormat costs far more than using one,
+ * and a list of 3,000 LPs formats several dates each (performance pass, 12 Oct 2026: 0.2 s of a rebuild).
+ */
+const formats = new Map<string, Intl.DateTimeFormat>();
+function numericFormat(timeZone: string | undefined): Intl.DateTimeFormat {
+  const key = timeZone ?? '';
+  let f = formats.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', {
+      year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', hourCycle: 'h23', timeZone,
+    });
+    formats.set(key, f);
+  }
+  return f;
+}
+
 export function formatDate(value: Date | number | string, o: DateParts): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   const p: Record<string, string> = {};
-  for (const x of new Intl.DateTimeFormat('en-US', {
-    year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', hourCycle: 'h23', timeZone: o.timeZone,
-  }).formatToParts(date)) p[x.type] = x.value;
+  for (const x of numericFormat(o.timeZone).formatToParts(date)) p[x.type] = x.value;
   const y = Number(p.year), m = Number(p.month), d = Number(p.day);
   const two = (v: number) => String(v).padStart(2, '0');
   const day = [

@@ -84,7 +84,7 @@ export async function commsFor(entityIds: string[], q?: Queryable): Promise<Map<
     };
     // The sender first: "who holds the thread" reads the first name on our own message.
     if (m.direction === 'ours') { const s = team.get(r.from_addr.toLowerCase()); if (s) m.team = [s, ...m.team.filter((x) => x !== s)]; }
-    out.set(r.for_entity, [...(out.get(r.for_entity) ?? []), m]);
+    { const l = out.get(r.for_entity); if (l) l.push(m); else out.set(r.for_entity, [m]); }
   }
   return out;
 }
