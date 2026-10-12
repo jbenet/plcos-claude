@@ -105,7 +105,7 @@ export const KEY_FORMAT = /^mg_[0-9A-Za-z]{12}_[0-9A-Za-z]{40}$/;
 /** Mailguard's address from config or the environment: an origin, https unless it is this machine. */
 export function parseBase(raw: string | null | undefined): URL | { why: string } {
   const s = (raw ?? '').trim();
-  if (!s) return { why: 'No mailguard address is set: npm run secret:store -- mailguard-url, or config.email.mailguard.url (docs/25 §12.5).' };
+  if (!s) return { why: 'No mailguard address is set: an Admin enters it in Settings → Connections → Mailguard address (on the Mac, npm run secret:store -- mailguard-url).' };
   let u: URL;
   try { u = new URL(s); } catch { return { why: 'The mailguard address is not a URL.' }; }
   if (u.username || u.password || u.search || u.hash || (u.pathname !== '/' && u.pathname !== '')) return { why: 'The mailguard address must be just its origin, like https://mail.example.com.' };

@@ -3,7 +3,8 @@ import { parseBase } from './allowlist';
 
 /**
  * Mailguard's address as a setting (docs/deploy/railway.md §3, docs/25 §12): entered in Settings →
- * Connections. MAILGUARD_URL in the environment still wins (the Mac's scripts/with-mailguard-token.sh), and
+ * Connections, never a Railway variable (Juan, 12 Oct 2026). MAILGUARD_URL in the environment still wins, for
+ * the Mac's scripts/with-mailguard-token.sh, and
  * config.email.mailguard.url is the fallback when neither is set. Declared here because only this folder
  * names the variable (npm run boundaries).
  *
