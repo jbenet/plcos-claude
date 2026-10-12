@@ -26,8 +26,16 @@ async function receipt<T>(work: () => Promise<T>): Promise<Receipt<T>> {
   }
 }
 
+/** The refusal while drafting is off in PLC OS (config.email.drafting, Juan, 12 Oct 2026). Null when it is on. */
+async function draftingOff(): Promise<Receipt<never> | null> {
+  const { DRAFTING_OFF, draftingOn } = await import('@/modules/email');
+  return draftingOn() ? null : { ok: false, error: DRAFTING_OFF };
+}
+
 export async function createDraftAction(formData: FormData): Promise<Receipt<{ draftId: string }>> {
   const user = await requireAction('app/email/actions.ts#createDraftAction', formData);
+  const off = await draftingOff();
+  if (off) return off;
   const { createDraft } = await import('@/modules/email');
   const purpose = String(formData.get('purpose'));
   if (!['first_message', 'intro_ask', 'follow_up'].includes(purpose)) return { ok: false, error: 'Unknown kind of email.' };
@@ -46,6 +54,8 @@ export async function saveDraftAction(input: {
   draftId: string; revision: number; to: string; cc: string; bcc: string; subject: string; mode: 'rich' | 'plain'; doc?: unknown; text?: string;
 }) {
   const user = await requireAction('app/email/actions.ts#saveDraftAction', input);
+  const off = await draftingOff();
+  if (off) return off;
   const { saveDraft, draftWithChecks } = await import('@/modules/email');
   return receipt(async () => {
     const saved = await saveDraft(user, input.draftId, {
@@ -59,12 +69,16 @@ export async function saveDraftAction(input: {
 
 export async function previewDraftAction(input: { draftId: string }) {
   const user = await requireAction('app/email/actions.ts#previewDraftAction', input);
+  const off = await draftingOff();
+  if (off) return off;
   const { previewDraft } = await import('@/modules/email');
   return receipt(() => previewDraft(user, input.draftId));
 }
 
 export async function moveDraftAction(input: { draftId: string }) {
   const user = await requireAction('app/email/actions.ts#moveDraftAction', input);
+  const off = await draftingOff();
+  if (off) return off;
   const { moveDraft } = await import('@/modules/email');
   return receipt(async () => {
     const moved = await moveDraft(user, input.draftId);
@@ -74,6 +88,8 @@ export async function moveDraftAction(input: { draftId: string }) {
 
 export async function discardDraftAction(input: { draftId: string; path?: string }) {
   const user = await requireAction('app/email/actions.ts#discardDraftAction', input);
+  const off = await draftingOff();
+  if (off) return off;
   const { discardDraft } = await import('@/modules/email');
   return receipt(async () => {
     await discardDraft(user, input.draftId);
@@ -84,6 +100,8 @@ export async function discardDraftAction(input: { draftId: string; path?: string
 
 export async function removeAttachmentAction(input: { draftId: string; attachmentId: string }) {
   const user = await requireAction('app/email/actions.ts#removeAttachmentAction', input);
+  const off = await draftingOff();
+  if (off) return off;
   const { removeAttachment, draftWithChecks, DraftRefused } = await import('@/modules/email');
   return receipt(async () => {
     const { draft } = await draftWithChecks(user, input.draftId);

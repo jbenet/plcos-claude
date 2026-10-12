@@ -10,6 +10,7 @@ import { CalendarFeeds } from '@/components/calendar/CalendarFeeds';
 import { McpTokens } from '@/components/mcp/McpTokens';
 import { VoiceCard } from '@/components/email/VoiceCard';
 import { SettingsLayout, settingsSection } from '@/components/settings/SettingsNav';
+import { config } from '@/config/deployment';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,8 +61,8 @@ async function Preferences({ searchParams }: { searchParams: Promise<{ section?:
       <div className="lbl">Preferences</div>
       <h1>Your settings</h1>
       <p className="sublede">
-        What you choose for yourself, kept in this browser — except your mailguard token, your voice
-        for drafts and your MCP tokens, which the server keeps for you alone. Nothing on this page changes what a number means, who can
+        What you choose for yourself, kept in this browser — except your mailguard token{config.email.drafting ? ', your voice for drafts' : ''}
+        and your MCP tokens, which the server keeps for you alone. Nothing on this page changes what a number means, who can
         approve anything, or what anyone else sees.
       </p>
 
@@ -116,8 +117,9 @@ async function Preferences({ searchParams }: { searchParams: Promise<{ section?:
           {/* Your calendars' private addresses, for the Calendar page's Travel and Events lanes (issue 0021). Read only. */}
           <CalendarFeeds />
 
-          {/* How you write, for drafts written for you (docs/email-guidelines.md §Voice). Server-side: drafters read it. */}
-          <VoiceCard />
+          {/* How you write, for drafts written for you (docs/email-guidelines.md §Voice). Server-side: drafters read it.
+              Hidden while drafting is off in PLC OS (config.email.drafting, Juan, 12 Oct 2026); what is saved stays. */}
+          {config.email.drafting && <VoiceCard />}
         </>}
         {section === 'agents' && <>
           {/* Tokens for agents over MCP (docs/26). Server-side and audited, like the mailguard token. */}

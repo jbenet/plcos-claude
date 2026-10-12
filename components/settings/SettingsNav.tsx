@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import Link from '@/components/ui/AppLink';
+import { config } from '@/config/deployment';
 import s from './settings.module.css';
 
 /**
@@ -37,7 +38,8 @@ export function SettingsLayout({ current, admin, children }: {
     <div className={s.layout}>
       <nav className={s.nav} aria-label="Settings sections">
         <div className={s.group}>Yours</div>
-        {SETTINGS_SECTIONS.map((x) => item(x.id, x.label, x.id === 'appearance' ? '/settings' : `/settings?section=${x.id}`))}
+        {/* Just "Email" while drafting is off in PLC OS (config.email.drafting, Juan, 12 Oct 2026). */}
+        {SETTINGS_SECTIONS.map((x) => item(x.id, x.id === 'email' && !config.email.drafting ? 'Email' : x.label, x.id === 'appearance' ? '/settings' : `/settings?section=${x.id}`))}
         {admin && <>
           <div className={s.group}>The server · Admins</div>
           {SERVER.map((x) => item(x.id, x.label, x.href))}

@@ -31,8 +31,10 @@ const LOG = 'data/demo/e2e-server.log';
 const TSX = join(ROOT, 'node_modules/.bin/tsx');
 const VIEWER = 'e2e-viewer';
 const MARK = `e2e ${Date.now().toString(36)}`;
-// The launcher runs `next` by name, as npm run would find it.
-const env: NodeJS.ProcessEnv = { ...process.env, DATA_PROFILE: 'demo', PGLITE_DIR: `./${DIR}`, PATH: `${join(ROOT, 'node_modules/.bin')}:${process.env.PATH ?? ''}` };
+// The launcher runs `next` by name, as npm run would find it. Drafting in PLC OS is off since 12 Oct 2026
+// (config.email.drafting); EMAIL_DRAFTING=1 turns it back on for this demo server, so the email check still
+// drives the draft box end to end.
+const env: NodeJS.ProcessEnv = { ...process.env, DATA_PROFILE: 'demo', PGLITE_DIR: `./${DIR}`, EMAIL_DRAFTING: '1', PATH: `${join(ROOT, 'node_modules/.bin')}:${process.env.PATH ?? ''}` };
 delete env.DATABASE_URL;
 Object.assign(process.env, { DATA_PROFILE: 'demo', PGLITE_DIR: `./${DIR}` });
 delete process.env.DATABASE_URL;

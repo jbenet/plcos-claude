@@ -169,6 +169,14 @@ export const config = {
    * lib/connectors/mailguard/fake.ts.
    */
   email: {
+    /**
+     * Writing drafts in PLC OS. Off by Juan's decision of 12 Oct 2026 ("Maybe remove or disable all those
+     * features for now. May bring back later."): JuanMail writes the drafts now. Set this to true to bring drafting back.
+     * Off hides the draft boxes and refuses the draft actions and the attachment route; the mailguard key,
+     * the calendar read and every MCP tool, draft tools included, stay as they are. The e2e check turns it
+     * on for its own demo server only (EMAIL_DRAFTING=1, scripts/e2e.ts), so the drafting code stays tested.
+     */
+    drafting: PROFILE === 'demo' && process.env.EMAIL_DRAFTING === '1',
     provider: 'mailguard' as 'mailguard' | 'off',
     mailguard: {
       /** Mailguard's origin, e.g. https://mail.example.com. An address in the live server’s environment wins (scripts/with-mailguard-token.sh). */

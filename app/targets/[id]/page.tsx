@@ -13,7 +13,7 @@ import { shortDate } from '@/lib/time';
 import {
   IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, spvMarks, statusNeedsEvidence, strategyPursuitsFor, suggestionsFor, updatesFor,
 } from '@/lib/authz/read/strategy';
-import { chooseFirstEmail, KIND_LABEL } from '@/modules/email';
+import { chooseFirstEmail, draftingOn, KIND_LABEL } from '@/modules/email';
 import { routeReading } from '@/components/routes/route-display';
 import { getDb } from '@/lib/db';
 import { auditFor } from '@/modules/platform';
@@ -303,7 +303,7 @@ async function TargetWorkspace({ params, searchParams }: {
             ))}
 
             <div className={hd.acts}>
-              <Link className="btn p" href={`${base}?tab=email`}>Draft an email</Link>
+              {draftingOn() && <Link className="btn p" href={`${base}?tab=email`}>Draft an email</Link>}
               <details className={hd.more}>
                 <summary className="btn">Change the status</summary>
                 <div className={hd.panel}>

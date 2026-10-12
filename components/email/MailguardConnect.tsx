@@ -2,7 +2,7 @@ import { demoMailguardAction, forgetMailguardAction, readCalendarsAction } from 
 import { getDb } from '@/lib/db';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
-import { mailStatus } from '@/modules/email';
+import { draftingOn, mailStatus } from '@/modules/email';
 import { CALENDAR_NOT_READ, keyFor, mailguardRuntime } from '@/lib/connectors/mailguard';
 import { maskSecret } from '@/lib/settings/store';
 import { PasteToken, TestConnection } from './MailguardForms';
@@ -34,12 +34,15 @@ const CALENDAR: Record<string, string> = CALENDAR_NOT_READ;
 /**
  * Preferences → Email (docs/25 §12): the person's mailguard token, which puts drafts written here into
  * their own Gmail Drafts. Only a token that mailguard says cannot send is accepted; it is checked when
- * pasted, at server start, before every move and daily, and drafting stops if it fails.
+ * pasted, at server start, before every move and daily, and drafting stops if it fails. While drafting is
+ * off in PLC OS (config.email.drafting, Juan, 12 Oct 2026) the card keeps the key and the calendar read and
+ * drops the lines that are only about drafting.
  */
 export async function MailguardConnect() {
   const user = await (await auth()).currentUser();
   if (user.access === 'viewer') return null;
   const g = await mailStatus(user);
+  const drafting = draftingOn();
   // Your own key, never anyone else's, and never in full: •••• and the last four of a long one.
   const rt = mailguardRuntime();
   const mine = rt.mode === 'off' ? null : await keyFor(rt, user.handle).catch(() => null);
@@ -68,8 +71,8 @@ export async function MailguardConnect() {
             {g.calendar?.state === 'ok' && (
               <form action={readCalendarsAction} style={{ marginTop: 4 }}><button className="btn" type="submit">Read calendars now</button></form>
             )}
-            {!g.canThread && <div className="fact"><span>Follow-ups</span><span style={{ color: 'var(--amber)' }}>start new threads: give the tool read.metadata in mailguard to reply in the thread.</span></div>}
-            {g.extras.length > 0 && <div className="fact"><span>More than needed</span><span style={{ color: 'var(--amber)' }}>{g.extras.join(', ')} — drafting needs only draft and read.metadata. Narrow the tool in mailguard.</span></div>}
+            {drafting && !g.canThread && <div className="fact"><span>Follow-ups</span><span style={{ color: 'var(--amber)' }}>start new threads: give the tool read.metadata in mailguard to reply in the thread.</span></div>}
+            {drafting && g.extras.length > 0 && <div className="fact"><span>More than needed</span><span style={{ color: 'var(--amber)' }}>{g.extras.join(', ')} — drafting needs only draft and read.metadata. Narrow the tool in mailguard.</span></div>}
             <div className="fact"><span>Checked</span><span>{g.checkedAt ? shortDate(new Date(g.checkedAt)) : '—'} · again before every move, and daily</span></div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start', marginTop: 10 }}>
               <TestConnection />
@@ -91,7 +94,7 @@ export async function MailguardConnect() {
             <p role="alert" style={{ marginTop: 0, color: g.transient ? 'var(--amber)' : 'var(--clay)' }}><b>{g.transient ? 'Could not check the token.' : 'Refused.'}</b> {g.reason}</p>
             <p>{g.transient
               ? 'Drafts wait until mailguard answers and says the token is drafts-only. Test the connection to ask again.'
-              : `Email drafting is off for you until a drafts-only token is connected. Nothing was moved with this one.${g.mailbox ? ` (It is for ${g.mailbox}.)` : ''}`}</p>
+              : `${drafting ? 'Email drafting' : 'Reading your calendar'} is off for you until a drafts-only token is connected.${drafting ? ' Nothing was moved with this one.' : ''}${g.mailbox ? ` (It is for ${g.mailbox}.)` : ''}`}</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
               <TestConnection />
               {g.source === 'pasted' && (
@@ -103,12 +106,20 @@ export async function MailguardConnect() {
           </>
         ) : (
           <>
-            <p style={{ marginTop: 0 }}>
-              Drafts written here go into your own Gmail Drafts through mailguard, where you review and send them yourself.
-              In mailguard, create a tool whose policy grants <b>draft</b> and <b>read.metadata</b> (for follow-ups in their
-              thread), and <b>calendar.read</b> if your meetings should appear next to LPs, and paste its token here. A token
-              that can send, invite people or answer invitations is refused and not kept.
-            </p>
+            {drafting ? (
+              <p style={{ marginTop: 0 }}>
+                Drafts written here go into your own Gmail Drafts through mailguard, where you review and send them yourself.
+                In mailguard, create a tool whose policy grants <b>draft</b> and <b>read.metadata</b> (for follow-ups in their
+                thread), and <b>calendar.read</b> if your meetings should appear next to LPs, and paste its token here. A token
+                that can send, invite people or answer invitations is refused and not kept.
+              </p>
+            ) : (
+              <p style={{ marginTop: 0 }}>
+                Your meetings appear next to the LPs they were with, read through mailguard. In mailguard, create a tool whose
+                policy grants <b>draft</b> and <b>calendar.read</b>, and paste its token here. A token that can send, invite
+                people or answer invitations is refused and not kept.
+              </p>
+            )}
             <PasteToken />
             {g.mode === 'fake' && (
               <form action={demoMailguardAction} style={{ marginTop: 10 }}>

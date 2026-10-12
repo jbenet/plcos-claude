@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
-import { draftsOn, mailStatus, moveBlocks, PURPOSE_LABEL, voiceOf, warningsFor, type Draft, type Voice } from '@/modules/email';
+import { DRAFTING_OFF, draftingOn, draftsOn, mailStatus, moveBlocks, PURPOSE_LABEL, voiceOf, warningsFor, type Draft, type Voice } from '@/modules/email';
 import { EmailDraftBox, type DraftView, type GmailView } from './EmailDraftBox';
 import { NewDraftButton } from './NewDraftButton';
 import s from './email.module.css';
@@ -11,6 +11,8 @@ import { Info } from '@/components/ui/Info';
  * message and follow-ups, and a route's intro ask. Shows the signed-in person's own drafts here —
  * nobody else's — with the newest open, and a button to start one. On the LP page the button is the
  * email the route calls for (docs/email-guidelines.md §Kinds), with the other kind beside it.
+ * While drafting is off in PLC OS (config.email.drafting, Juan, 12 Oct 2026) it is one line saying so:
+ * no editor, files, drafts list or draft buttons. Drafts already written stay in the database.
  */
 
 export interface DraftsWhere { pursuitId?: string; entityId?: string; connectorId?: string; vehicleId?: string }
@@ -42,6 +44,7 @@ export async function EmailDrafts({ title, lede, where, create, path, startLabel
 }) {
   const user = await (await auth()).currentUser();
   if (user.access === 'viewer') return null;
+  if (!draftingOn()) return <p className="muted" id="email" style={{ fontSize: 12 }}>{DRAFTING_OFF}</p>;
   const [drafts, g, voice] = await Promise.all([draftsOn(user, where), mailStatus(user), voiceOf(user)]);
   const gmail: GmailView = { mode: g.mode, email: g.ok ? g.mailbox : null, why: g.mode === 'off' ? g.why : g.connected && !g.ok ? g.reason : null };
   const [open, ...rest] = drafts;
