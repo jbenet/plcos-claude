@@ -74,4 +74,27 @@ export async function enrichBatchProperties(check: Check) {
       JSON.stringify(order) === JSON.stringify(['committed', 'spvOnly', 'selected']),
       `Invented fixture ordered ${JSON.stringify(order)}; 1.13 files, Sourcing and an LP held by another Astra batch stay out.`);
   } finally { await rm(tight, { recursive: true, force: true }); }
+
+  // A strategy under an identity alias, or only in a vehicle folder, is the LP's: not handed out as a new one (12 Oct 2026).
+  const al = await mkdtemp(join(tmpdir(), 'batch-alias-'));
+  const adir = join(al, 'data/demo/enrich');
+  try {
+    for (const folder of ['raw', 'strategy/spv-invented', 'batches']) await mkdir(join(adir, folder), { recursive: true });
+    const cands = ['fresh', 'aliased', 'foldered'].map(key => ({ key, name: `Invented ${key}`, domains: [], org: null,
+      pursuits: [{ vehicle: 'Invented Fund', status: 'discussing' }], contact: { meetings: 0, groupMeetings: 0, lastFromThem: null, lastTouch: null } }));
+    const jsonl = (xs: unknown[]) => xs.map(x => JSON.stringify(x)).join('\n');
+    await writeFile(join(adir, 'candidates.jsonl'), jsonl(cands));
+    await writeFile(join(adir, 'research-set.jsonl'), jsonl(cands));
+    await writeFile(join(adir, 'entity-keys.json'), JSON.stringify({ 'old-aliased': 'aliased' }));
+    const strategy = (key: string, vehicle: string) => JSON.stringify({ key, made: { at: new Date().toISOString(), version: '1.13' }, ask: { vehicle } });
+    await writeFile(join(adir, 'strategy', 'old-aliased.json'), strategy('old-aliased', 'Invented Fund'));
+    await writeFile(join(adir, 'strategy/spv-invented/foldered.json'), strategy('foldered', 'spv-invented'));
+    await promisify(execFile)(process.execPath,
+      ['--import', import.meta.resolve('tsx'), resolve('scripts/enrich-batch.ts'), 'w5', 'aa', '5'],
+      { cwd: al, env: { ...process.env, DATA_PROFILE: 'demo', DATABASE_URL: '', TSX_TSCONFIG_PATH: resolve('tsconfig.json') } });
+    const files = (await readdir(join(adir, 'batches'))).filter(f => f.startsWith('aa'));
+    const picked = (await Promise.all(files.map(f => readFile(join(adir, 'batches', f), 'utf8')))).join('').trim().split('\n').filter(Boolean).sort();
+    check('W5 hands out no LP whose strategy sits under an alias or only in a vehicle folder',
+      JSON.stringify(picked) === JSON.stringify(['fresh']), `Invented fixture picked ${JSON.stringify(picked)}.`);
+  } finally { await rm(al, { recursive: true, force: true }); }
 }

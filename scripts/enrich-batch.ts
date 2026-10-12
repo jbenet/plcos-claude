@@ -107,7 +107,16 @@ async function main() {
     if (!previous || f.researched.at > previous.researched.at) findings.set(key, { ...f, key });
   }
   if (unmapped) console.log(`${unmapped} findings not mapped to candidates; refresh Export the research set to update aliases.`);
-  const strategies = await jsonDir<Strategy>(join(dir, 'strategy'));
+  // Strategies by the LP they resolve to, as findings are: one filed under an identity alias is that LP's (12 Oct 2026:
+  // Astra W5 runs were handed LPs whose strategy sat under another key, revised the alias file, and pushed nothing).
+  const strategies = new Map<string, Strategy>();
+  for (const s of (await jsonDir<Strategy>(join(dir, 'strategy'))).values()) {
+    const key = candidateKey(s, cands, aliases, rawFindings.get(s.key)) ?? s.key;
+    const previous = strategies.get(key);
+    if (!previous || s.made.at > previous.made.at) strategies.set(key, s);
+  }
+  /** LPs with a strategy in either layout, under any of their keys: never handed out for a new one. */
+  const hasStrategy = new Set((await strategyFiles(join(dir, 'strategy'))).map((f) => candidateKey(f, cands, aliases, rawFindings.get(f.key)) ?? f.key));
   // A top-level strategy names its vehicle by name or slug; team context is matched by slug.
   const vehicles: Array<{ slug: string; name: string; kind?: string }> = JSON.parse(await readFile(join(dir, 'vehicles.json'), 'utf8').catch(() => '[]'));
   const vehicleOf = (named: string | undefined) => {
@@ -206,8 +215,8 @@ async function main() {
     if (only) return only.has(c.key) && Boolean(s || eligible);
     if (s) return isStale(s, f, c.money, pinTiers(c.key), contextAtFor(c.context, vehicleOf(s.ask?.vehicle)?.slug), vehicleOf(s.ask?.vehicle)?.kind ?? null) || (revise && flagged(c));
     // Discussing or committed: a strategy from our records even without a resolved finding — a
-    // firm's lead can be one of them (v03's learning).
-    return !revise && eligible;
+    // firm's lead can be one of them (v03's learning). Not when one already exists in a vehicle folder or under an alias.
+    return !revise && eligible && !hasStrategy.has(c.key);
   });
   if (revise) {
     // The whole firm comes along: its colleagues' strategies are rewritten with the lead's.
