@@ -9,7 +9,7 @@ import s from './settings.module.css';
  */
 export const SETTINGS_SECTIONS = [
   { id: 'appearance', label: 'Appearance' },
-  { id: 'email', label: 'Email and drafts' },
+  { id: 'email', label: 'Email and calendar' },
   { id: 'agents', label: 'Agent access' },
   { id: 'account', label: 'Account' },
 ] as const;

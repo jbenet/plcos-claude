@@ -77,7 +77,7 @@ export async function inspect(rt: MailguardRuntime, key: string, source: KeySour
   if (!KEY_FORMAT.test(key)) return { ok: false, code: 'format', reason: 'That is not a mailguard token: it looks like mg_, twelve letters or digits, _, and forty more. Nothing was sent.', mailbox: null, tool: null, capabilities: [], source, at };
   try {
     const answer = await mailguardClient({ transport: rt.transport, base: rt.base, key, log }).whoami();
-    const v = draftOnlyVerdict(answer, at);
+    const v = draftOnlyVerdict(answer, at, config.email.drafting);
     return v.ok ? { ...v, source, at } : { ok: false, code: v.code, reason: v.reason, mailbox: v.mailbox, tool: v.tool, capabilities: v.capabilities, source, at };
   } catch (e) {
     if (e instanceof MailguardError) return { ok: false, code: e.kind, reason: e.message, mailbox: null, tool: null, capabilities: [], source, at };
