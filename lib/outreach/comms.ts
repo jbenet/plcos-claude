@@ -74,12 +74,12 @@ async function entitiesOf(addresses: string[], q: Queryable): Promise<string[]> 
   return [...new Set([...people, ...firms])].sort();
 }
 
-/** Reconcile the LPs a batch of new received messages is about: their active pursuits, each once. */
+/** Reconcile the LPs a batch of new messages is about, ours and theirs: their active pursuits, each once (our email moves to Connecting, docs/29 §4a). */
 async function reconcileAfterMail(messageIds: string[], q: Queryable): Promise<number> {
   const pursuits = (await q.query<{ id: string }>(`select distinct p.pursuit_id::text id
       from email.comms_message m cross join lateral unnest(m.entity_ids) x(id)
       join strategy.active_pursuit p on p.entity_id = any(identity.alias_ids(array[identity.canonical_entity_id(x.id)]))
-     where m.message_id = any($1::text[]) and m.direction = 'theirs'`, [messageIds])).map((r) => r.id);
+     where m.message_id = any($1::text[])`, [messageIds])).map((r) => r.id);
   const { reconcilePursuit } = await import('@/lib/reconcile');
   for (const id of pursuits) await reconcilePursuit(id);
   return pursuits.length;
@@ -144,7 +144,7 @@ export async function ingest(ctx: Ctx, raw: Record<string, unknown>) {
     detail: { messages: a.messages.length, new: n('new'), already: n('already'), unmatched: n('unmatched'), reconciled } }, db);
   return { data: {
     new: n('new'), already: n('already'), unmatched: n('unmatched'), messages: out, reconciled,
-    note: 'Metadata only: no touchpoint, status or ticket is written. A new reply from an LP is a reply on file, so Reconciliation records the conversation rungs it supports (LP opted in), undoable on the LP\'s timeline; reconciled counts the LPs it looked at. The LP page and the queue read these with Affinity\'s records, one row per message. A message with nobody on record is not kept.',
+    note: 'Metadata only: no touchpoint, status or ticket is written. Reconciliation runs inside this call for the LPs its new messages are about: a reply from an LP records the conversation rungs it supports (LP opted in), and moves the status forward as docs/29 §4a says (our email to Connecting, their reply to Discussing), all undoable; reconciled counts the LPs it looked at. The LP page and the queue read these with Affinity\'s records, one row per message. A message with nobody on record is not kept.',
   } };
 }
 

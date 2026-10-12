@@ -20,7 +20,7 @@ Thu 15 Oct 2026; an API key bills separately, but keep it small).
    from the LP, PLC OS records the conversation rungs it supports (LP opted in) on its own: Reconciliation, as for
    Affinity's replies, undoable on the LP's timeline. It also moves the status forward on its own (Juan, 9 Oct 2026):
    our email to Connecting, their reply or a meeting to Discussing, never to Committed or Passed (docs/29 §4a). So
-   read the pursuit's status again after `comms_ingest` before showing it. Nothing else for the desk to do.
+   read the pursuit's status again after `comms_ingest` returns (it has run by then) before showing it. Nothing else for the desk to do.
 
 2. **Read the contact details — rules first, no model.** From the sender's signature block (the lines after the
    sign-off, or after `--`): phone, title, firm, postal address, LinkedIn URL. Only from a message the person sent,

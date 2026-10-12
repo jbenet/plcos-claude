@@ -190,6 +190,13 @@ export async function mailActionProperties(check: Check, db: Db) {
   const statusOf = async (id: string) => (await db.one<{ status: string }>(`select status::text status from strategy.pursuit where pursuit_id = $1`, [id]))?.status;
   const movedBy = await db.one<{ handle: string; reason: string | null }>(`select u.handle, p.status_reason reason from strategy.pursuit p join platform.app_user u on u.id = p.status_set_by where p.pursuit_id = $1`, [p2]);
   const [s2, s3] = [await statusOf(p2), await statusOf(p3)];
+  // Our own email, ingested, moves a Selected LP to Connecting inside the same call.
+  const lp4 = await entity('Invented Mail LP Four', 'person');
+  const p4 = await pursuit(lp4, fund.id, 'selected');
+  await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'yara@invented-mail.example', 'props:mail', current_date, 'medium')`, [lp4]);
+  const sent = await call(writer, 'comms_ingest', { messages: [{ messageId: '<mail-4@invented-mail.example>', gmailMessageId: 'g-mail-4',
+    date: new Date(Date.now() - 1_800_000).toISOString(), direction: 'sent', from: juanEmail, to: ['yara@invented-mail.example'], subject: 'The fund', pursuitId: p4 }] });
+  const s4 = await statusOf(p4);
   const { setStatus } = await import('../../modules/strategy');
   await setStatus(juan.id, p2, { status: 'connecting' });
   await reconcilePursuit(p2);
@@ -197,8 +204,8 @@ export async function mailActionProperties(check: Check, db: Db) {
   check('Status on the records (Juan, 9 Oct 2026, "Auto, with undo"): our email moves to Connecting, their reply or a meeting with them to Discussing; never backward, never from or to Committed or Passed, not on an event, a firm\'s record, history before the start date, the future, or a record older than a person\'s own setting; off when unset. The LP\'s Gmail reply moved them, by Reconciliation, saying why; setting it back holds',
     pure.oursFromSelected === 'connecting' && pure.oursFromConnecting === null && pure.replyFromNew === 'discussing' && pure.meeting === 'discussing'
     && [pure.event, pure.fromDiscussing, pure.fromCommitted, pure.fromPassed, pure.history, pure.future, pure.afterPerson, pure.viaFirm, pure.off].every((x) => x === null)
-    && s2 === 'discussing' && s3 === 'connecting' && movedBy?.handle === 'reconciliation' && /^Reconciliation: a reply from them/.test(movedBy.reason ?? '') && held === 'connecting',
-    `pure ${JSON.stringify(pure)}; after ingest p2 ${s2} (${JSON.stringify(movedBy)}), p3 ${s3}; after a person set it back and reconcile: ${held}`);
+    && s2 === 'discussing' && s3 === 'connecting' && !sent.error && s4 === 'connecting' && movedBy?.handle === 'reconciliation' && /^Reconciliation: a reply from them/.test(movedBy.reason ?? '') && held === 'connecting',
+    `pure ${JSON.stringify(pure)}; after ingest p2 ${s2} (${JSON.stringify(movedBy)}), p3 ${s3}; our email to a Selected LP: ${s4} ${sent.error ?? ''}; after a person set it back and reconcile: ${held}`);
 
   for (const c of [writer, reader, spvReader]) await c.close();
 }
