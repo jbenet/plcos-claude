@@ -6,8 +6,14 @@ import { inWindow } from './jobs';
 
 export const CODEX = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex';
 export const MODELS = ['gpt-6-astra', 'gpt-6-sol'] as const;
-/** A worker that runs longer than this is stopped and its run failed (a W1+W5 batch of 5 took 40–90 min in Oct). */
-export const RUN_LIMIT_MS = 3 * 3600_000;
+/**
+ * A worker that runs longer than this is stopped and its run failed, so a stuck run can't burn tokens for hours.
+ * Guessed from Oct runs: a W1+W5 batch of 5 took 40–90 min, a w5t batch of 8 took 6–9 min (Juan, 12 Oct: "make sure
+ * astra doesnt do silly things and run up the token bill").
+ */
+export const RUN_LIMIT_MS: Record<string, number> = { w1w5: 2 * 3600_000, w1: 90 * 60_000, w5: 45 * 60_000, w5t: 25 * 60_000 };
+/** Workflows that research the public web; the others work from local files only and get no web search. */
+export const WEB_WORKFLOWS: readonly string[] = ['w1w5', 'w1'];
 /** After both models report "at capacity", the runner claims nothing for this long. */
 export const CAPACITY_WAIT_MS = 30 * 60_000;
 
@@ -34,10 +40,10 @@ export function fill(template: string, values: Record<string, string>): string {
 }
 
 /** codex exec's arguments: a research worker with web search, writing only inside the worker folder and enrich/. */
-export function codexArgs(o: { model: string; worker: string; enrich: string; last: string; git?: string[] }): string[] {
+export function codexArgs(o: { model: string; worker: string; enrich: string; last: string; git?: string[]; web?: boolean }): string[] {
   return ['exec', '-m', o.model, '-C', o.worker, '-s', 'workspace-write', '--skip-git-repo-check',
     '--add-dir', o.enrich, ...(o.git ?? []).flatMap((d) => ['--add-dir', d]),
-    '-c', 'sandbox_workspace_write.network_access=true', '-c', 'tools.web_search=true', '-o', o.last, '-'];
+    '-c', 'sandbox_workspace_write.network_access=true', '-c', `tools.web_search=${o.web ?? true}`, '-o', o.last, '-'];
 }
 
 /** Whether a finished attempt should fall back to the next model: only when it wrote no final message and said "at capacity". */

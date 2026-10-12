@@ -32,11 +32,14 @@ permission check refused. The runner takes Claude out of the launch path entirel
    vehicle's pursuit is Committed, then Discussing, Connecting and Selected, in either layout (Juan: "start further
    down the pipeline and work way back to selected ones. (Don't need to go beyond that for now)").
 2. Fill the fixed brief from `scripts/astra/templates/` (W1, W5, W1+W5 or the shortening pass), with three recent
-   findings and two recent strategies as example paths.
+   findings and two recent strategies as example paths (the shortening pass names its exact read set instead and
+   gets no examples).
 3. Begin a ledger run (`source: chatgpt`, agent `astra-runner`).
-4. Run `codex exec` in a free slot (6 by default, `ASTRA_SLOTS` 1–6; Juan, 12 Oct 2026: "run many more astra runs in parallel"; the `plcos-codex-bN` worktrees beside the live checkout when present, else plain
-   folders), sandboxed to write only in its folder and `enrich/`, with web search. `gpt-6-astra` first; `gpt-6-sol`
-   only when the first says "at capacity" and wrote no final message. Stopped after 3 hours.
+4. Run `codex exec` in a free slot (8 by default, `ASTRA_SLOTS` up to 12; the `plcos-codex-bN` worktrees beside the
+   live checkout when present, else plain folders), sandboxed to write only in its folder and `enrich/`. Only W1 and
+   W1+W5 get web search; W5 and the shortening pass work from local files. `gpt-6-astra` first; `gpt-6-sol` only when
+   the first says "at capacity" and wrote no final message. Stopped at its workflow's limit (`RUN_LIMIT_MS`: W1+W5
+   2 h, W1 90 min, W5 45 min, shortening 25 min).
 5. Push each finding and strategy the run wrote (strategies in vehicle folders too) with `cloud-push.sh` (the importer's checks run first; the server
    queues the import). Finish the ledger run with usage estimated from codex's own session logs. Report counts.
 
