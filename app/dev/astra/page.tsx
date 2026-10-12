@@ -6,6 +6,7 @@ import { getDb } from '@/lib/db';
 import { COMMAND_LABEL, planText, readRunner, recentCommands, recentJobs, runnerUp, WORKFLOW_LABEL, type AstraCommand, type AstraJob, type AstraRunner } from '@/lib/astra/jobs';
 import { cancelAstraAction } from './actions';
 import { AutoForm, CommandButtons, PauseButton, PlanForm, QueueForm } from './AstraForms';
+import { AstraCharts } from './AstraCharts';
 import s from './astra.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -78,6 +79,8 @@ async function AstraPage() {
       <div className="lbl">Developer</div>
       <h1>Astra</h1>
       <p className="sublede">Queue research and strategy runs for Astra, the ChatGPT workers on the Mac, and watch them. Nothing here goes through Claude.</p>
+
+      <AstraCharts jobs={jobs} now={Date.now()} />
 
       <div className="card">
         <div className="chead">
@@ -162,35 +165,38 @@ async function AstraPage() {
           <div className="cbody"><div className="empty">No runs yet. Queue some above, or turn on Every night.</div></div>
         ) : (
           <div className={s.scroll}>
-            <table className={`list ${s.table}`}>
+            <table className={`list ${s.table} ${s.rows}`}>
               <thead>
-                <tr><th>Run</th><th>Status</th><th className={s.num}>LPs</th><th className={s.num}>Valid</th><th className={s.num}>Pushed</th><th>Where</th><th /></tr>
+                <tr><th>Run</th><th>Status</th><th>Time</th><th className={s.num}>LPs</th><th className={s.num}>Valid</th><th className={s.num}>Pushed</th><th>Where</th><th /></tr>
               </thead>
               <tbody>
-                {jobs.map((j) => (
-                  <tr key={j.id}>
-                    <td>
-                      {WORKFLOW_LABEL[j.workflow]}
-                      <span className={s.sub}>{j.source === 'plan' ? `Plan step ${(j.step ?? 0) + 1}, ${j.night}${j.focus.length ? ` · ${j.focus.join(', ')}` : ''}` : j.source === 'auto' ? `Every night, ${j.night}` : j.runNow ? 'Now' : 'Tonight'} · queued {ago(new Date(j.createdAt))}</span>
-                    </td>
-                    <td>
-                      <span className={`flag ${FLAG[j.status]}`}>{STATUS[j.status]}</span>
-                      <span className={s.sub}>{waiting(j, runner) ?? elapsed(j)}{j.message ? ` · ${j.message}` : ''}</span>
-                    </td>
-                    <td className={s.num}>{j.counts.selected ?? j.size}</td>
-                    <td className={s.num}>{j.counts.valid ?? '—'}</td>
-                    <td className={s.num}>{j.counts.pushed ?? '—'}</td>
-                    <td><span className={s.key}>{[j.batch, j.slot, j.model].filter(Boolean).join(' · ')}</span></td>
-                    <td>
-                      {(j.status === 'queued' || j.status === 'claimed' || j.status === 'running') && (
-                        <form action={cancelAstraAction} className={s.inline}>
-                          <input type="hidden" name="id" value={j.id} />
-                          <button className={s.link}>{j.status === 'queued' ? 'Cancel' : 'Stop'}</button>
-                        </form>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {jobs.map((j) => {
+                  const origin = `${j.source === 'plan' ? `Plan step ${(j.step ?? 0) + 1}, ${j.night}${j.focus.length ? ` · ${j.focus.join(', ')}` : ''}` : j.source === 'auto' ? `Every night, ${j.night}` : j.runNow ? 'Now' : 'Tonight'} · queued ${ago(new Date(j.createdAt))}`;
+                  const note = [waiting(j, runner), j.message].filter(Boolean).join(' · ');
+                  const where = [j.batch, j.slot, j.model].filter(Boolean).join(' · ');
+                  return (
+                    <tr key={j.id}>
+                      <td title={origin}>{WORKFLOW_LABEL[j.workflow]}</td>
+                      <td>
+                        <span className={`flag ${FLAG[j.status]}`}>{STATUS[j.status]}</span>
+                        {note && <span className={`${s.cut} ${s.cutNote}`} title={note}>{note}</span>}
+                      </td>
+                      <td className={s.num} title={origin}>{elapsed(j) || '—'}</td>
+                      <td className={s.num}>{j.counts.selected ?? j.size}</td>
+                      <td className={s.num}>{j.counts.valid ?? '—'}</td>
+                      <td className={s.num}>{j.counts.pushed ?? '—'}</td>
+                      <td><span className={`${s.key} ${s.cut}`} title={where}>{where}</span></td>
+                      <td>
+                        {(j.status === 'queued' || j.status === 'claimed' || j.status === 'running') && (
+                          <form action={cancelAstraAction} className={s.inline}>
+                            <input type="hidden" name="id" value={j.id} />
+                            <button className={s.link}>{j.status === 'queued' ? 'Cancel' : 'Stop'}</button>
+                          </form>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
