@@ -29,6 +29,7 @@ cd desktop/astra && npm install && npm run install-app
 
 This builds `Astra.app` and copies it to `~/Applications`. Then tick **Open at Login** in its menu. The app is
 ad-hoc signed: on first launch, right-click it in `~/Applications` and choose Open. `npm run icon` regenerates the
-icons from `icon-source.png`; `src-tauri/tray.png` is the menu-bar icon.
+icons from `icon-source.png`; `src-tauri/tray.png` is the menu-bar icon. The app lives in the menu bar and shows in
+the Dock and Cmd-Tab only while one of its windows is open.
 
 If Google sign-in refuses to run inside the app's window, use **Open in Browser**; the runner works either way.

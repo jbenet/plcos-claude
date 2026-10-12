@@ -96,7 +96,16 @@ fn status_text(r: &Shared) -> String {
     if r.alive() { "Runner: running".into() } else if r.wanted { "Runner: restarting…".into() } else { "Runner: stopped".into() }
 }
 
+/// The app lives in the menu bar, but shows in the Dock and Cmd-Tab while one of its windows is open.
+fn in_dock(app: &AppHandle, on: bool) {
+    #[cfg(target_os = "macos")]
+    let _ = app.set_activation_policy(if on { tauri::ActivationPolicy::Regular } else { tauri::ActivationPolicy::Accessory });
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, on);
+}
+
 fn show_window(app: &AppHandle) {
+    in_dock(app, true);
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show(); let _ = w.set_focus(); return;
     }
@@ -106,6 +115,7 @@ fn show_window(app: &AppHandle) {
 }
 
 fn show_feedback(app: &AppHandle) {
+    in_dock(app, true);
     if let Some(w) = app.get_webview_window("feedback") {
         let _ = w.show(); let _ = w.set_focus(); return;
     }
@@ -297,7 +307,12 @@ fn main() {
         })
         .on_window_event(|w, e| {
             // Closing the window hides it; the app keeps running in the menu bar.
-            if let WindowEvent::CloseRequested { api, .. } = e { api.prevent_close(); let _ = w.hide(); }
+            if let WindowEvent::CloseRequested { api, .. } = e {
+                api.prevent_close(); let _ = w.hide();
+                let app = w.app_handle();
+                let open = app.webview_windows().values().any(|o| o.label() != w.label() && o.is_visible().unwrap_or(false));
+                if !open { in_dock(app, false); }
+            }
         })
         .build(tauri::generate_context!())
         .expect("error building Astra")
