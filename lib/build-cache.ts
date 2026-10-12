@@ -25,10 +25,14 @@ export async function touchRevisions(db: Db): Promise<{ revision: string; foregr
     foreground::text || ':' || current_date::text as foreground from network.read_revision where singleton`);
   return row!;
 }
-/** Moves only when a route computation writes network.route_cache (network 021). */
+/**
+ * Moves only when a route computation writes network.route_cache (network 021). Its writes are never
+ * a person's (no read trigger watches that table), so they move this foreground too: a stored search
+ * is read fresh the moment it is written, as it was before this cache.
+ */
 export async function routesRevisions(db: Db): Promise<{ revision: string; foreground: string }> {
   const row = await db.one<{ revision: string; foreground: string }>(`select 'r' || routes::text as revision,
-    foreground::text || ':' || current_date::text as foreground from network.read_revision where singleton`);
+    foreground::text || ':' || routes::text || ':' || current_date::text as foreground from network.read_revision where singleton`);
   return row!;
 }
 type Revisions = (db: Db) => Promise<{ revision: string; foreground: string }>;
