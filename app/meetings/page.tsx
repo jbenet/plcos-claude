@@ -12,7 +12,7 @@ import { pursuitFor, RUNG_LABEL, RUNG_REQUIRES, STATUSES, STATUS_LABEL } from '@
 import { closeTracksFor, CLOSE_STATE_LABEL } from '@/modules/pipeline';
 import { claimLabel } from '@/lib/authz/read/research';
 import {
-  CHANNEL_LABEL, listMeetings, MEETING_LABEL, OBJECTION_LABEL, prepBrief, summarize, touchpointsFor, type Meeting,
+  CHANNEL_LABEL, meetingsOn, MEETING_LABEL, OBJECTION_LABEL, prepBrief, summarize, touchpointsFor, type Meeting,
 } from '@/modules/meetings';
 import s from './meetings.module.css';
 
@@ -48,7 +48,7 @@ async function Meetings({ searchParams }: { searchParams: Promise<{ e?: string; 
   const sp = await searchParams;
   const now = new Date();
 
-  const all = await listMeetings(vehicle?.id ?? null);
+  const all = await meetingsOn(vehicle?.id ?? '');
   const words = (sp.q ?? '').toLowerCase().split(/\s+/).filter(Boolean);
   const matches = (m: Meeting) => words.every((w) => `${m.entityName} ${m.ownerName} ${m.attendees.join(' ')} ${m.vehicleName ?? ''}`.toLowerCase().includes(w));
   const pool = all.filter(matches);

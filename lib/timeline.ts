@@ -5,7 +5,7 @@ import { conditionsFor, listCycles, spvRooms } from '@/modules/close';
 import { listAsks } from '@/modules/coordination';
 import { listOpenTickets } from '@/modules/governance';
 import { listFunders } from '@/modules/grants';
-import { listMeetings, listQuestions, raiseWindows } from '@/modules/meetings';
+import { meetingsOn, listQuestions, raiseWindows } from '@/modules/meetings';
 import { listUsers } from '@/modules/platform';
 import { touchesOn } from '@/modules/strategy';
 import { listAccreditation } from '@/modules/compliance';
@@ -74,7 +74,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
   const [periods, cycles, rooms, asks, tickets, meetings, questions, accreditation, funders] =
     await Promise.all([
       listPeriods(), listCycles(), spvRooms(), listAsks(null), listOpenTickets(),
-      listMeetings(), listQuestions(), listAccreditation(), listFunders(),
+      meetingsOn(''), listQuestions(), listAccreditation(), listFunders(),
     ]);
 
   const users = await listUsers();

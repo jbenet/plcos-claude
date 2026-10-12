@@ -1,6 +1,7 @@
 import { cache } from 'react';
 import { teamLabels } from '@/modules/identity/team';
 import { getDb } from '@/lib/db';
+import { buildCache, touchRevisions } from '@/lib/build-cache';
 import type { LadderRung } from '@/modules/strategy/client';
 import type {
   Channel, DiligenceQuestion, DirectContact, Direction, Meeting, MeetingKind, Objection, ObjectionClass, ObjectionStatus,
@@ -66,6 +67,13 @@ export async function listMeetings(vehicleId: string | null = null): Promise<Mee
     )
   ).map(r => toMeeting(r, project));
 }
+
+/**
+ * The meetings page's list, kept by the touch revision (network 020): it reads only what that revision
+ * watches, so moving an LP's status leaves it standing and a new meeting rebuilds it. '' is every vehicle.
+ * Shared between requests: read it, never change it.
+ */
+export const meetingsOn = buildCache((vehicleId: string) => listMeetings(vehicleId || null), 8, touchRevisions);
 
 export async function upcomingMeetings(): Promise<Meeting[]> {
   const db = await getDb();

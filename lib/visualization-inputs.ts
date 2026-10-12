@@ -6,7 +6,7 @@ import { listAsks as asks, listConflicts as conflicts, listRestrictions as restr
 import { listAssets as assets } from '@/modules/content';
 import { listOpenTickets as tickets } from '@/modules/governance';
 import { coverageGaps as gaps } from '@/modules/library';
-import { listMeetings as meetings, listObjections as objections } from '@/modules/meetings';
+import { meetingsOn, listObjections as objections } from '@/modules/meetings';
 import { poolChecks as pools } from '@/modules/pipeline';
 import { listVehicles as vehicles } from '@/modules/platform';
 import { listMethods as methods } from '@/modules/research';
@@ -20,7 +20,7 @@ export const connectorLoad = cache(load);
 export const listAssets = cache(assets);
 export const listOpenTickets = cache(tickets);
 export const coverageGaps = cache(gaps);
-export const listMeetings = cache(meetings);
+export const listMeetings = cache(() => meetingsOn(''));
 export const listObjections = cache(objections);
 export const poolChecks = cache(pools);
 export const listVehicles = cache(vehicles);

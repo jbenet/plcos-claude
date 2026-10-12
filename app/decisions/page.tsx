@@ -6,7 +6,7 @@ import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
 import { listPursuits, RUNG_LABEL, STATUS_LABEL } from '@/lib/authz/read/strategy';
 import {
-  listMeetings, listObjections, listQuestions, MEETING_LABEL, objectionTally, OBJECTION_LABEL,
+  meetingsOn, listObjections, listQuestions, MEETING_LABEL, objectionTally, OBJECTION_LABEL,
 } from '@/modules/meetings';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +26,7 @@ async function DecisionRoom({
   const selection = await vehicleSelection();
   const { e } = await searchParams;
   const [pursuits, tally, allObjections, allQuestions, meetings] = await Promise.all([
-    listPursuits(), objectionTally(), listObjections(), listQuestions(), listMeetings(),
+    listPursuits(), objectionTally(), listObjections(), listQuestions(), meetingsOn(''),
   ]);
 
   const withWork = pursuits.filter((p) =>

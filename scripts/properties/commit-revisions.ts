@@ -122,6 +122,17 @@ export async function commitRevisionProperties(check: Check) {
     check('REVISIONS keep a vehicle\'s touchpoints through a status move and read a new meeting at once',
       kept === first && fresh !== first && count(fresh) > count(first), `${count(first)} → ${count(kept)} → ${count(fresh)}`);
 
+    // The meetings list (meetingsOn) is kept the same way: a status move leaves it, a new meeting is in it at once.
+    const { meetingsOn } = await import('../../modules/meetings/repo');
+    const listed = () => withDb(db, () => meetingsOn(vehicle));
+    const m0 = await listed();
+    await db.query(`update strategy.pursuit set status = 'selected' where pursuit_id = $1`, [pursuit]);
+    const m1 = await listed();
+    await db.query(`insert into meetings.meeting (entity_id, owner_id, vehicle_id, held_on, channel, summary) values ($1, $2, $3, current_date, 'meeting', 'Invented meeting')`, [org, user, vehicle]);
+    const m2 = await listed();
+    check('REVISIONS keep a vehicle\'s meetings list through a status move and list a new meeting at once',
+      m1 === m0 && m2 !== m0 && m2.length === m0.length + 1, `${m0.length} → ${m1.length} → ${m2.length}`);
+
     if (db.kind === 'postgres' && process.env.DATABASE_URL) {
       // Two connections: a long writer to research notes and identities, and a status change meanwhile.
       const { openPostgres } = await import('../../lib/db/postgres');
