@@ -12,3 +12,4 @@ moves an LP's status forward on the records on file (docs/29 §4a):
 
 It runs on every Reconciliation pass, so at once after juanmail reports a reply. `config.reconcile.statusFromRecordsSince`
 set to null turns it off.
+- **12 Oct:** our own sent email now moves the status inside the `comms_ingest` call too; before, only replies did, and our email waited for a later full pass.

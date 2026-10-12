@@ -63,15 +63,15 @@ moved nothing. Now `reconcile` reads each pursuit's merged trace (`tracePairs`),
 same message Affinity has is one record — and a received one counts as a reply only when the LP sent it: the sender's
 address is an email claim of the LP, of a contact on their pursuit, or of someone acting for the LP's firm now
 (`sentByThem`). Copied on someone else's message is not a reply; auto-replies are not either. `comms_ingest` runs
-Reconciliation for the LPs its new received messages are about, at once, and answers how many it looked at
+Reconciliation for the LPs its new messages are about, ours and theirs, inside the call (12 Oct 2026), and answers how many it looked at
 (`reconciled`). It records only what Juan allowed on 8 Oct (connector, LP opted in, Meeting held), marked as
 Reconciliation's and undoable on the timeline; above them it still asks.
 
 ### 4a. Status forward on the records — "Auto, with undo"
 
 Juan, 9 Oct 2026, chose "Auto, with undo", and kept it ("Both") beside a one-click status picker in Raise's right panel,
-for the vehicle the page is under. `statusFromRecords` in `lib/reconcile.ts`, on each Reconciliation pass (so at once
-after `comms_ingest`):
+for the vehicle the page is under. `statusFromRecords` in `lib/reconcile.ts`, on each Reconciliation pass (so inside
+`comms_ingest`, for our sends and their replies alike):
 
 - our email or message moves an LP from New, Sourcing or Selected to **Connecting**;
 - a reply from them (as §4 reads it), or a meeting or call with them (not our event), moves them to **Discussing**;
