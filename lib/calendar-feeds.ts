@@ -145,11 +145,21 @@ const day = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 
 /** Sorts entries into marks. One mark per occurrence (iCal UID and start), with everyone whose calendar holds it. */
 class Marks {
   private byId = new Map<string, LaneMark>();
+  /** Entries someone relabelled Meeting here, once each, so the page can offer them back. */
+  private relabelled = new Map<string, RelabelledMeeting>();
   constructor(private now: Date, private labels: Map<string, CalendarLabel>) {}
   add(person: string, e: Entry, colours: ColourPicks) {
     const key = entryKey(e.uid);
     const sorted = classify(e, colours, this.labels.get(key) ?? null);
-    if (sorted.label === 'meeting') return;
+    if (sorted.label === 'meeting') {
+      if (sorted.by === 'relabel') {
+        const was = classify(e, colours).label;
+        const seen = this.relabelled.get(key);
+        if (seen) { if (!seen.team.includes(person)) seen.team = [...seen.team, person].sort(); }
+        else if (was !== 'meeting') this.relabelled.set(key, { key, title: e.title.replace(/\s*\[(travel|trip|events?)\]\s*/i, ' ').trim() || '(no title)', from: day(e.start).toISOString(), was, team: [person] });
+      }
+      return;
+    }
     const id = `ics:${createHash('sha256').update(`${e.uid}|${e.start.toISOString()}`).digest('hex').slice(0, 16)}`;
     const seen = this.byId.get(id);
     if (seen) { seen.team = [...new Set([...(seen.team ?? []), person])].sort(); return; }
@@ -163,7 +173,11 @@ class Marks {
     });
   }
   list() { return [...this.byId.values()]; }
+  hidden() { return [...this.relabelled.values()].sort((a, b) => a.from.localeCompare(b.from)); }
 }
+
+/** An entry the rules put in Travel or Events that someone relabelled Meeting: shown apart, with its undo. */
+export interface RelabelledMeeting { key: string; title: string; from: string; was: CalendarLabel; team: string[] }
 
 type Users = Array<{ id: string; name: string; handle: string }>;
 const allUsers = async (): Promise<Users> => (await (await import('@/modules/platform')).listUsers()).map((u) => ({ id: u.id, name: u.name, handle: u.handle }));
@@ -278,7 +292,7 @@ async function googleEntries(rt: Runtime, u: { id: string; handle: string }, win
  * addresses: one per occurrence, with everyone whose calendar holds it (a conference two of us attend is one mark).
  * `sources` counts the people read through mailguard and the pasted addresses. Problems are said per person, in words.
  */
-export async function laneMarks(now: Date, window: { from: Date; to: Date }, o: { transport?: IcsFetch; runtime?: Runtime; users?: Users } = {}): Promise<{ marks: LaneMark[]; problems: FeedProblem[]; sources: number }> {
+export async function laneMarks(now: Date, window: { from: Date; to: Date }, o: { transport?: IcsFetch; runtime?: Runtime; users?: Users } = {}): Promise<{ marks: LaneMark[]; problems: FeedProblem[]; sources: number; hidden: RelabelledMeeting[] }> {
   const { mailguardRuntime } = await import('@/lib/connectors/mailguard');
   const users = o.users ?? await allUsers();
   const rt = o.runtime ?? mailguardRuntime();
@@ -297,7 +311,7 @@ export async function laneMarks(now: Date, window: { from: Date; to: Date }, o: 
     }
     for (const e of ics.entries) marks.add(u.name, e, colours);
   }));
-  return { marks: marks.list(), problems: problems.sort((a, b) => a.person.localeCompare(b.person)), sources };
+  return { marks: marks.list(), problems: problems.sort((a, b) => a.person.localeCompare(b.person)), sources, hidden: marks.hidden() };
 }
 
 /** For the properties: forget every copy. */

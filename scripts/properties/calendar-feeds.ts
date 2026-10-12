@@ -147,6 +147,9 @@ export async function calendarFeedProperties(check: Check) {
     try { await relabelEntry(j.id, 'not-a-key', 'travel'); } catch (e) { badKey = e instanceof FeedRefused; }
     const after = await laneMarks(now, window, { users: [j, m], runtime: rt, transport });
     const notes = await db.query<{ body: string; data: unknown }>(`select body, data from research.note where kind = 'calendar_label'`);
+    check('Calendar lanes: an entry relabelled Meeting leaves the lanes but is listed apart, once, with what the rules made it, so it can be shown again',
+      after.hidden.length === 1 && after.hidden[0]!.key === lisbon && after.hidden[0]!.was === 'travel' && after.hidden[0]!.title === 'Lisbon' && got.hidden.length === 0,
+      JSON.stringify(after.hidden));
     check('Calendar lanes: a relabel clicked on the Calendar page is remembered, the latest wins, and keeps no title or place; entries are read once an hour, not once a page',
       !after.marks.some((x) => x.label === 'Lisbon') && after.marks.find((x) => x.label === 'A meeting')?.lane === 'travel' && after.marks.find((x) => x.label === 'A meeting')?.entry.by === 'relabelled here'
         && badKey && notes.length === 3 && !JSON.stringify(notes).match(/Lisbon|meeting@|A meeting/) && ((await readFake(dir)).calls['calendar.events.list'] ?? 0) === listCalls && reads === 1,
