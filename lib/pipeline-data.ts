@@ -81,17 +81,20 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
       `select distinct o.canonical_id::text as org_id,
         e.entity_id::text as id, e.display_name as name, coalesce(a.role, '') as role
         from identity.alias_pairs($1::uuid[]) o join identity.affiliation a on a.org_entity=o.entity_id
-        join identity.entity e on e.entity_id=identity.canonical_entity_id(a.person_entity)
+        join identity.entity a_e on a_e.entity_id=a.person_entity
+        join identity.entity e on e.entity_id=case when a_e.merged_into is null then a.person_entity else identity.canonical_entity_id(a.person_entity) end
         where a.ended_on is null
         order by name`, [[...organisations]]),
     db.query<{ pursuit_id: string; id: string; name: string; role: string }>(
       `select c.pursuit_id::text, e.entity_id::text id, e.display_name name, coalesce(c.role, '') role
-         from strategy.pursuit_contact c join identity.entity e on e.entity_id=identity.canonical_entity_id(c.person_entity)
+         from strategy.pursuit_contact c join identity.entity c_e on c_e.entity_id=c.person_entity
+         join identity.entity e on e.entity_id=case when c_e.merged_into is null then c.person_entity else identity.canonical_entity_id(c.person_entity) end
         where c.pursuit_id=any($1::uuid[]) order by c.created_at, name`, [orgPursuits]),
     db.query<{ person: string; id: string; name: string; role: string | null }>(
       `select p.canonical_id::text person, o.entity_id::text id, o.display_name name, a.role
          from identity.alias_pairs($1::uuid[]) p join identity.affiliation a on a.person_entity=p.entity_id
-         join identity.entity o on o.entity_id=identity.canonical_entity_id(a.org_entity)
+         join identity.entity a_o on a_o.entity_id=a.org_entity
+         join identity.entity o on o.entity_id=case when a_o.merged_into is null then a.org_entity else identity.canonical_entity_id(a.org_entity) end
         where a.ended_on is null and o.entity_type<>'person' and o.retired_at is null
         order by 1, a.is_primary desc, a.as_of desc nulls last`, [personIds]),
   ]);
@@ -140,14 +143,15 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
 
   // Furthest along first: by evidence, then meetings held, then what the source's word says
   // happened; then the most recently in touch, then the name. The table can re-sort by column.
-  pursuits.sort(
-    (a, b) =>
-      rungIndex(b.rung) - rungIndex(a.rung) ||
-      sum(b).meetingDates.length - sum(a).meetingDates.length ||
-      rungIndex(impliedRung(b.implied)) - rungIndex(impliedRung(a.implied)) ||
-      (sum(b).lastTouch?.getTime() ?? 0) - (sum(a).lastTouch?.getTime() ?? 0) ||
-      a.entityName.localeCompare(b.entityName),
-  );
+  // Keys worked out once per row, and one collator: localeCompare per comparison was most of this sort.
+  const byName = new Intl.Collator().compare;
+  const keys = new Map(pursuits.map((p) => [p, {
+    rung: rungIndex(p.rung), meetings: sum(p).meetingDates.length, implied: rungIndex(impliedRung(p.implied)), touch: sum(p).lastTouch?.getTime() ?? 0,
+  }]));
+  pursuits.sort((a, b) => {
+    const x = keys.get(a)!, y = keys.get(b)!;
+    return y.rung - x.rung || y.meetings - x.meetings || y.implied - x.implied || y.touch - x.touch || byName(a.entityName, b.entityName);
+  });
 
   const rows: PipelineRow[] = pursuits.map((p) => {
     const s = sum(p);
