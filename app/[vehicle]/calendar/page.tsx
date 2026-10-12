@@ -10,6 +10,7 @@ import { DatedList } from '@/components/calendar/DatedList';
 import { packRows } from '@/lib/packed-rows';
 import { CalendarWindow } from '@/components/calendar/CalendarWindow';
 import { CalendarStats } from '@/components/calendar/CalendarStats';
+import { Relabel } from '@/components/calendar/Relabel';
 import windowLook from './window.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -161,6 +162,17 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
           <span className="lbl">search, lanes and standing filter as you type</span>
         </div>
         <DatedList packed={packRows(rows)} vehicles={vehicleNames} />
+        {feeds && feeds.hidden.length > 0 && (
+          <div className="cbody" style={{ borderTop: '1px solid var(--line)' }}>
+            <div className="lbl">Marked as meetings here ({feeds.hidden.length})</div>
+            {feeds.hidden.map((h) => (
+              <div key={h.key} style={{ margin: '6px 0' }}>
+                <span className="mono">{shortDate(new Date(h.from))}</span> · {h.title} <span className="muted">· {h.team.join(', ')}</span>
+                <Relabel entry={{ key: h.key, label: 'meeting', by: 'relabelled here' }} />
+              </div>
+            ))}
+          </div>
+        )}
         <p className="cover">
           <b>What this covers:</b> every record in this system that carries a date
           {vehicle ? ` and belongs to ${vehicle.name}` : ' across every vehicle'}. Work nobody has

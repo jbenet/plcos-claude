@@ -370,7 +370,8 @@ one, so a calendar is not assigned to a lane. Every entry is sorted by what it i
 - **What shows**: as above, each Travel or Event entry as a mark with its title (the tag taken out), place and whose
   calendar it came from; one mark per occurrence (iCal UID and start), so an entry in two people's calendars, or in
   Google and a pasted address, is one mark with both names. Under each one the page says why it is there and offers
-  the relabel.
+  the relabel. An entry relabelled Meeting is listed apart under "Marked as meetings here", with Travel and Event to
+  show it again.
 - **When it cannot read**: a key without `calendar.read`, a mailguard older than v0.9 or a calendar not yet added in
   mailguard is said in words on the Calendar page per person, as the Email card says it (`CALENDAR_NOT_READ`).
   A person with no token is simply not read. Nobody is asked for a key.
