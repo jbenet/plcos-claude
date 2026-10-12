@@ -17,6 +17,9 @@ For each key, rewrite every strategy file of that LP written before version 1.13
   { at, by: "astra", rule: "1.13 tighten" } to made.revised. Keep firstMessage unless it repeats the analysis; if
   you keep it, it must still match the strategy.
 - A firm's colleagues come together in the batch: rewrite the lead first, then its colleagues against it.
+- A date that has passed: a park whose look-again (or, without one, its step date) is past is re-dated by the
+  protocol's `--lapsed` rule (the rule dates, noted in made.revised); a step that is not a park keeps its date and
+  stays overdue, since a person owes it. Never move a date to hide that it passed.
 
 Examples of finished strategies for shape and tone: {{strategyExamples}}.
 
