@@ -16,6 +16,8 @@ import type { PushAnswer } from './push';
  *   POST { op: "command", command: "diagnose" | "restart" | "update" } → 200 { id, existing }: what Check, Restart and Update
  *        do on the page (Juan, 11 Oct 2026: "built some RC type thing for the runner on the Mac so you can help admin it").
  *   POST { op: "command-report", id, status: "done" | "failed", result?, message? }: the runner answers a command it took.
+ *   POST { op: "plan", keepBusy?, plan?: [{ workflow, size, focus? }], windowStart?, windowEnd? } → 200 { runner }: what the
+ *        page's Night plan form saves (migration 027; Juan, 12 Oct 2026: "would be good to come up with a schedule").
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
@@ -44,7 +46,8 @@ export async function astraCall(caller: SyncCaller, request: Request, o: { db?: 
     const commands = Array.isArray(input.commands) ? astra.ASTRA_COMMANDS.filter((c) => (input.commands as unknown[]).includes(c)) : undefined;
     const code = typeof input.commit === 'string' && /^[0-9a-f]{7,40}$/.test(input.commit) ? input.commit : null;
     const codeStartedAt = typeof input.startedAt === 'string' && Number.isFinite(Date.parse(input.startedAt)) ? new Date(input.startedAt).toISOString() : null;
-    const result = await astra.poll(db, { host: text(input.host, 60) ?? 'mac', workflows, commands, code, codeStartedAt, inWindow: input.inWindow, night, free, held, slots,
+    const features = Array.isArray(input.features) ? (['focus'] as const).filter((f) => (input.features as unknown[]).includes(f)) : [];
+    const result = await astra.poll(db, { host: text(input.host, 60) ?? 'mac', workflows, commands, features, code, codeStartedAt, inWindow: input.inWindow, night, free, held, slots,
       capacityUntil: capacity, note: text(input.note, 300) });
     // Polls come every minute; only those that hand out or cancel work go in the audit log.
     if (result.jobs.length || result.cancel.length || result.commands.length) {
@@ -91,5 +94,15 @@ export async function astraCall(caller: SyncCaller, request: Request, o: { db?: 
     if (!ok) return answer(409, 'refused', { error: 'That command was not sent to the runner, or was already answered.' }, { op: 'command-report', reason: 'state' });
     return answer(200, 'ok', {}, { op: 'command-report', status });
   }
-  return answer(422, 'invalid', { error: 'op must be poll, report, queue, status, command or command-report.' }, { reason: 'op' });
+  if (input?.op === 'plan') {
+    const hour = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 23 ? v as number : undefined);
+    if (input.plan !== undefined && !Array.isArray(input.plan)) return answer(422, 'invalid', { error: 'plan is a list of { workflow, size, focus? }.' }, { op: 'plan', reason: 'shape' });
+    const plan = input.plan === undefined ? undefined : astra.readPlan(input.plan);
+    if (plan && plan.length !== (input.plan as unknown[]).length) return answer(422, 'invalid', { error: 'A step needs a known workflow, 1–20 LPs per run, and at most 8 vehicles.' }, { op: 'plan', reason: 'step' });
+    await astra.saveSettings(db, caller.user.id, { keepBusy: typeof input.keepBusy === 'boolean' ? input.keepBusy : undefined, plan,
+      windowStart: hour(input.windowStart), windowEnd: hour(input.windowEnd) });
+    const runner = await astra.readRunner(db);
+    return answer(200, 'ok', { runner }, { op: 'plan', keepBusy: runner.keepBusy, steps: runner.plan.length });
+  }
+  return answer(422, 'invalid', { error: 'op must be poll, report, queue, status, command, command-report or plan.' }, { reason: 'op' });
 }

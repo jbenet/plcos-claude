@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { syncGuard } from '../../lib/sync/auth';
 import { SYNC_ADMIN, SYNC_PUSH } from '../../lib/sync/scopes';
 import { astraCall } from '../../lib/sync/astra';
-import { ASTRA_WORKFLOWS, cancel, cancelQueued, enqueue, inWindow, readRunner, recentJobs, saveSettings } from '../../lib/astra/jobs';
+import { ASTRA_WORKFLOWS, cancel, cancelQueued, enqueue, inWindow, parsePlan, planText, readRunner, recentJobs, saveSettings } from '../../lib/astra/jobs';
 import { batchPrefix, codexArgs, fill, nightOf, RUN_LIMIT_MS, shouldFallBack, WEB_WORKFLOWS } from '../../lib/astra/runner';
 import { createMcpToken, type AppUser } from '../../modules/platform';
 import { freshDb, type Check } from './harness';
@@ -39,7 +39,8 @@ export async function astraProperties(check: Check) {
     if ('response' in guard) return { status: guard.response.status, body: await guard.response.json() as Record<string, any> };
     return astraCall(guard.caller, req(), { db }) as Promise<{ status: number; body: Record<string, any> }>;
   };
-  const poll = (o: Partial<{ inWindow: boolean; free: number; held: string[]; night: string; workflows: string[]; commands: string[]; commit: string; startedAt: string }> = {}) =>
+  const poll = (o: Partial<{ inWindow: boolean; free: number; held: string[]; night: string; workflows: string[]; commands: string[]; commit: string; startedAt: string;
+    features: string[]; slots: Array<{ slot: string; job: string | null }> }> = {}) =>
     call(admin.secret, { op: 'poll', host: 'props', inWindow: false, night: '2026-10-10', free: 4, held: [], slots: [{ slot: 's1', job: null }], ...o });
 
   check('astra refuses a push-only token', (await call(pushOnly.secret, { op: 'poll' })).status === 403, 'push-only');
@@ -123,4 +124,41 @@ export async function astraProperties(check: Check) {
   const done = (await call(admin.secret, { op: 'status' })).body.commands.find((c: { id: string }) => c.id === issued.body.id);
   check('astra keeps short scalar command results only, and takes one answer', answered.status === 200 && twice.status === 409 && done?.status === 'done'
     && done.result.behind === 2 && !('names' in done.result) && !('nested' in done.result) && Object.keys(done.result).length === 3, JSON.stringify(done));
+
+  // Night plan (migration 027; Juan, 12 Oct 2026: "i asked you to keep it busy", "would be good to come up with a schedule").
+  let badPlan = '';
+  try { parsePlan('w5 5 neurotech\nrm -rf 3'); } catch (e) { badPlan = e instanceof Error ? e.message : ''; }
+  const plan = parsePlan('# focus first\nw5 5 neurotech, spv-netholabs\nw5t 8\nw1w5 5');
+  check('astra parses a night plan and refuses a line it cannot read', plan.length === 3 && plan[0]!.focus.length === 2 && plan[1]!.focus.length === 0
+    && /Step 2/.test(badPlan) && planText(plan).split('\n')[0] === 'w5 5 neurotech, spv-netholabs', `${JSON.stringify(plan)} ${badPlan}`);
+  await saveSettings(db, juan.id, { autoOn: false });
+  await cancelQueued(db);
+  await poll({ free: 0, held: [] });
+  const all = ['w1w5', 'w1', 'w5', 'w5t'], two = [{ slot: 's1', job: null }, { slot: 's2', job: null }];
+  const viaToken = await call(admin.secret, { op: 'plan', keepBusy: true, plan: plan.map((p) => ({ ...p })), windowStart: 22, windowEnd: 10 });
+  const badStep = await call(admin.secret, { op: 'plan', plan: [{ workflow: 'w9', size: 3 }] });
+  check('astra saves a night plan by token and refuses an unknown step', viaToken.status === 200 && viaToken.body.runner.keepBusy === true
+    && viaToken.body.runner.plan.length === 3 && viaToken.body.runner.windowEnd === 10 && badStep.status === 422, `${JSON.stringify(viaToken.body.runner?.plan)} ${badStep.status}`);
+  await poll({ inWindow: true, night: '2026-10-12', free: 0, workflows: all, features: ['focus'], slots: two });
+  await poll({ inWindow: true, night: '2026-10-12', free: 0, workflows: all, features: ['focus'], slots: two });
+  const step0 = (await recentJobs(db)).filter((j) => j.source === 'plan' && j.night === '2026-10-12' && j.status === 'queued');
+  check('astra keeps two runs per slot queued from the first plan step, with its focus, and no more', step0.length === 4
+    && step0.every((j) => j.step === 0 && j.workflow === 'w5' && j.focus.join() === 'neurotech,spv-netholabs'), JSON.stringify(step0.map((j) => [j.step, j.workflow, j.focus])));
+  const unfocused = await poll({ inWindow: true, night: '2026-10-12', free: 4, workflows: all, slots: two });
+  check('astra never hands a focused run to a runner that cannot cut one', unfocused.body.jobs.length === 0, JSON.stringify(unfocused.body.jobs));
+  const night2 = await poll({ inWindow: true, night: '2026-10-13', free: 1, workflows: all, slots: two });
+  const left = (await recentJobs(db)).filter((j) => j.source === 'plan' && j.night === '2026-10-12');
+  check('astra skips a focused step for such a runner, and drops an earlier night\'s plan runs', night2.body.jobs.length === 1 && night2.body.jobs[0].workflow === 'w5t'
+    && left.every((j) => j.status === 'cancelled'), `${JSON.stringify(night2.body.jobs)} ${JSON.stringify(left.map((j) => j.status))}`);
+  const empty = night2.body.jobs[0].id as string;
+  await call(admin.secret, { op: 'report', id: empty, status: 'done', counts: { selected: 0 }, message: 'Nobody is left for this workflow.' });
+  await poll({ inWindow: true, night: '2026-10-13', free: 0, workflows: all, slots: two });
+  const n2 = (await recentJobs(db)).filter((j) => j.source === 'plan' && j.night === '2026-10-13');
+  check('astra moves to the next plan step when a run finds nobody, cancelling that step\'s leftovers',
+    n2.filter((j) => j.step === 1 && j.status === 'queued').length === 0 && n2.filter((j) => j.step === 2 && j.status === 'queued').length > 0,
+    JSON.stringify(n2.map((j) => [j.step, j.status])));
+  await saveSettings(db, juan.id, { keepBusy: false });
+  await cancelQueued(db);
+  await poll({ inWindow: true, night: '2026-10-14', free: 0, workflows: all, slots: two });
+  check('astra queues nothing from the plan with Keep busy off', (await recentJobs(db)).every((j) => j.night !== '2026-10-14'), 'keep busy off');
 }

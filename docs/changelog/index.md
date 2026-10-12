@@ -328,4 +328,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Strategies come out short: W5's length limits are enforced](entries/w5-short.md)
 - [Astra shortens the long strategies, Committed back to Selected](entries/astra-shorten.md)
 - [Admin the Astra runner from the page: Check, Update, Restart](entries/astra-admin.md)
+- [Astra keeps busy all night from a plan](entries/astra-plan.md)
 - [Faster LP lists, meetings, calendar and Today](entries/perf-lists.md)

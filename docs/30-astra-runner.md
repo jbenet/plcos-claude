@@ -69,6 +69,22 @@ Juan, 11 Oct 2026: "built some RC type thing for the runner on the Mac so you ca
 - **Fetching.** HTTPS first for a GitHub remote, through git's credential helper (`gh auth git-credential` on the
   Mac), since 1Password's SSH agent can refuse to sign for a background process; SSH in batch mode is the fallback.
 
+## The night plan
+
+Juan, 12 Oct 2026, after the runner sat idle for 6.6 hours once the queued work ran out: "i asked you to keep it
+busy" and "would be good to come up with a schedule".
+
+- **Keep busy** (migration 027, `astra_runner.keep_busy` and `plan`). On Developer → Astra, **Night plan** holds an
+  ordered list of steps, one a line: a workflow, LPs per run, and optionally the vehicles to focus on (slugs or names
+  as the Mac's `vehicles.json` has them). An Admin token sets the same with `op: "plan"`.
+- **How it queues.** With Keep busy on, each poll inside the night window tops the queue up to about two runs per slot,
+  from the first step that still has work tonight. A step is done for the night when one of its runs finds nobody, or
+  its last three runs wrote nothing; its leftover queued runs are cancelled and the next step starts. Plan runs left
+  from an earlier night are cancelled, so each night starts at step 1. No Claude session needs to be awake.
+- **Focus.** A step with vehicles cuts its batches with `enrich-batch.ts --vehicle`: only LPs with a pursuit in those
+  vehicles, and for Shorten strategies every stage of those vehicles, furthest first. Only a runner that announces
+  `features: ["focus"]` is handed a focused run; an older one skips that step.
+
 ## Not yet
 
 W1c and W13 runs; a retry button; the page showing each run's codex log tail (it stays on the Mac).

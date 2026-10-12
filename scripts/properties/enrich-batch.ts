@@ -97,4 +97,38 @@ export async function enrichBatchProperties(check: Check) {
     check('W5 hands out no LP whose strategy sits under an alias or only in a vehicle folder',
       JSON.stringify(picked) === JSON.stringify(['fresh']), `Invented fixture picked ${JSON.stringify(picked)}.`);
   } finally { await rm(al, { recursive: true, force: true }); }
+
+  // --tighten resolves aliases and loose vehicle names; --vehicle focuses a cut on named vehicles, every stage (12 Oct 2026).
+  const fv = await mkdtemp(join(tmpdir(), 'batch-focus-'));
+  const fdir = join(fv, 'data/demo/enrich');
+  try {
+    for (const folder of ['raw', 'strategy', 'batches']) await mkdir(join(fdir, folder), { recursive: true });
+    const fund = 'Invented Fund', spv = 'Invented SPV';
+    const rows: Array<[string, string, string]> = [['aliased', fund, 'selected'], ['loose', fund, 'connecting'], ['spvLate', spv, 'sourcing'], ['other', fund, 'sourcing']];
+    const cands = rows.map(([key, vehicle, status]) => ({ key, name: `Invented ${key}`, domains: [], org: null,
+      pursuits: [{ vehicle, status }], contact: { meetings: 0, groupMeetings: 0, lastFromThem: null, lastTouch: null } }));
+    const jsonl = (xs: unknown[]) => xs.map(x => JSON.stringify(x)).join('\n');
+    await writeFile(join(fdir, 'candidates.jsonl'), jsonl(cands));
+    await writeFile(join(fdir, 'research-set.jsonl'), jsonl(cands));
+    await writeFile(join(fdir, 'vehicles.json'), JSON.stringify([{ slug: 'fund-invented', name: fund }, { slug: 'spv-invented', name: spv }]));
+    await writeFile(join(fdir, 'entity-keys.json'), JSON.stringify({ 'old-aliased': 'aliased' }));
+    const strategy = (key: string, vehicle: string) => JSON.stringify({ key, made: { at: '2026-10-01', version: '1.12' }, ask: { vehicle } });
+    await writeFile(join(fdir, 'strategy', 'old-aliased.json'), strategy('old-aliased', fund));
+    await writeFile(join(fdir, 'strategy', 'loose.json'), strategy('loose', 'the invented fund'));
+    await writeFile(join(fdir, 'strategy', 'spvLate.json'), strategy('spvLate', 'spv-invented'));
+    await writeFile(join(fdir, 'strategy', 'other.json'), strategy('other', fund));
+    const cut = async (prefix: string, extra: string[]) => {
+      await promisify(execFile)(process.execPath, ['--import', import.meta.resolve('tsx'), resolve('scripts/enrich-batch.ts'), 'w5', prefix, '9', '--tighten', ...extra],
+        { cwd: fv, env: { ...process.env, DATA_PROFILE: 'demo', DATABASE_URL: '', TSX_TSCONFIG_PATH: resolve('tsconfig.json') } });
+      const files = (await readdir(join(fdir, 'batches'))).filter(f => f.startsWith(prefix));
+      return (await Promise.all(files.map(f => readFile(join(fdir, 'batches', f), 'utf8')))).join('').trim().split('\n').filter(Boolean).sort();
+    };
+    const plain = await cut('pl', []);
+    check('W5 --tighten takes a strategy filed under an alias, and one whose vehicle is named loosely',
+      JSON.stringify(plain) === JSON.stringify(['aliased', 'loose']), `Invented fixture picked ${JSON.stringify(plain)}.`);
+    await rm(join(fdir, 'batches'), { recursive: true, force: true }); await mkdir(join(fdir, 'batches'));
+    const focused = await cut('fo', ['--vehicle', 'spv-invented']);
+    check('W5 --tighten --vehicle takes only that vehicle, at every stage', JSON.stringify(focused) === JSON.stringify(['spvLate']),
+      `Invented fixture picked ${JSON.stringify(focused)}.`);
+  } finally { await rm(fv, { recursive: true, force: true }); }
 }

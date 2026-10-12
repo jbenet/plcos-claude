@@ -23,6 +23,9 @@
  *        whose vehicle's pursuit is Committed, Discussing, Connecting or Selected, furthest first (Juan,
  *        11 Oct 2026: "start further down the pipeline and work way back to selected ones"), in either
  *        layout (strategy/<key>.json or strategy/<vehicle>/<key>.json), colleagues in the same firm together.
+ *   With `--vehicle <slug or name,…>` (the Astra night plan, migration 027): only LPs with a pursuit in those vehicles;
+ *        with `--tighten`, only those vehicles' strategies, at every stage (Juan, 12 Oct 2026: "my focus is currently on
+ *        closing the PLC Neurotech Fund I and Netholabs SPV").
  *
  * Writes batches/<prefix>NN.jsonl (w1: identity lines from research-set.jsonl) or .txt (w5: keys),
  * and prints counts only.
@@ -76,8 +79,10 @@ async function main() {
   const keysFile = keysAt >= 0 ? process.argv[keysAt + 1] : null;
   const maxAt = process.argv.indexOf('--max');
   const max = maxAt >= 0 ? Number(process.argv[maxAt + 1]) : Infinity;
+  const vehicleAt = process.argv.indexOf('--vehicle');
+  const focusArg = vehicleAt >= 0 ? process.argv[vehicleAt + 1] ?? '' : null;
   if (!(max >= 1)) { console.error('--max takes a positive number.'); process.exit(2); }
-  const [mode, prefix, sizeArg] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !['--keys', '--max'].includes(all[i - 1]!));
+  const [mode, prefix, sizeArg] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !['--keys', '--max', '--vehicle'].includes(all[i - 1]!));
   const withSearch = process.argv.includes('--search');
   const tighten = process.argv.includes('--tighten');
   const revise = !tighten && (process.argv.includes('--revise') || Boolean(keysFile));
@@ -123,6 +128,15 @@ async function main() {
     const n = (named ?? '').trim().toLowerCase();
     return vehicles.find((v) => v.slug.toLowerCase() === n || v.name.toLowerCase() === n) ?? null;
   };
+  // `--vehicle`: a pursuit or strategy counts when its vehicle is named by slug or name.
+  const focus = focusArg === null ? null : new Set(focusArg.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean));
+  if (focus && !focus.size) { console.error('--vehicle takes one or more vehicle slugs or names, comma-separated.'); process.exit(2); }
+  const inFocus = (named: string | undefined) => {
+    if (!focus) return true;
+    const v = vehicleOf(named);
+    return focus.has((named ?? '').trim().toLowerCase()) || Boolean(v && (focus.has(v.slug.toLowerCase()) || focus.has(v.name.toLowerCase())));
+  };
+  const focused = (c: Candidate) => !focus || c.pursuits.some((p) => inFocus(p.vehicle ?? undefined));
   // Keys already in a batch file for this mode and not yet done are left to that batch; once done
   // (a finding, a strategy), they are eligible again — for a search pass, or a stale strategy.
   const batched = new Set<string>();
@@ -172,13 +186,24 @@ async function main() {
   const tightRank = new Map<string, number>();
   if (tighten) {
     const byKey = new Map(cands.map((c) => [c.key, c]));
+    // With `--vehicle`, every stage of those vehicles, the furthest first; without, back to Selected and no further.
+    const rankOf = (status: string | undefined) => TIGHTEN[status ?? ''] ?? (focus ? 4 : undefined);
     for (const f of await strategyFiles(join(dir, 'strategy'))) {
-      if (!versionBefore(f.version as string, TIGHT_FROM)) continue;
-      const c = byKey.get(aliases[f.key] ?? f.key);
+      if (!versionBefore(f.version as string, TIGHT_FROM) || !inFocus(f.vehicle)) continue;
+      // Resolved as the checker resolves it: a strategy filed under an alias is its LP's (12 Oct 2026: the alias-blind cut
+      // left 98 older Selected and 27 older Connecting strategies untightened).
+      const key = candidateKey(f, cands, aliases, rawFindings.get(f.key));
+      const c = key ? byKey.get(key) : undefined;
       const v = vehicleOf(f.vehicle);
       const names = [f.vehicle, v?.name, v?.slug].filter(Boolean).map((n) => n!.trim().toLowerCase());
-      const p = c?.pursuits.find((x) => names.includes((x.vehicle ?? '').trim().toLowerCase()));
-      const r = TIGHTEN[p?.status ?? ''];
+      const sameVehicle = (x: { vehicle?: string | null }) => {
+        const n = (x.vehicle ?? '').trim().toLowerCase(), xv = vehicleOf(x.vehicle ?? undefined);
+        return names.includes(n) || Boolean(xv && v && xv.slug === v.slug);
+      };
+      // A top-level strategy whose vehicle matches no pursuit (renamed, or named loosely) takes the LP's furthest pursuit.
+      const p = c?.pursuits.find(sameVehicle)
+        ?? (f.folder === null ? c?.pursuits.filter((x) => inFocus(x.vehicle ?? undefined)).sort((a, b) => (rankOf(a.status) ?? 9) - (rankOf(b.status) ?? 9)).at(0) : undefined);
+      const r = rankOf(p?.status);
       if (c && r !== undefined) tightRank.set(c.key, Math.min(r, tightRank.get(c.key) ?? 9));
     }
   }
@@ -205,6 +230,7 @@ async function main() {
   let wanted = cands.filter((c) => {
     const f = findings.get(c.key);
     if (mode === 'w5' && inOpenBatch(c.key)) return false;
+    if (!focused(c)) return false;
     if (tighten) return tightRank.has(c.key);
     if (batched.has(c.key) && (mode === 'w1' ? !f : !strategies.has(c.key))) return false;
     if (mode === 'w1') return !f || (withSearch && pagesOnly(f));

@@ -39,7 +39,9 @@ const REPO = process.cwd();
 const SLOTS = Math.max(1, Math.min(12, Number(process.env.ASTRA_SLOTS ?? 8)));
 const POLL_MS = 60_000;
 const WORKFLOWS = ['w1w5', 'w1', 'w5', 'w5t'] as const;
-type Job = { id: string; workflow: (typeof WORKFLOWS)[number]; size: number };
+type Job = { id: string; workflow: (typeof WORKFLOWS)[number]; size: number; focus?: string[] };
+/** What this runner can do beyond the first runners: `focus` = cut a batch for named vehicles (the night plan, migration 027). */
+const FEATURES = ['focus'] as const;
 /** Restarted when it exits: by launchd (the login item), or by the Astra app — found by its env, or up the parent chain for app builds before it set one. */
 let SUPERVISED = process.env.ASTRA_SUPERVISED === '1' || process.env.XPC_SERVICE_NAME === 'com.plcos.astra-runner';
 async function underAstraApp(): Promise<boolean> {
@@ -183,7 +185,7 @@ async function work(slot: Slot, job: Job, root: string) {
   const mode = job.workflow === 'w5' || job.workflow === 'w5t' ? 'w5' : 'w1';
   const prefix = batchPrefix(job.id);
   const cut = cutting.then(() => run('npx', ['tsx', 'scripts/enrich-batch.ts', mode, prefix, String(job.size), '--max', '1',
-    ...(job.workflow === 'w5t' ? ['--tighten'] : [])], { cwd: REPO, env, timeout: 600_000 }));
+    ...(job.workflow === 'w5t' ? ['--tighten'] : []), ...(job.focus?.length ? ['--vehicle', job.focus.join(',')] : [])], { cwd: REPO, env, timeout: 600_000 }));
   cutting = cut.catch(() => undefined);
   try { await cut; } catch { return reportJob(job.id, 'failed', { message: 'The batch cutter failed; see the runner log on the Mac.' }); }
   const batch = `${prefix}01`, file = join(batches, `${batch}.${mode === 'w1' ? 'jsonl' : 'txt'}`);
@@ -340,7 +342,7 @@ async function main() {
     // A Restart or Update waiting for the running batches: start nothing new meanwhile.
     const holding = pendingCommands.some((c) => c.op !== 'diagnose');
     try {
-      const answer = await call({ op: 'poll', host: hostname().slice(0, 60), workflows: WORKFLOWS, commands: COMMANDS, commit: startCommit.slice(0, 12), startedAt,
+      const answer = await call({ op: 'poll', host: hostname().slice(0, 60), workflows: WORKFLOWS, features: FEATURES, commands: COMMANDS, commit: startCommit.slice(0, 12), startedAt,
         inWindow, night, free: waiting || holding ? 0 : idle.length,
         held: pool.flatMap((s) => (s.job ? [s.job.id] : [])), slots: pool.map((s) => ({ slot: s.name, job: s.job?.id ?? null })),
         capacityUntil: waiting ? new Date(capacityUntil).toISOString() : null, note: holding ? 'Waiting for running batches to finish before a restart.' : null });
