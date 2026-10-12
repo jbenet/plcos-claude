@@ -94,6 +94,14 @@ export async function syncVehiclesProperties(check: Check) {
   const jobPush = await jobsBy(pushOnly.secret, { kind: 'export' }), jobBad = await jobsBy(admin.secret, { kind: 'linear-rebuild' });
   const g2 = await syncGuard(jobsReq(admin.secret, null, 'GET', '?job=11111111-2222-4333-8444-555555555555'), 'jobs');
   const unknownJob = 'response' in g2 ? g2.response.status : (await jobState(g2.caller, jobsReq(admin.secret, null, 'GET', '?job=11111111-2222-4333-8444-555555555555'), { db })).status;
+  // A calendar read that did not run says why, and who was not read and in what state (no address).
+  const offId = (await db.one<{ id: string }>(`insert into platform.import_job (kind, status, phase, actor, input, result, finished_at)
+    values ('calendar', 'completed', 'Completed', $1, '{}', $2, now()) returning id::text id`,
+    [juan.id, JSON.stringify({ off: 'No mailguard address is set.', skipped: [{ handle: 'juan', why: 'no_read', address: 'x@invented.example' }] })]))!.id;
+  const g3 = await syncGuard(jobsReq(admin.secret, null, 'GET', `?job=${offId}`), 'jobs');
+  const offState = 'response' in g3 ? null : (await jobState(g3.caller, jobsReq(admin.secret, null, 'GET', `?job=${offId}`), { db })).body as { job?: { off?: string; skipped?: unknown[] } };
+  check('Jobs by token: a calendar read that did not run says why, and lists who was not read by state, never an address',
+    offState?.job?.off === 'No mailguard address is set.' && JSON.stringify(offState.job.skipped) === '[{"handle":"juan","why":"no_read"}]', JSON.stringify(offState));
   // An Affinity read needs one of the buttons' operations; nothing here reaches Affinity.
   const affNone = await jobsBy(admin.secret, { kind: 'affinity' }), affBad = await jobsBy(admin.secret, { kind: 'affinity', operation: 'write' });
   check('Jobs by token: a push token cannot queue, an unknown kind or an Affinity job without a known operation is refused, an unknown job is 404',

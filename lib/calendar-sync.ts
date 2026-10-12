@@ -147,6 +147,8 @@ async function readPerson(client: MailguardClient, from: string, to: string, onE
 }
 
 export async function syncCalendars(db: Db, actor: string, o: { runtime?: RuntimeState; now?: Date; progress?: ImportProgress } = {}): Promise<CalendarSyncResult | { off: string }> {
+  // The address may be kept in the app (Settings → Connections): read it fresh, as a worker process starts with none.
+  if (!o.runtime) await (await import('@/lib/settings/store')).settingsReady().catch(() => undefined);
   const rt = o.runtime ?? mailguardRuntime();
   if (rt.mode === 'off') return { off: rt.why };
   const now = o.now ?? new Date();

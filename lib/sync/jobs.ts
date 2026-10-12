@@ -65,6 +65,12 @@ export async function jobState(caller: SyncCaller, request: Request, o: { db?: D
   const counts = Object.fromEntries(Object.entries(row.result ?? {}).filter(([, v]) => typeof v === 'number'));
   // Merge duplicate identities also says which proposals applied and why any were refused (ids, line numbers, reasons).
   const decisions = row.result && typeof row.result.decisions === 'object' ? row.result.decisions : undefined;
+  // A read that did not run says why (the calendar read's `off`), and who was not read and in what state: states, never addresses.
+  const off = typeof row.result?.off === 'string' ? row.result.off.slice(0, 300) : undefined;
+  const skipped = Array.isArray(row.result?.skipped)
+    ? (row.result.skipped as Array<Record<string, unknown>>).flatMap((x) => (typeof x?.handle === 'string' && typeof x?.why === 'string' ? [{ handle: x.handle, why: x.why }] : []))
+    : undefined;
   return { status: 200, body: { ok: true, job: { id: row.id, kind: row.kind, status: row.status, phase: row.phase, error: row.error,
-    createdAt: new Date(row.created_at).toISOString(), finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null, counts, ...(decisions ? { decisions } : {}) } } };
+    createdAt: new Date(row.created_at).toISOString(), finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null, counts,
+    ...(decisions ? { decisions } : {}), ...(off ? { off } : {}), ...(skipped?.length ? { skipped } : {}) } } };
 }
