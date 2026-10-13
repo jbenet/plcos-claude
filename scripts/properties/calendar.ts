@@ -149,18 +149,28 @@ export async function calendarProperties(check: Check) {
       ('affinity', 'person', '900001', 'props-cal-old', '{"primaryEmailAddress": "rhea@former-invented.example", "emailAddresses": ["rhea@former-invented.example"]}', '2026-01-01'),
       ('affinity', 'person', '900001', 'props-cal-new', '{"primaryEmailAddress": "Rhea@Kestrel-Invented.example", "emailAddresses": ["rhea.alt@kestrel-invented.example", 7]}', '2026-06-01')`);
     await db.query(`insert into identity.affiliation (person_entity, org_entity, kind, role, source, as_of, certainty) values ($1, $2, 'staff', 'Invented', 'fixture', now(), 'inferred')`, [rhea, kestrel]);
-    await db.query(`insert into strategy.pursuit (entity_id, vehicle_id, owner_id) values ($1, (select id from platform.vehicle order by slug limit 1), $2::uuid)`, [kestrel, juan.id]);
+    // Osprey is a firm known only by the domains on its Affinity company record.
+    const osprey = await entity('org', 'Invented Osprey Holdings');
+    await db.query(`insert into identity.source_record(source, source_id, entity_id, resolved_by) values ('affinity', 'company:900002', $1, 'human:fixture')`, [osprey]);
+    await db.query(`insert into sources.raw_record(source, kind, source_id, payload_hash, payload) values
+      ('affinity', 'list_entry', '900003', 'props-cal-co', '{"type": "company", "entity": {"id": 900002, "domain": "osprey-invented.example", "domains": ["osprey-invented.example", "osprey-alt-invented.example"]}}')`);
+    await db.query(`insert into strategy.pursuit (entity_id, vehicle_id, owner_id) select e, (select id from platform.vehicle order by slug limit 1), $2::uuid from unnest($1::uuid[]) e`, [[kestrel, osprey], juan.id]);
     await fakeCalendar(dir, juan.email, { id: 'primary' }, [
       ev('aff2', '2026-09-20T15:00:00Z', [juan.email, 'rhea.alt@kestrel-invented.example']),
       ev('aff3', '2026-09-21T15:00:00Z', [juan.email, 'someone.new@kestrel-invented.example']),
       ev('aff4', '2026-09-22T15:00:00Z', [juan.email, 'rhea@former-invented.example']),
+      ev('aff5', '2026-09-23T15:00:00Z', [juan.email, 'partner@osprey-alt-invented.example']),
     ]);
-    await sync();
+    const affRead = await sync();
     const affRows = await db.query<{ entity: string; day: string; summary: string | null }>(
-      `select entity_id::text entity, held_on::text "day", summary from meetings.meeting where source = 'calendar' and held_on between '2026-09-20' and '2026-09-22' order by held_on, entity_id::text`);
-    check('Calendar: the addresses Affinity holds for a person match by address (the person and their LP firm), and their domain matches the firm, never by name; an address only on an older copy of the record does not count',
-      JSON.stringify(affRows.map((x) => [x.day, x.entity, x.summary])) === JSON.stringify([['2026-09-20', rhea, null], ['2026-09-20', kestrel, null], ['2026-09-21', kestrel, null]].sort((a, b) => `${a[0]}${a[1]}`.localeCompare(`${b[0]}${b[1]}`))),
-      JSON.stringify(affRows.map((x) => [x.day, x.entity === kestrel ? 'kestrel' : x.entity === rhea ? 'rhea' : x.entity, x.summary ? 'by name' : ''])));
+      `select entity_id::text entity, held_on::text "day", summary from meetings.meeting where source = 'calendar' and held_on between '2026-09-20' and '2026-09-23' order by held_on, entity_id::text`);
+    check('Calendar: the addresses Affinity holds for a person match by address (the person and their LP firm), and their domain matches the firm, as do the domains on a firm’s Affinity record, never by name; an address only on an older copy of the record does not count',
+      JSON.stringify(affRows.map((x) => [x.day, x.entity, x.summary])) === JSON.stringify([['2026-09-20', rhea, null], ['2026-09-20', kestrel, null], ['2026-09-21', kestrel, null], ['2026-09-23', osprey, null]].sort((a, b) => `${a[0]}${a[1]}`.localeCompare(`${b[0]}${b[1]}`))),
+      JSON.stringify(affRows.map((x) => [x.day, x.entity === kestrel ? 'kestrel' : x.entity === rhea ? 'rhea' : x.entity === osprey ? 'osprey' : x.entity, x.summary ? 'by name' : ''])));
+    check('Calendar: a read counts its coverage: outside guests and those known, meetings with an outside guest and those no LP matched',
+      affRead.matched + affRead.unmatchedExternal === affRead.externalEvents && affRead.unmatchedExternal >= 1 && affRead.guestsKnown >= 3 && affRead.guestsKnown < affRead.guests
+        && (await db.one<{ note: string }>(`select note from sources.sync_run where source = 'calendar' order by id desc limit 1`))!.note.includes(`${affRead.guestsKnown} of ${affRead.guests} outside guests known`),
+      JSON.stringify({ matched: affRead.matched, guests: affRead.guests, known: affRead.guestsKnown, external: affRead.externalEvents, unmatched: affRead.unmatchedExternal }));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

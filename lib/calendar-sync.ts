@@ -45,6 +45,11 @@ export interface CalendarSyncResult {
   /** LP meetings: an outside guest matched an LP by address or firm domain, or (byName) the entry named one. */
   matched: number;
   byName: number;
+  /** Coverage: distinct outside guests, those known by address or firm domain, meetings with an outside guest, and those no LP matched. */
+  guests: number;
+  guestsKnown: number;
+  externalEvents: number;
+  unmatchedExternal: number;
   added: number;
   updated: number;
   /** Already Affinity's, for that LP that day. */
@@ -103,7 +108,7 @@ const AFFINITY_PERSON_EMAILS = `
        and not exists (select 1 from sources.raw_record n where n.source = 'affinity' and n.kind = 'person' and n.source_id = r.source_id
                           and (n.fetched_at, n.id) > (r.fetched_at, r.id))`;
 
-/** The LP firms holding each of these email domains: a firm's own email-domain or email claims, or its current people's emails. */
+/** The LP firms holding each of these email domains: a firm's own email-domain or email claims or Affinity domains, or its current people's emails (claims or Affinity's). */
 async function firmsByDomain(domains: string[], lps: Set<string>, q: Queryable): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>();
   if (!domains.length) return out;
@@ -122,7 +127,14 @@ async function firmsByDomain(domains: string[], lps: Set<string>, q: Queryable):
     select regexp_replace(m.email, '^.*@', ''), identity.canonical_entity_id(a.org_entity)::text
       from (${AFFINITY_PERSON_EMAILS}) m
       join identity.affiliation a on identity.canonical_entity_id(a.person_entity) = m.id::uuid and a.ended_on is null
-     where regexp_replace(m.email, '^.*@', '') = any($1::text[])`, [domains]);
+     where regexp_replace(m.email, '^.*@', '') = any($1::text[])
+    union
+    select lower(trim(d.v)), identity.canonical_entity_id(s.entity_id)::text
+      from sources.raw_record r
+      cross join lateral (select r.payload->'entity'->>'domain' v
+                          union select jsonb_array_elements_text(case when jsonb_typeof(r.payload->'entity'->'domains') = 'array' then r.payload->'entity'->'domains' else '[]'::jsonb end)) d
+      join identity.source_record s on s.source = 'affinity' and s.source_id = 'company:' || (r.payload->'entity'->>'id')
+     where r.source = 'affinity' and r.kind = 'list_entry' and r.payload->>'type' = 'company' and lower(trim(d.v)) = any($1::text[])`, [domains]);
   for (const r of rows) if (lps.has(r.id)) out.set(r.d, [...new Set([...(out.get(r.d) ?? []), r.id])].sort());
   return out;
 }
@@ -179,7 +191,7 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
   if (rt.mode === 'off') return { off: rt.why };
   const now = o.now ?? new Date();
   const from = new Date(now.getTime() - CALENDAR_WINDOW.pastDays * DAY), to = new Date(now.getTime() + CALENDAR_WINDOW.futureDays * DAY);
-  const r: CalendarSyncResult = { people: 0, skipped: [], calendars: 0, events: 0, matched: 0, byName: 0, added: 0, updated: 0, affinity: 0, removed: 0, complete: true,
+  const r: CalendarSyncResult = { people: 0, skipped: [], calendars: 0, events: 0, matched: 0, byName: 0, guests: 0, guestsKnown: 0, externalEvents: 0, unmatchedExternal: 0, added: 0, updated: 0, affinity: 0, removed: 0, complete: true,
     window: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) } };
   const run = await startRun('calendar', 'read', actor);
   try {
@@ -250,6 +262,8 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
     const parties = await partiesOf(outsiders, db);
     const { lps, contactOf } = await lpUniverse(db);
     const byDomain = await firmsByDomain([...new Set(outsiders.filter((a) => !parties.has(a)).map(domainOf).filter((d) => !PUBLIC_MAIL.has(d)))], lps, db);
+    r.guests = outsiders.length;
+    r.guestsKnown = outsiders.filter((a) => parties.has(a) || byDomain.has(domainOf(a))).length;
     const unmatched = new Set((await db.query<{ ref: string }>(`select data->>'ref' ref from research.note where kind = 'calendar_unmatch' and entity_id is null`)).map((r) => r.ref));
     let names: Array<{ id: string; re: RegExp }> | null = null;
     const lpNames = async () => names ??= (await db.query<{ id: string; name: string; type: string }>(
@@ -265,6 +279,7 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
     for (const [k, { event: e, holders }] of seen) {
       const outside = outsideOf(e);
       if (!outside.length) continue;
+      r.externalEvents++;
       // By address: the person if they or a firm of theirs is an LP, and their LP firms.
       const entities = new Set<string>();
       const groups = new Set<string>();
@@ -284,7 +299,7 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
         for (const n of await lpNames()) if (n.re.test(text)) { entities.add(n.id); groups.add(n.id); }
         byName = entities.size > 0;
       }
-      if (!entities.size) continue;
+      if (!entities.size) { r.unmatchedExternal++; continue; }
       r.matched++;
       if (byName) r.byName++;
       const start = startOf(e)!;
@@ -332,10 +347,10 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
     if (r.added || r.removed) await (await import('@/lib/reconcile')).reconcile(actor);
 
     const noKey = r.skipped.filter((s) => s.why === NO_KEY).length;
-    const counts = { people: r.people, skipped: r.skipped.length, calendars: r.calendars, events: r.events, matched: r.matched, byName: r.byName, added: r.added, updated: r.updated, affinity: r.affinity, removed: r.removed, complete: r.complete };
+    const counts = { people: r.people, skipped: r.skipped.length, calendars: r.calendars, events: r.events, matched: r.matched, byName: r.byName, guests: r.guests, guestsKnown: r.guestsKnown, externalEvents: r.externalEvents, unmatchedExternal: r.unmatchedExternal, added: r.added, updated: r.updated, affinity: r.affinity, removed: r.removed, complete: r.complete };
     await appendAudit({ actorId: actor, action: 'calendar.read', subjectType: 'source', detail: { ...counts, skippedWhy: r.skipped.map((s) => s.why) } }, db);
     await finishRun(run, { status: 'ok', requests: 0, records: r.events, newRecords: r.added,
-      note: `${r.people} people's calendars (${r.calendars} calendars${r.skipped.length ? `, ${r.skipped.length} people not read${noKey ? `, ${noKey} with no key` : ''}` : ''}) · ${r.events} meetings, ${r.matched} with an LP (${r.byName} by name only) · ${r.added} new, ${r.updated} kept, ${r.affinity} already Affinity's, ${r.removed} removed${r.complete ? '' : ' · not every calendar was read whole, so none was removed for being gone'}`,
+      note: `${r.people} people's calendars (${r.calendars} calendars${r.skipped.length ? `, ${r.skipped.length} people not read${noKey ? `, ${noKey} with no key` : ''}` : ''}) · ${r.events} meetings, ${r.matched} with an LP (${r.byName} by name only), ${r.unmatchedExternal} of ${r.externalEvents} with an outside guest unmatched · ${r.guestsKnown} of ${r.guests} outside guests known · ${r.added} new, ${r.updated} kept, ${r.affinity} already Affinity's, ${r.removed} removed${r.complete ? '' : ' · not every calendar was read whole, so none was removed for being gone'}`,
       detail: counts });
     return r;
   } catch (e) {
