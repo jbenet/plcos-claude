@@ -23,7 +23,10 @@ export async function enrichmentStrategyProperties(check: Check) {
     // The kind named first, not the first in a fixed order; "angel/seed" is counted (N81's readers).
     const firstNamed = cap.sizeReading('By size: a multi-family office with $4.2B under advice')?.kind === 'wealth_manager'
       && cap.sizeReading('By size: an adviser to family foundations, $3B')?.kind === 'wealth_manager'
-      && cap.floorHolds('Floor: 60 angel/seed investments on record');
+      && cap.floorHolds('Floor: 60 angel/seed investments on record')
+      // Comma-grouped figures read whole (W1 search pass, 13 Oct: "$2,780,000,000" read as $2,780).
+      && cap.parseUsd('$2,780,000,000') === 2.78e9 && cap.parseUsd('$1,250 million') === 1.25e9 && cap.parseUsd('$1,5 bn') === 1.5e9
+      && cap.parseUsd('$4.2 billion') === 4.2e9;
     const bySize = flags('$1–5M', 'By size: a wealth manager with $4.2 billion under management, per its ADV');
     const offTable = flags('$5–25M', 'By size: a wealth manager with $4.2 billion under management, per its ADV');
     const floor = flags('$100K+ (floor)', 'Floor: 12 angel checks on record, sizes unknown');
