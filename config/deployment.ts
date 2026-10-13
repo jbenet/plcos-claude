@@ -390,6 +390,8 @@ export const config = {
     domains: [
       { match: ['netho'], label: 'neurotech', terms: ['neuro*', 'brain', 'bci', 'brain-computer', 'connectom*', 'whole-brain', 'neuromodulation'] },
       { match: ['prime intellect'], label: 'AI and compute', terms: ['artificial intelligence', 'ai', 'machine learning', 'llm*', 'gpu*', 'compute', 'deep learning'] },
+      // Gordian Bio: in vivo pooled screening of gene therapies for target discovery (obesity, ageing diseases). 13 Oct 2026.
+      { match: ['gordian'], label: 'biotech', terms: ['biotech*', 'life science*', 'biopharma*', 'pharma*', 'therapeutic*', 'drug discovery', 'drug development', 'target discovery', 'gene therap*', 'genomic*', 'genetic medicine*', 'in vivo', 'single-cell', 'functional genomics', 'longevity', 'aging', 'ageing', 'geroscience', 'obesity', 'metabolic disease*', 'biology'] },
       { match: ['persona'], label: 'robotics', terms: ['robot*', 'humanoid*', 'automation', 'manufactur*'] },
       // Demo: SPV — Cortex is an invented neurotech company.
       { match: ['cortex'], label: 'neurotech', terms: ['neuro*', 'brain', 'bci', 'brain-computer', 'neuromodulation'] },
