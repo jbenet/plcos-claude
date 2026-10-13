@@ -4,7 +4,7 @@ import { can } from '@/lib/authz';
 import { getDb } from '@/lib/db';
 import { lastCalendarRead, listCandidates, reasonText, recentAdds, type CandidateGuest, type CandidateRow } from '@/lib/calendar-candidates';
 import { shortDate } from '@/lib/time';
-import { CandidateActions, UndoAdd } from './PossibleLpActions';
+import { CandidateActions, Notice, UndoAdd } from './PossibleLpActions';
 import s from './possible-lps.module.css';
 
 /**
@@ -69,6 +69,7 @@ export async function PossibleLps({ vehicle, vehicles }: {
           {read.failed && <> · <span className="stat waiting"><i />Latest read failed</span></>}
         </span>
       </div>
+      <Notice />
 
       {!read.at ? (
         <div className="cbody"><div className="empty">

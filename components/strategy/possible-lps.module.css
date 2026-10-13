@@ -15,6 +15,7 @@
 .confirm { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--ink) }
 .ok { font-size: 12px; color: var(--green); line-height: 1.5 }
 .err { font-size: 12px; color: var(--clay); line-height: 1.5 }
+.notice { padding: 9px 15px; border-bottom: 1px solid var(--line) }
 .undo { display: inline-flex; gap: 8px; align-items: center; margin-left: 8px }
 .recent { padding: 10px 15px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted) }
 .recent li { margin: 4px 0 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { addCandidateAction, dismissCandidateAction, researchCandidateAction, undoCandidateAddAction, type CandidateActionResult } from '@/app/targets/calendar-candidate-actions';
 import { actionFailure, withDeadline } from '@/lib/client/action-failure';
@@ -15,6 +15,22 @@ import s from './possible-lps.module.css';
 
 type Busy = null | 'add' | 'dismiss' | 'research' | 'undo';
 
+/**
+ * A receipt that refreshes the list removes the row that asked for it, and with it the row's own message; such a
+ * receipt is said once at the top of the section instead (Notice), so an add, a set-aside or an undo is never silent.
+ */
+const NOTICE = 'possible-lps:notice';
+
+export function Notice() {
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setText((e as CustomEvent<string>).detail);
+    window.addEventListener(NOTICE, on);
+    return () => window.removeEventListener(NOTICE, on);
+  }, []);
+  return text ? <div role="status" className={`${s.notice} ${s.ok}`}>{text}</div> : null;
+}
+
 function useRun() {
   const router = useRouter();
   const [busy, setBusy] = useState<Busy>(null);
@@ -24,8 +40,10 @@ function useRun() {
     setSaid(null);
     try {
       const r = await withDeadline(call());
-      setSaid(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.error });
-      if (r.ok && refresh) router.refresh();
+      if (r.ok && refresh) {
+        window.dispatchEvent(new CustomEvent(NOTICE, { detail: r.message }));
+        router.refresh();
+      } else setSaid(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.error });
     } catch (e) {
       setSaid({ ok: false, text: actionFailure(e, 'The server did not answer. Nothing is known to have changed; reload the page to see.') });
     } finally {
