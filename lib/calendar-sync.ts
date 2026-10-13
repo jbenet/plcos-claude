@@ -382,14 +382,15 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
       for (const entity of [...entities].sort()) {
         const ref = `event:${k}:${entity}`;
         if (unmatched.has(ref)) continue;
-        if (affinity.has(`${entity}|${m.day}`)) { r.affinity++; twins.add(k); continue; }
+        if (affinity.has(`${entity}|${m.day}`)) { r.affinity++; twins.add(ref); continue; }
         rows.push({ entity_id: entity, held_on: m.future ? null : m.day, scheduled_for: m.scheduledFor, owner_id: m.owner, attendees: m.attendees,
           ref, about: m.about, about_vehicles: m.aboutVehicles, about_basis: m.aboutBasis, group_size: m.groupSize,
           summary: byName ? (via.get(entity) === 'affiliate' ? MATCHED_BY_AFFILIATE : MATCHED_BY_NAME) : null });
       }
     }
 
-    // A possible LP needs a reason: investor data on record for the firm or a guest, or the invite's wording.
+    // Every unmatched outside group is a possible LP; its reasons: investor data on record for the firm or a guest, the
+    // invite's wording, or (weak) only that it is an outside firm or a person we hold.
     const investors = await investorFields([...new Set([...proposals.values()].flatMap((g) => [...(g.entityId ? [g.entityId] : []), ...g.persons]))], db);
     const proposed: Candidate[] = [];
     for (const g of [...proposals.values()].sort((a, b) => a.key.localeCompare(b.key))) {
@@ -399,7 +400,7 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
         ...[...g.words].sort().map((keyword) => ({ kind: 'wording' as const, keyword })),
         ...[...g.vehicles].sort().map((vehicle) => ({ kind: 'vehicle' as const, vehicle })),
       ];
-      if (!reasons.length) continue;
+      if (!reasons.length) reasons.push({ kind: 'outside', held: !!g.entityId });
       proposed.push({ key: g.key, entityId: g.entityId, domain: g.domain, held: g.held, reasons,
         meetings: [...g.meetings.values()].sort((a, b) => a.day.localeCompare(b.day) || a.k.localeCompare(b.k)),
         guests: [...g.guests.values()].sort((a, b) => a.domain.localeCompare(b.domain) || String(a.held).localeCompare(String(b.held))) });
@@ -423,10 +424,10 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
       }
       // Gone: cancelled, now Affinity's, and — only when every calendar was read whole — no longer in any.
       const gone = await tx.query<{ n: number }>(`with d as (delete from meetings.meeting
-          where source = 'calendar' and (split_part(source_ref, ':', 2) = any($1::text[]) or source_ref = any($6::text[])
+          where source = 'calendar' and (split_part(source_ref, ':', 2) = any($1::text[]) or source_ref = any($6::text[]) or source_ref = any($7::text[])
              or ($2 and coalesce(held_on, scheduled_for::date) between $3::date and $4::date and not (source_ref = any($5::text[]))))
           returning 1) select count(*)::int n from d`,
-        [[...cancelled, ...twins], r.complete, r.window.from, r.window.to, rows.map((x) => x.ref as string), [...unmatched]]);
+        [[...cancelled], r.complete, r.window.from, r.window.to, rows.map((x) => x.ref as string), [...unmatched], [...twins]]);
       r.removed = gone[0]?.n ?? 0;
       await storeCandidates(tx, proposed, r.complete);
     });

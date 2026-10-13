@@ -334,9 +334,11 @@ arrives in its v0.9 (DESIGN §5.8, §6.1).
 - **Possible LPs** (13 Oct 2026; Juan: "look through calendars and figure out which may be LPs based on external
   addrs, what the invite says, or who the external addrs are"; `lib/calendar-candidates.ts`). A meeting with an outside
   guest that no LP matched is proposed on Pipeline → New, grouped by the firm we hold for the guest (their firm, or the
-  firm at their domain), the person when they have none, or else the domain, when there is a reason: investor data on
+  firm at their domain), the person when they have none, or else the domain, with its reasons: investor data on
   record for the firm or a guest (investor type, AUM, check size; never Dakota's), or the invite's wording (fund, LP,
-  investment, allocation …, a GUESS list) or one of our vehicles named. Left out: Protocol Labs, the team, portfolio
+  investment, allocation …, a GUESS list) or one of our vehicles named. With none of those, the weak reason "outside
+  firm, not on file" (13 Oct 2026: 2 of 59 unmatched meetings was too strict); strong reasons are listed first, and
+  Juan sets the rest aside with **Not an LP**. Left out: Protocol Labs, the team, portfolio
   companies, app users, and a personal address we hold nobody for. Kept as `research.note` kind `calendar_candidate`:
   the meetings as above, each guest's domain and whether we hold them, and the reasons by label; no title,
   description, address or outside name. Nothing is added without a click: **Add as LP prospect** opens a pursuit in

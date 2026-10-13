@@ -8,10 +8,11 @@ import { appendAudit } from '@/modules/platform';
  * The calendar read (lib/calendar-sync.ts) keeps only LP meetings. A meeting with an outside guest that no LP matched
  * leaves no touchpoint, but it may be a meeting with an LP we do not hold yet. Each read proposes those as possible LPs,
  * grouped by the outside firm (the guest's firm when we hold the guest, or the firm we hold at the guest's email domain)
- * or else by the domain itself, and only when there is a reason to think so:
+ * or else by the domain itself, with the reasons to think so, strongest first:
  *   - the firm, or the person when they have no firm, has investor data on record (investor type, AUM, check size);
  *   - a guest we hold has investor data on record;
- *   - the invite speaks of a fund, LPs, investing, an allocation … (a fixed word list), or names one of our vehicles.
+ *   - the invite speaks of a fund, LPs, investing, an allocation … (a fixed word list), or names one of our vehicles;
+ *   - else only that it is an outside firm or a person we hold (weak, listed last; Juan sets the rest aside as not an LP).
  * A reason names the word from the list or our vehicle's name, never the entry's own words. Nothing else is kept beyond
  * what §13 of docs/25 keeps for an LP meeting: the date, who on the team was there, what it is about; plus each guest's
  * email domain and whether we hold them. No title, description, address or outside name.
@@ -41,7 +42,11 @@ export type CandidateReason =
   | { kind: 'investor_data'; field: string }
   | { kind: 'known_investor'; field: string }
   | { kind: 'wording'; keyword: string }
-  | { kind: 'vehicle'; vehicle: string };
+  | { kind: 'vehicle'; vehicle: string }
+  /** The weak reason (Juan, 13 Oct 2026: 2 of 59 was too strict): an outside firm or person, nothing else said. */
+  | { kind: 'outside'; held: boolean };
+/** A reason beyond a bare outside meeting. Strong candidates are listed first. */
+export const strongReason = (r: CandidateReason) => r.kind !== 'outside';
 export interface CandidateGuest { domain: string; held: 'person' | 'org' | null }
 export interface Candidate {
   /** `entity:<uuid>` for a firm or person we hold, `domain:<domain>` otherwise. */
@@ -84,6 +89,7 @@ export function reasonText(r: CandidateReason): string {
     case 'known_investor': return `A guest is on record as an investor (${fieldLabel(r.field)})`;
     case 'wording': return `The invite speaks of “${r.keyword}”`;
     case 'vehicle': return `The invite names ${r.vehicle}`;
+    case 'outside': return r.held ? 'On file, nothing yet says they invest' : 'Outside firm, not on file';
   }
 }
 
@@ -137,7 +143,7 @@ export async function listCandidates(q: Queryable): Promise<CandidateRow[]> {
        and not exists (select 1 from research.note d where d.kind = 'calendar_not_lp' and d.data->>'key' = n.data->>'key')
        and not (n.entity_id is not null and exists (select 1 from strategy.active_pursuit p where identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id(n.entity_id)))`);
   return rows.map((r) => ({ ...r.data, name: r.name, entityType: r.type }))
-    .sort((a, b) => b.meetings.length - a.meetings.length || (b.meetings.at(-1)?.day ?? '').localeCompare(a.meetings.at(-1)?.day ?? '') || a.key.localeCompare(b.key));
+    .sort((a, b) => Number(b.reasons.some(strongReason)) - Number(a.reasons.some(strongReason)) || b.meetings.length - a.meetings.length || (b.meetings.at(-1)?.day ?? '').localeCompare(a.meetings.at(-1)?.day ?? '') || a.key.localeCompare(b.key));
 }
 
 async function candidateOf(q: Queryable, key: string): Promise<Candidate | null> {
