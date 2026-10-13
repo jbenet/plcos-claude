@@ -59,6 +59,7 @@ async function main() {
   await step('cloud-w1c', async () => (await import('./properties/cloud-w1c')).cloudW1cProperties(check));
   await step('sync-runs', async () => (await import('./properties/sync-runs')).syncRunsProperties(check));
   await step('sync-vehicles', async () => (await import('./properties/sync-vehicles')).syncVehiclesProperties(check));
+  await step('sync-screen', async () => (await import('./properties/sync-screen')).syncScreenProperties(check));
   await step('sync-retire', async () => (await import('./properties/sync-retire')).syncRetireProperties(check));
   await step('sync-feedback', async () => (await import('./properties/sync-feedback')).syncFeedbackProperties(check));
   await step('cloud-w1', async () => (await import('./properties/cloud-w1')).cloudW1Properties(check));

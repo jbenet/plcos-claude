@@ -81,3 +81,18 @@ no real-data reads/writes or external calls. Acceptance: idempotent additions, e
 pursuits preserved, ambiguous identities listed, normal page/export visibility. Deadline:
 this assigned task; budget: bounded implementation and one full validation pass, with
 targeted follow-up for failures. Escalation owner: Juan; integration owner: Claude.
+
+## Screening our records for a vehicle
+
+`POST /api/sync/screen` with an Admin token (`lib/sync/screen.ts`, 13 Oct 2026) finds people and firms already in
+our records whose research ties them to a vehicle's field, for a one-off such as a possible SPV:
+
+```json
+{ "vehicle": "spv-example", "terms": ["biotech*", "gene therap*"], "minScore": 4, "limit": 150, "add": false }
+```
+
+`terms` defaults to the vehicle's strategic field (`config.strategic.domains`). Without `add` it is a dry run
+answering counts by score, term, kind and relationship, never a name. With `add: true` the top `limit` at or over
+`minScore` go through `addProspects` above, pinned by entity id, status `new`, as the token's owner; then go
+through them on Selection with that vehicle chosen. Pursuits already on the vehicle and LPs passed everywhere are
+left out, so a rerun adds only new matches.
