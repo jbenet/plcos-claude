@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { syncCalendars, unmatchCalendarMeeting, type CalendarSyncResult } from '../../lib/calendar-sync';
 import { MATCHED_BY_AFFILIATE, MATCHED_BY_NAME } from '../../lib/calendar-match';
-import { addCandidate, CandidateRefused, dismissCandidate, listCandidates, researchCandidate, undoCandidateAdd } from '../../lib/calendar-candidates';
+import { addCandidate, CandidateRefused, dismissCandidate, listCandidates, researchCandidate, strongReason, undoCandidateAdd } from '../../lib/calendar-candidates';
 import { FAKE_BASE, fakeCalendar, fakeMintKey, fakeSetCalendar, readFake, type FakeEvent } from '../../lib/connectors/mailguard/fake';
 import { fakeTransport } from '../../lib/connectors/mailguard/fake';
 import { memoryStore } from '../../lib/connectors/mailguard/tokens';
@@ -222,17 +222,21 @@ export async function calendarProperties(check: Check) {
         && w.reasons.some((r) => r.kind === 'investor_data' && r.field === 'investor_type') && w.reasons.some((r) => r.kind === 'wording' && r.keyword === 'fund')
         && !!d && d.held === null && d.entityId === null && d.reasons.some((r) => r.kind === 'wording' && r.keyword === 'LP') && d.reasons.some((r) => r.kind === 'wording' && r.keyword === 'allocation')
         && !!j && j.held === 'person' && j.reasons.some((r) => r.kind === 'investor_data' && r.field === 'aum') && j.guests[0]?.domain === 'gmail.com' && j.guests[0]?.held === 'person'
-        && cRead.candidates === 3 && cands.length === 3,
+        && cands.length === cRead.candidates && cands.slice(0, 3).every((c) => c.reasons.some(strongReason)) && cands.filter((c) => c.reasons.some(strongReason)).length === 3,
       JSON.stringify({ candidates: cRead.candidates, keys: cands.map((c) => c.key.replace(wren, 'wren').replace(juno, 'juno')), wren: w && { meetings: w.meetings.map((m) => m.day), guests: w.guests, reasons: w.reasons } }));
-    check('Calendar: no possible LP for Protocol Labs, our team, a portfolio company, an unheld personal address or a guest with no reason to think so',
-      !cands.some((c) => /portco|gmail|protocol|vendor2/.test(c.key) || c.key === `entity:${portco}`),
+    check('Calendar: no possible LP for Protocol Labs, our team, a portfolio company or an unheld personal address',
+      !cands.some((c) => /portco|gmail|protocol/.test(c.key) || c.key === `entity:${portco}`),
       JSON.stringify(cands.map((c) => c.key)));
+    const vendor = byKey.get('domain:vendor2-invented.example');
+    check('Calendar: any other outside firm is a possible LP too, with only the weak reason, listed after every one with a strong reason',
+      !!vendor && vendor.reasons.length === 1 && vendor.reasons[0]!.kind === 'outside' && cands.findIndex((c) => !c.reasons.some(strongReason)) >= 3,
+      JSON.stringify(cands.map((c) => [c.key.replace(wren, 'wren').replace(juno, 'juno'), c.reasons.map((r) => r.kind)])));
     const stored = (await db.query<{ data: unknown; body: string }>(`select data, body from research.note where kind = 'calendar_candidate'`)).map((n) => JSON.stringify(n));
     check('Calendar: a possible LP keeps no title or description text, and no guest’s address or name',
-      stored.length === 3 && stored.every((n) => !/Secret|coffee|catch-up|intro|lunch|chat|@|\bana\b|\bben\b|juno\.invented|Wren Holdings|Juno Park/i.test(n)),
+      stored.length === cRead.candidates && stored.every((n) => !/Secret|coffee|catch-up|intro|lunch|chat|@|\bana\b|\bben\b|juno\.invented|Wren Holdings|Juno Park/i.test(n)),
       stored.map((n) => n.slice(0, 160)).join(' | '));
     const runNote = (await db.one<{ note: string }>(`select note from sources.sync_run where source = 'calendar' order by id desc limit 1`))!.note;
-    check('Calendar: the run note counts possible LPs, never a name or address', runNote.includes('3 possible LPs') && !/Wren|Juno|newfirm|invented/i.test(runNote), runNote);
+    check('Calendar: the run note counts possible LPs, never a name or address', runNote.includes(`${cRead.candidates} possible LPs`) && !/Wren|Juno|newfirm|invented/i.test(runNote), runNote);
 
     // "Not an LP" is remembered: the next read does not propose it again.
     let refusedNoName = false;
@@ -241,7 +245,7 @@ export async function calendarProperties(check: Check) {
     await dismissCandidate(db, juan.id, 'domain:newfirm-invented.example');
     const afterDismiss = await sync();
     check('Calendar: “Not an LP” is remembered across a re-read; a firm known only by its domain needs its name before it can be added',
-      refusedNoName && !(await listCandidates(db)).some((c) => c.key === 'domain:newfirm-invented.example') && afterDismiss.candidates === 2
+      refusedNoName && !(await listCandidates(db)).some((c) => c.key === 'domain:newfirm-invented.example') && afterDismiss.candidates === cRead.candidates - 1
         && !(await db.query(`select 1 from research.note where kind = 'calendar_candidate' and data->>'key' = 'domain:newfirm-invented.example'`)).length,
       JSON.stringify({ refusedNoName, candidates: afterDismiss.candidates }));
 
@@ -264,7 +268,7 @@ export async function calendarProperties(check: Check) {
     const again2 = await addCandidate(db, juan.id, { key: `entity:${wren}`, vehicleId, requestKey: 'props-cal-add-2' });
     const reread2 = await sync();
     check('Calendar: once added, the next read keeps its meetings as the firm’s and proposes it no more',
-      again2.created && (await wrenMeetings()).length === 2 && !(await listCandidates(db)).some((c) => c.key === `entity:${wren}`) && reread2.candidates === 1,
+      again2.created && (await wrenMeetings()).length === 2 && !(await listCandidates(db)).some((c) => c.key === `entity:${wren}`) && reread2.candidates === cRead.candidates - 2,
       JSON.stringify({ meetings: (await wrenMeetings()).length, candidates: reread2.candidates }));
     const research = await researchCandidate(db, juan.id, `entity:${juno}`, 'props-cal-research');
     const researchAgain = await researchCandidate(db, juan.id, `entity:${juno}`, 'props-cal-research-2');
@@ -274,6 +278,14 @@ export async function calendarProperties(check: Check) {
     check('Calendar: “Research” asks once for the profile workflow by public name, starts nothing, and is refused for a domain we hold no name for',
       research.created && !researchAgain.created && req.length === 1 && req[0]!.data.workflow === 'research' && req[0]!.data.execution === 'not_started' && req[0]!.data.publicNameOnly && refusedDomain,
       JSON.stringify({ research, again: researchAgain, requests: req.length, refusedDomain }));
+
+    // A meeting that is Affinity's for one LP and new for another keeps the new one: a second read adds and removes nothing.
+    await fakeCalendar(dir, juan.email, { id: 'primary' }, [ev('both1', '2026-09-04T17:00:00Z', [juan.email, 'otto@invented-cal.example', 'lena@invented-cal.example'])]);
+    const firstRead = await sync(), second = await sync();
+    const both = await db.query<{ entity: string }>(`select entity_id::text entity from meetings.meeting where source = 'calendar' and held_on = '2026-09-04'`);
+    check('Calendar: a read with no calendar change adds and removes nothing, even for a meeting that is already Affinity’s for one of its LPs',
+      firstRead.affinity >= 1 && both.length === 2 && both.every((x) => x.entity === lena || x.entity === firm) && second.added === 0 && second.removed === 0,
+      JSON.stringify({ first: [firstRead.added, firstRead.removed, firstRead.affinity], second: [second.added, second.removed], rows: both.length }));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
