@@ -5,7 +5,8 @@ import type { CalendarEvent, MailguardClient } from '@/lib/connectors/mailguard/
 import type { Db, Queryable } from '@/lib/db';
 import type { ImportProgress } from '@/lib/import-jobs/types';
 import { appendAudit } from '@/modules/platform';
-import { MATCHED_BY_NAME } from '@/lib/calendar-match';
+import { MATCHED_BY_AFFILIATE, MATCHED_BY_NAME } from '@/lib/calendar-match';
+import { dismissedKeys, investorFields, notLpEntities, storeCandidates, wordingOf, type Candidate, type CandidateMeeting, type CandidateReason } from '@/lib/calendar-candidates';
 import { finishRun, startRun } from '@/modules/sources';
 
 /**
@@ -45,6 +46,10 @@ export interface CalendarSyncResult {
   /** LP meetings: an outside guest matched an LP by address or firm domain, or (byName) the entry named one. */
   matched: number;
   byName: number;
+  /** Of those by name, matched only through the name of someone at an LP firm (the firm's, not theirs). */
+  byAffiliate: number;
+  /** Possible LPs proposed (lib/calendar-candidates.ts): groups of unmatched meetings with a reason to think so. */
+  candidates: number;
   /** Coverage: distinct outside guests, those known by address or firm domain, meetings with an outside guest, and those no LP matched. */
   guests: number;
   guestsKnown: number;
@@ -108,8 +113,8 @@ const AFFINITY_PERSON_EMAILS = `
        and not exists (select 1 from sources.raw_record n where n.source = 'affinity' and n.kind = 'person' and n.source_id = r.source_id
                           and (n.fetched_at, n.id) > (r.fetched_at, r.id))`;
 
-/** The LP firms holding each of these email domains: a firm's own email-domain or email claims or Affinity domains, or its current people's emails (claims or Affinity's). */
-async function firmsByDomain(domains: string[], lps: Set<string>, q: Queryable): Promise<Map<string, string[]>> {
+/** The firms holding each of these email domains: a firm's own email-domain or email claims or Affinity domains, or its current people's emails (claims or Affinity's). Only LP firms when `lps` is given. */
+async function firmsByDomain(domains: string[], lps: Set<string> | null, q: Queryable): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>();
   if (!domains.length) return out;
   const rows = await q.query<{ d: string; id: string }>(`select lower(regexp_replace(trim(c.value), '^.*@', '')) d, identity.canonical_entity_id(c.entity_id)::text id
@@ -135,7 +140,7 @@ async function firmsByDomain(domains: string[], lps: Set<string>, q: Queryable):
                           union select jsonb_array_elements_text(case when jsonb_typeof(r.payload->'entity'->'domains') = 'array' then r.payload->'entity'->'domains' else '[]'::jsonb end)) d
       join identity.source_record s on s.source = 'affinity' and s.source_id = 'company:' || (r.payload->'entity'->>'id')
      where r.source = 'affinity' and r.kind = 'list_entry' and r.payload->>'type' = 'company' and lower(trim(d.v)) = any($1::text[])`, [domains]);
-  for (const r of rows) if (lps.has(r.id)) out.set(r.d, [...new Set([...(out.get(r.d) ?? []), r.id])].sort());
+  for (const r of rows) if (!lps || lps.has(r.id)) out.set(r.d, [...new Set([...(out.get(r.d) ?? []), r.id])].sort());
   return out;
 }
 
@@ -191,7 +196,7 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
   if (rt.mode === 'off') return { off: rt.why };
   const now = o.now ?? new Date();
   const from = new Date(now.getTime() - CALENDAR_WINDOW.pastDays * DAY), to = new Date(now.getTime() + CALENDAR_WINDOW.futureDays * DAY);
-  const r: CalendarSyncResult = { people: 0, skipped: [], calendars: 0, events: 0, matched: 0, byName: 0, guests: 0, guestsKnown: 0, externalEvents: 0, unmatchedExternal: 0, added: 0, updated: 0, affinity: 0, removed: 0, complete: true,
+  const r: CalendarSyncResult = { people: 0, skipped: [], calendars: 0, events: 0, matched: 0, byName: 0, byAffiliate: 0, candidates: 0, guests: 0, guestsKnown: 0, externalEvents: 0, unmatchedExternal: 0, added: 0, updated: 0, affinity: 0, removed: 0, complete: true,
     window: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) } };
   const run = await startRun('calendar', 'read', actor);
   try {
@@ -261,18 +266,87 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
     const outsiders = [...new Set(candidates.flat())];
     const parties = await partiesOf(outsiders, db);
     const { lps, contactOf } = await lpUniverse(db);
-    const byDomain = await firmsByDomain([...new Set(outsiders.filter((a) => !parties.has(a)).map(domainOf).filter((d) => !PUBLIC_MAIL.has(d)))], lps, db);
+    // Every firm we hold at an outside guest's domain (for possible LPs), and of those the LP firms (to match by domain).
+    const orgsAt = await firmsByDomain([...new Set(outsiders.map(domainOf).filter((d) => !PUBLIC_MAIL.has(d)))], null, db);
+    const unheldDomains = new Set(outsiders.filter((a) => !parties.has(a)).map(domainOf));
+    const byDomain = new Map([...orgsAt].filter(([d]) => unheldDomains.has(d)).map(([d, ids]) => [d, ids.filter((id) => lps.has(id))] as const).filter(([, ids]) => ids.length));
     r.guests = outsiders.length;
     r.guestsKnown = outsiders.filter((a) => parties.has(a) || byDomain.has(domainOf(a))).length;
     const unmatched = new Set((await db.query<{ ref: string }>(`select data->>'ref' ref from research.note where kind = 'calendar_unmatch' and entity_id is null`)).map((r) => r.ref));
-    let names: Array<{ id: string; re: RegExp }> | null = null;
-    const lpNames = async () => names ??= (await db.query<{ id: string; name: string; type: string }>(
-      `select identity.canonical_entity_id(entity_id)::text id, display_name name, entity_type::text type from identity.entity where entity_id = identity.canonical_entity_id(entity_id) and entity_id = any($1::uuid[])`,
-      [[...lps]])).filter((n) => nameWorthy(n.name, n.type)).map((n) => ({ id: n.id, re: nameRe(n.name) }));
+    // An LP's or firm's own name, or (Juan, 13 Oct 2026: "could use firm name, or person at firm") the name of someone
+    // currently at an LP firm, which makes it the firm's. Never a name of someone on the team or using this app.
+    const teamNames = new Set([...[...team.values()].map((t) => t.name), ...users.map((u) => u.name)].map((n) => n.trim().toLowerCase()));
+    let names: Array<{ id: string; re: RegExp; via: 'name' | 'affiliate' }> | null = null;
+    const lpNames = async () => names ??= [
+      ...(await db.query<{ id: string; name: string; type: string }>(
+        `select identity.canonical_entity_id(entity_id)::text id, display_name name, entity_type::text type from identity.entity where entity_id = identity.canonical_entity_id(entity_id) and entity_id = any($1::uuid[])`,
+        [[...lps]])).filter((n) => nameWorthy(n.name, n.type)).map((n) => ({ id: n.id, re: nameRe(n.name), via: 'name' as const })),
+      ...(await db.query<{ id: string; name: string }>(`select distinct identity.canonical_entity_id(a.org_entity)::text id, p.display_name name
+          from identity.affiliation a join identity.entity p on p.entity_id = identity.canonical_entity_id(a.person_entity) and p.entity_type = 'person'
+         where a.ended_on is null and identity.canonical_entity_id(a.org_entity) = any($1::uuid[])
+           and not exists (select 1 from identity.source_record s where s.source = 'app_user' and identity.canonical_entity_id(s.entity_id) = p.entity_id)`, [[...lps]]))
+        .filter((n) => lps.has(n.id) && nameWorthy(n.name, 'person') && !teamNames.has(n.name.trim().toLowerCase()))
+        .map((n) => ({ id: n.id, re: nameRe(n.name), via: 'affiliate' as const })),
+    ];
     const vehicles = await db.query<AboutVehicle>(`select slug, name, coalesce(aliases, '{}') aliases from platform.vehicle`);
     const affinity = new Set((await db.query<{ k: string }>(`select identity.canonical_entity_id(entity_id)::text || '|' || coalesce(held_on, scheduled_for::date)::text k
         from meetings.meeting where source <> 'calendar' and source <> 'us' and channel in ('meeting', 'call')
          and coalesce(held_on, scheduled_for::date) between $1::date and $2::date`, [r.window.from, r.window.to])).map((x) => x.k));
+
+    /** What §13 keeps of a meeting: the date, the team on it (by name), its owner and what it is about. */
+    const meetingOf = (k: string, e: CalendarEvent, holders: Set<string>, groupSize: number): CandidateMeeting & { future: boolean; start: Date } => {
+      const start = startOf(e)!;
+      const day = e.start.date ?? start.toISOString().slice(0, 10);
+      const future = start.getTime() > now.getTime();
+      const inTeam = [e.organizer?.email, ...e.attendees.map((a) => a.email)].map((a) => (a ? team.get(a.toLowerCase()) : undefined)).filter((t): t is { email: string; id: string; name: string } => !!t);
+      const organizer = e.organizer?.email ? team.get(e.organizer.email.toLowerCase())?.id : undefined;
+      const owner = organizer ?? [...holders][0]!;
+      const attendees = [...new Set([...inTeam.map((t) => t.name), ...[...holders].map((h) => nameOf.get(h)!)])].sort();
+      const about = aboutRaise(`${e.summary} ${e.description ?? ''}`, [e.organizer?.email, ...e.attendees.map((a) => a.email)], vehicles, []);
+      return { k, day, scheduledFor: future ? start.toISOString() : null, owner, attendees, about: about.about, aboutVehicles: about.vehicles, aboutBasis: about.basis, groupSize, future, start };
+    };
+
+    // Possible LPs (lib/calendar-candidates.ts): an unmatched meeting's outside guests, grouped by the firm we hold for
+    // them (their firm, or the one at their domain), the person when they have none, or else their domain. Never a
+    // portfolio company, someone using this app, a personal address we hold nobody for, or a group set aside as not an LP.
+    const notLp = await notLpEntities(db);
+    const dismissed = await dismissedKeys(db);
+    type Group = { key: string; entityId: string | null; domain: string | null; held: 'person' | 'org' | null; persons: Set<string>;
+      meetings: Map<string, CandidateMeeting>; guests: Map<string, { domain: string; held: 'person' | 'org' | null }>; words: Set<string>; vehicles: Set<string> };
+    const proposals = new Map<string, Group>();
+    const propose = (k: string, e: CalendarEvent, holders: Set<string>, outside: string[]) => {
+      const touched = new Set<Group>();
+      for (const a of outside) {
+        const d = domainOf(a), p = parties.get(a);
+        let entityId: string | null = null, held: Group['held'] = null, guestHeld: Group['held'] = null;
+        if (p) {
+          if (notLp.has(p.person) || p.firms.some((f) => notLp.has(f))) continue;
+          entityId = p.firms[0] ?? p.person; held = p.firms[0] ? 'org' : 'person'; guestHeld = 'person';
+        } else {
+          if (PUBLIC_MAIL.has(d)) continue;
+          const orgs = orgsAt.get(d) ?? [];
+          if (orgs.some((o) => notLp.has(o))) continue;
+          if (orgs[0]) { entityId = orgs[0]; held = 'org'; guestHeld = 'org'; }
+        }
+        const key = entityId ? `entity:${entityId}` : `domain:${d}`;
+        if (dismissed.has(key)) continue;
+        const g = proposals.get(key) ?? { key, entityId, domain: entityId ? null : d, held, persons: new Set<string>(), meetings: new Map(), guests: new Map(), words: new Set<string>(), vehicles: new Set<string>() };
+        proposals.set(key, g);
+        if (p) g.persons.add(p.person);
+        g.guests.set(a, { domain: d, held: guestHeld });
+        touched.add(g);
+      }
+      if (!touched.size) return;
+      const text = `${e.summary} ${e.description ?? ''}`;
+      const words = wordingOf(text);
+      const named = vehicles.filter((v) => [v.name, ...v.aliases].some((x) => x.trim().length >= 3 && nameRe(x).test(text))).map((v) => v.name);
+      const { future: _f, start: _s, ...m } = meetingOf(k, e, holders, touched.size);
+      for (const g of touched) {
+        g.meetings.set(k, m);
+        words.forEach((w) => g.words.add(w));
+        named.forEach((v) => g.vehicles.add(v));
+      }
+    };
 
     const rows: Array<Record<string, unknown>> = [];
     const twins = new Set<string>();
@@ -294,32 +368,43 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
         } else for (const f of byDomain.get(domainOf(a)) ?? []) { entities.add(f); groups.add(f); }
       }
       let byName = false;
+      const via = new Map<string, 'name' | 'affiliate'>();
       if (!entities.size) {
         const text = `${e.summary} ${e.description ?? ''}`;
-        for (const n of await lpNames()) if (n.re.test(text)) { entities.add(n.id); groups.add(n.id); }
+        for (const n of await lpNames()) if (n.re.test(text)) { entities.add(n.id); groups.add(n.id); if (via.get(n.id) !== 'name') via.set(n.id, n.via); }
         byName = entities.size > 0;
       }
-      if (!entities.size) { r.unmatchedExternal++; continue; }
+      if (!entities.size) { r.unmatchedExternal++; propose(k, e, holders, outside); continue; }
       r.matched++;
-      if (byName) r.byName++;
-      const start = startOf(e)!;
-      const day = e.start.date ?? start.toISOString().slice(0, 10);
-      const future = start.getTime() > now.getTime();
-      const inTeam = [e.organizer?.email, ...e.attendees.map((a) => a.email)].map((a) => (a ? team.get(a.toLowerCase()) : undefined)).filter((t): t is { email: string; id: string; name: string } => !!t);
-      const organizer = e.organizer?.email ? team.get(e.organizer.email.toLowerCase())?.id : undefined;
-      const owner = organizer ?? [...holders][0]!;
-      const attendees = [...new Set([...inTeam.map((t) => t.name), ...[...holders].map((h) => nameOf.get(h)!)])].sort();
+      if (byName) { r.byName++; if ([...via.values()].every((x) => x === 'affiliate')) r.byAffiliate++; }
       // Parties, as Affinity counts them (N81): a firm, or a person with none. Four or more is an event.
-      const groupSize = Math.max(1, groups.size);
-      const about = aboutRaise(`${e.summary} ${e.description ?? ''}`, [e.organizer?.email, ...e.attendees.map((a) => a.email)], vehicles, []);
+      const m = meetingOf(k, e, holders, Math.max(1, groups.size));
       for (const entity of [...entities].sort()) {
         const ref = `event:${k}:${entity}`;
         if (unmatched.has(ref)) continue;
-        if (affinity.has(`${entity}|${day}`)) { r.affinity++; twins.add(k); continue; }
-        rows.push({ entity_id: entity, held_on: future ? null : day, scheduled_for: future ? start.toISOString() : null, owner_id: owner, attendees,
-          ref, about: about.about, about_vehicles: about.vehicles, about_basis: about.basis, group_size: groupSize, summary: byName ? MATCHED_BY_NAME : null });
+        if (affinity.has(`${entity}|${m.day}`)) { r.affinity++; twins.add(k); continue; }
+        rows.push({ entity_id: entity, held_on: m.future ? null : m.day, scheduled_for: m.scheduledFor, owner_id: m.owner, attendees: m.attendees,
+          ref, about: m.about, about_vehicles: m.aboutVehicles, about_basis: m.aboutBasis, group_size: m.groupSize,
+          summary: byName ? (via.get(entity) === 'affiliate' ? MATCHED_BY_AFFILIATE : MATCHED_BY_NAME) : null });
       }
     }
+
+    // A possible LP needs a reason: investor data on record for the firm or a guest, or the invite's wording.
+    const investors = await investorFields([...new Set([...proposals.values()].flatMap((g) => [...(g.entityId ? [g.entityId] : []), ...g.persons]))], db);
+    const proposed: Candidate[] = [];
+    for (const g of [...proposals.values()].sort((a, b) => a.key.localeCompare(b.key))) {
+      const reasons: CandidateReason[] = [
+        ...(g.entityId ? investors.get(g.entityId) ?? [] : []).map((field) => ({ kind: 'investor_data' as const, field })),
+        ...[...new Set([...g.persons].filter((p) => p !== g.entityId).flatMap((p) => investors.get(p) ?? []))].sort().map((field) => ({ kind: 'known_investor' as const, field })),
+        ...[...g.words].sort().map((keyword) => ({ kind: 'wording' as const, keyword })),
+        ...[...g.vehicles].sort().map((vehicle) => ({ kind: 'vehicle' as const, vehicle })),
+      ];
+      if (!reasons.length) continue;
+      proposed.push({ key: g.key, entityId: g.entityId, domain: g.domain, held: g.held, reasons,
+        meetings: [...g.meetings.values()].sort((a, b) => a.day.localeCompare(b.day) || a.k.localeCompare(b.k)),
+        guests: [...g.guests.values()].sort((a, b) => a.domain.localeCompare(b.domain) || String(a.held).localeCompare(String(b.held))) });
+    }
+    r.candidates = proposed.length;
 
     await o.progress?.('Writing meetings', users.length + 1, users.length + 1);
     await db.transaction(async (tx) => {
@@ -343,14 +428,15 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
           returning 1) select count(*)::int n from d`,
         [[...cancelled, ...twins], r.complete, r.window.from, r.window.to, rows.map((x) => x.ref as string), [...unmatched]]);
       r.removed = gone[0]?.n ?? 0;
+      await storeCandidates(tx, proposed, r.complete);
     });
     if (r.added || r.removed) await (await import('@/lib/reconcile')).reconcile(actor);
 
     const noKey = r.skipped.filter((s) => s.why === NO_KEY).length;
-    const counts = { people: r.people, skipped: r.skipped.length, calendars: r.calendars, events: r.events, matched: r.matched, byName: r.byName, guests: r.guests, guestsKnown: r.guestsKnown, externalEvents: r.externalEvents, unmatchedExternal: r.unmatchedExternal, added: r.added, updated: r.updated, affinity: r.affinity, removed: r.removed, complete: r.complete };
+    const counts = { people: r.people, skipped: r.skipped.length, calendars: r.calendars, events: r.events, matched: r.matched, byName: r.byName, byAffiliate: r.byAffiliate, candidates: r.candidates, guests: r.guests, guestsKnown: r.guestsKnown, externalEvents: r.externalEvents, unmatchedExternal: r.unmatchedExternal, added: r.added, updated: r.updated, affinity: r.affinity, removed: r.removed, complete: r.complete };
     await appendAudit({ actorId: actor, action: 'calendar.read', subjectType: 'source', detail: { ...counts, skippedWhy: r.skipped.map((s) => s.why) } }, db);
     await finishRun(run, { status: 'ok', requests: 0, records: r.events, newRecords: r.added,
-      note: `${r.people} people's calendars (${r.calendars} calendars${r.skipped.length ? `, ${r.skipped.length} people not read${noKey ? `, ${noKey} with no key` : ''}` : ''}) · ${r.events} meetings, ${r.matched} with an LP (${r.byName} by name only), ${r.unmatchedExternal} of ${r.externalEvents} with an outside guest unmatched · ${r.guestsKnown} of ${r.guests} outside guests known · ${r.added} new, ${r.updated} kept, ${r.affinity} already Affinity's, ${r.removed} removed${r.complete ? '' : ' · not every calendar was read whole, so none was removed for being gone'}`,
+      note: `${r.people} people's calendars (${r.calendars} calendars${r.skipped.length ? `, ${r.skipped.length} people not read${noKey ? `, ${noKey} with no key` : ''}` : ''}) · ${r.events} meetings, ${r.matched} with an LP (${r.byName} by name only, ${r.byAffiliate} of them by someone at the firm), ${r.unmatchedExternal} of ${r.externalEvents} with an outside guest unmatched, ${r.candidates} possible LPs · ${r.guestsKnown} of ${r.guests} outside guests known · ${r.added} new, ${r.updated} kept, ${r.affinity} already Affinity's, ${r.removed} removed${r.complete ? '' : ' · not every calendar was read whole, so none was removed for being gone'}`,
       detail: counts });
     return r;
   } catch (e) {

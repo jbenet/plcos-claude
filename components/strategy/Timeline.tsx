@@ -8,7 +8,7 @@ import type { NoteView } from '@/lib/connectors/affinity/notes';
 import { WHAT_LABEL, type What } from '@/lib/connectors/affinity/readings';
 import { decideReadingAction, retractRungAction } from '@/app/targets/actions';
 import { unmatchCalendarMeetingAction } from '@/app/settings/calendar-actions';
-import { MATCHED_BY_NAME } from '@/lib/calendar-match';
+import { isNameMatch } from '@/lib/calendar-match';
 import { interactionRef, noteRef } from '@/lib/connectors/affinity/event-tags';
 import { Glyph, type GlyphName } from '@/components/ui/Glyph';
 import { refOf, type RungRecord } from '@/lib/reconcile';
@@ -276,7 +276,7 @@ function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate,
           <div className="t"><span className="muted">{t.summary ?? who}</span></div>
         )}
         {c?.text && <div className="p2" style={{ marginTop: 3 }}>{who}</div>}
-        {t.source === 'calendar' && t.summary === MATCHED_BY_NAME && t.sourceRef && (
+        {t.source === 'calendar' && isNameMatch(t.summary) && t.sourceRef && (
           <form action={unmatchCalendarMeetingAction} style={{ marginTop: 4 }}>
             <input type="hidden" name="ref" value={t.sourceRef} />
             <span className="muted" style={{ fontSize: 12 }}>{who} · </span>

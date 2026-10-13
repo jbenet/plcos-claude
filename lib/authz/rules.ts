@@ -70,6 +70,12 @@ export const actionRules = {
   'app/settings/calendar-actions.ts#relabelCalendarEntryAction': { action: 'mutate', scope: 'global' },
   // "Not this LP" on a calendar meeting matched to an LP (by name): removed, and never matched again.
   'app/settings/calendar-actions.ts#unmatchCalendarMeetingAction': { action: 'mutate', scope: 'global' },
+  // Possible LPs from the calendar, on Pipeline → New (lib/calendar-candidates.ts): add one to New for a vehicle, undo it,
+  // set one aside as not an LP (one list the whole team sees), or ask for research on it by public name.
+  'app/targets/calendar-candidate-actions.ts#addCandidateAction': { action: 'mutate', scope: 'vehicle' },
+  'app/targets/calendar-candidate-actions.ts#undoCandidateAddAction': { action: 'mutate', scope: 'pursuit' },
+  'app/targets/calendar-candidate-actions.ts#dismissCandidateAction': { action: 'mutate', scope: 'global' },
+  'app/targets/calendar-candidate-actions.ts#researchCandidateAction': { action: 'mutate', scope: 'global' },
   // MCP tokens (docs/26): a person's own; the service revokes only the caller's.
   // Settings → Connections (docs/deploy/railway.md §3): Admin only; a refusal is audit-logged.
   'app/settings/connections/actions.ts#saveSettingAction': { action: 'admin', scope: 'global' },

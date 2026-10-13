@@ -328,6 +328,22 @@ arrives in its v0.9 (DESIGN §5.8, §6.1).
      with a **Not this LP** button on the LP's timeline. Undoing removes it and keeps a `research.note` of kind
      `calendar_unmatch` with only its reference, so no later read makes it again.
   Any other outside guest (a portfolio company, a vendor, a recruiter) leaves nothing.
+  Since 13 Oct 2026 (Juan: "could use firm name, or person at firm"), step 3 also reads the name of someone currently
+  at an LP firm (an affiliation with no end date; never someone on the team or using the app), which makes the meeting
+  the firm's, marked "Matched by name: the calendar entry names someone at this firm …", undone the same way.
+- **Possible LPs** (13 Oct 2026; Juan: "look through calendars and figure out which may be LPs based on external
+  addrs, what the invite says, or who the external addrs are"; `lib/calendar-candidates.ts`). A meeting with an outside
+  guest that no LP matched is proposed on Pipeline → New, grouped by the firm we hold for the guest (their firm, or the
+  firm at their domain), the person when they have none, or else the domain, when there is a reason: investor data on
+  record for the firm or a guest (investor type, AUM, check size; never Dakota's), or the invite's wording (fund, LP,
+  investment, allocation …, a GUESS list) or one of our vehicles named. Left out: Protocol Labs, the team, portfolio
+  companies, app users, and a personal address we hold nobody for. Kept as `research.note` kind `calendar_candidate`:
+  the meetings as above, each guest's domain and whether we hold them, and the reasons by label; no title,
+  description, address or outside name. Nothing is added without a click: **Add as LP prospect** opens a pursuit in
+  New for the vehicle with the meetings as its calendar touchpoints (audited, keyed, undoable while nothing else is
+  recorded on it); a firm known only by its domain asks for its name and is held with the domain as an email-domain
+  claim; **Not an LP** is remembered (`calendar_not_lp`); **Research** asks for the profile workflow by public name, as
+  the pipeline's Research does, and runs nothing.
 - **When.** Daily, after Affinity's read; and "Read calendars now" in Preferences → Email, or `cloud-job.sh`'s
   `calendar` job.
 ## 14. Travel and Events from the team's calendars (8 Oct 2026, issue 0021)

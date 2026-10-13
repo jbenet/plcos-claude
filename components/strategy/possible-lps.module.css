@@ -1,0 +1,21 @@
+/* Possible LPs from the calendar, on Pipeline → New. Tokens only (app/globals.css), so both themes and dark mode hold. */
+.list { list-style: none; margin: 0; padding: 0 }
+.item { padding: 13px 15px; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 340px); gap: 10px 18px }
+.item:first-child { border-top: 0 }
+@media (max-width: 860px) { .item { grid-template-columns: minmax(0, 1fr) } }
+.name { font-weight: 600; font-size: 13.5px; color: var(--ink) }
+.meta { font-size: 12px; color: var(--muted); line-height: 1.55; margin-top: 3px }
+.meta b { color: var(--ink); font-weight: 500 }
+.reasons { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px }
+.actions { display: flex; flex-direction: column; gap: 7px; align-items: flex-start }
+.actRow { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end }
+.field { display: flex; flex-direction: column; gap: 3px }
+.fieldLbl { font-size: 10.5px; color: var(--muted); font-family: var(--mono) }
+.input { font: inherit; font-size: 12px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 170px }
+.confirm { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--ink) }
+.ok { font-size: 12px; color: var(--green); line-height: 1.5 }
+.err { font-size: 12px; color: var(--clay); line-height: 1.5 }
+.undo { display: inline-flex; gap: 8px; align-items: center; margin-left: 8px }
+.recent { padding: 10px 15px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted) }
+.recent li { margin: 4px 0 }
+.cover { padding: 10px 15px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); line-height: 1.55 }

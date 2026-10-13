@@ -2,7 +2,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { syncCalendars, unmatchCalendarMeeting, type CalendarSyncResult } from '../../lib/calendar-sync';
-import { MATCHED_BY_NAME } from '../../lib/calendar-match';
+import { MATCHED_BY_AFFILIATE, MATCHED_BY_NAME } from '../../lib/calendar-match';
+import { addCandidate, CandidateRefused, dismissCandidate, listCandidates, researchCandidate, undoCandidateAdd } from '../../lib/calendar-candidates';
 import { FAKE_BASE, fakeCalendar, fakeMintKey, fakeSetCalendar, readFake, type FakeEvent } from '../../lib/connectors/mailguard/fake';
 import { fakeTransport } from '../../lib/connectors/mailguard/fake';
 import { memoryStore } from '../../lib/connectors/mailguard/tokens';
@@ -171,6 +172,108 @@ export async function calendarProperties(check: Check) {
       affRead.matched + affRead.unmatchedExternal === affRead.externalEvents && affRead.unmatchedExternal >= 1 && affRead.guestsKnown >= 3 && affRead.guestsKnown < affRead.guests
         && (await db.one<{ note: string }>(`select note from sources.sync_run where source = 'calendar' order by id desc limit 1`))!.note.includes(`${affRead.guestsKnown} of ${affRead.guests} outside guests known`),
       JSON.stringify({ matched: affRead.matched, guests: affRead.guests, known: affRead.guestsKnown, external: affRead.externalEvents, unmatched: affRead.unmatchedExternal }));
+
+    // Juan, 13 Oct 2026: "could use firm name, or person at firm". Someone currently at an LP firm, named in the entry,
+    // makes the meeting the firm's (marked, undoable); someone who has left does not.
+    const heron = await entity('org', 'Invented Heron Partners'), mira = await entity('person', 'Invented Mira Solberg'), gone = await entity('person', 'Invented Otis Former');
+    await db.query(`insert into identity.affiliation (person_entity, org_entity, kind, role, source, as_of, certainty, ended_on) values
+      ($1, $3, 'staff', 'Invented', 'fixture', now(), 'inferred', null), ($2, $3, 'staff', 'Invented', 'fixture', now(), 'inferred', '2025-01-01')`, [mira, gone, heron]);
+    await db.query(`insert into strategy.pursuit (entity_id, vehicle_id, owner_id) select $1, (select id from platform.vehicle order by slug limit 1), $2::uuid`, [heron, juan.id]);
+    // Possible LPs: Wren is a firm we hold (not an LP) with investor data and a domain; Juno a person we hold on a personal
+    // address, with investor data; Portco a portfolio company of ours.
+    const wren = await entity('org', 'Invented Wren Holdings'), juno = await entity('person', 'Invented Juno Park'), portco = await entity('org', 'Invented Portco Labs');
+    await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values
+      ($1, 'investor_type', 'Invented family office', 'props:calendar', current_date, 'medium'), ($1, 'email_domain', 'wren-invented.example', 'props:calendar', current_date, 'medium'),
+      ($2, 'email', 'juno.invented@gmail.com', 'props:calendar', current_date, 'medium'), ($2, 'aum', '100000000', 'props:calendar', current_date, 'medium'),
+      ($3, 'email_domain', 'portco-invented.example', 'props:calendar', current_date, 'medium')`, [wren, juno, portco]);
+    await db.query(`insert into network.portfolio (portfolio_id, vehicle_id, company_entity, company_name, source, input_hash) select 'props-cal-portco', id, $1, 'Invented Portco Labs', '{}'::jsonb, 'props-cal-portco' from platform.vehicle order by slug limit 1`, [portco]);
+    const secret = (t: string) => ({ summary: `Secret ${t}`, description: 'Secret description of the meeting' });
+    await fakeCalendar(dir, juan.email, { id: 'primary' }, [
+      ev('affil1', '2026-09-24T15:00:00Z', [juan.email, 'someone@heron-unrelated-invented.example'], secret('coffee with Invented Mira Solberg')),
+      ev('affil2', '2026-09-24T17:00:00Z', [juan.email, 'other@heron-unrelated2-invented.example'], secret('call with Invented Otis Former')),
+      ev('wren1', '2026-09-25T15:00:00Z', [juan.email, 'ana@wren-invented.example'], secret('catch-up')),
+      ev('wren2', '2026-10-20T15:00:00Z', [juan.email, 'ana@wren-invented.example', 'ben@wren-invented.example'], secret('fund intro')),
+      ev('dom1', '2026-09-26T15:00:00Z', [juan.email, 'x@newfirm-invented.example'], secret('LP allocation chat')),
+      ev('juno1', '2026-09-27T15:00:00Z', [juan.email, 'juno.invented@gmail.com'], secret('lunch')),
+      ev('gmail1', '2026-09-28T15:00:00Z', [juan.email, 'unknown.invented@gmail.com'], secret('fund chat')),
+      ev('portco1', '2026-09-29T15:00:00Z', [juan.email, 'ceo@portco-invented.example'], secret('fund update')),
+      ev('pl1', '2026-09-30T15:00:00Z', [juan.email, 'colleague@protocol.ai'], secret('fund prep')),
+      ev('team2', '2026-09-30T17:00:00Z', [juan.email, mara.email], secret('fund prep')),
+      ev('vendor2', '2026-10-01T15:00:00Z', [juan.email, 'sales@vendor2-invented.example'], secret('software demo')),
+    ]);
+    const cRead = await sync();
+    const affRows2 = await db.query<{ entity: string; day: string; summary: string | null; ref: string }>(
+      `select entity_id::text entity, held_on::text "day", summary, source_ref ref from meetings.meeting where source = 'calendar' and held_on = '2026-09-24'`);
+    check('Calendar: someone currently at an LP firm named in the entry makes the meeting the firm’s, marked as matched by someone at the firm; someone who has left does not',
+      affRows2.length === 1 && affRows2[0]!.entity === heron && affRows2[0]!.summary === MATCHED_BY_AFFILIATE && cRead.byAffiliate === 1 && !affRows2.some((x) => x.entity === mira),
+      JSON.stringify({ rows: affRows2.map((x) => [x.entity === heron ? 'heron' : x.entity === mira ? 'mira' : x.entity, x.summary === MATCHED_BY_AFFILIATE ? 'affiliate' : x.summary]), byAffiliate: cRead.byAffiliate }));
+    const undoneAff = await unmatchCalendarMeeting(db, juan.id, affRows2[0]?.ref ?? '');
+    const afterAff = await sync();
+    check('Calendar: “Not this LP” undoes a match by someone at the firm, for good',
+      undoneAff && !(await db.query(`select 1 from meetings.meeting where source = 'calendar' and held_on = '2026-09-24'`)).length && afterAff.added === 0,
+      JSON.stringify({ undoneAff, added: afterAff.added }));
+
+    const cands = await listCandidates(db);
+    const byKey = new Map(cands.map((c) => [c.key, c]));
+    const w = byKey.get(`entity:${wren}`), d = byKey.get('domain:newfirm-invented.example'), j = byKey.get(`entity:${juno}`);
+    check('Calendar: a possible LP is proposed for an unmatched outside guest, grouped by the firm we hold at their domain, with its meetings’ dates, the guests’ domains, whether held, and reasons',
+      !!w && w.held === 'org' && w.meetings.map((m) => m.day).join() === '2026-09-25,2026-10-20' && !!w.meetings[1]!.scheduledFor && !w.meetings[0]!.scheduledFor
+        && w.guests.length === 2 && w.guests.every((g) => g.domain === 'wren-invented.example' && g.held === 'org')
+        && w.reasons.some((r) => r.kind === 'investor_data' && r.field === 'investor_type') && w.reasons.some((r) => r.kind === 'wording' && r.keyword === 'fund')
+        && !!d && d.held === null && d.entityId === null && d.reasons.some((r) => r.kind === 'wording' && r.keyword === 'LP') && d.reasons.some((r) => r.kind === 'wording' && r.keyword === 'allocation')
+        && !!j && j.held === 'person' && j.reasons.some((r) => r.kind === 'investor_data' && r.field === 'aum') && j.guests[0]?.domain === 'gmail.com' && j.guests[0]?.held === 'person'
+        && cRead.candidates === 3 && cands.length === 3,
+      JSON.stringify({ candidates: cRead.candidates, keys: cands.map((c) => c.key.replace(wren, 'wren').replace(juno, 'juno')), wren: w && { meetings: w.meetings.map((m) => m.day), guests: w.guests, reasons: w.reasons } }));
+    check('Calendar: no possible LP for Protocol Labs, our team, a portfolio company, an unheld personal address or a guest with no reason to think so',
+      !cands.some((c) => /portco|gmail|protocol|vendor2/.test(c.key) || c.key === `entity:${portco}`),
+      JSON.stringify(cands.map((c) => c.key)));
+    const stored = (await db.query<{ data: unknown; body: string }>(`select data, body from research.note where kind = 'calendar_candidate'`)).map((n) => JSON.stringify(n));
+    check('Calendar: a possible LP keeps no title or description text, and no guest’s address or name',
+      stored.length === 3 && stored.every((n) => !/Secret|coffee|catch-up|intro|lunch|chat|@|\bana\b|\bben\b|juno\.invented|Wren Holdings|Juno Park/i.test(n)),
+      stored.map((n) => n.slice(0, 160)).join(' | '));
+    const runNote = (await db.one<{ note: string }>(`select note from sources.sync_run where source = 'calendar' order by id desc limit 1`))!.note;
+    check('Calendar: the run note counts possible LPs, never a name or address', runNote.includes('3 possible LPs') && !/Wren|Juno|newfirm|invented/i.test(runNote), runNote);
+
+    // "Not an LP" is remembered: the next read does not propose it again.
+    let refusedNoName = false;
+    const vehicleId = (await db.one<{ id: string }>(`select id::text from platform.vehicle where phase = 'active' and kind <> 'grant_rail' order by slug limit 1`))!.id;
+    try { await addCandidate(db, juan.id, { key: 'domain:newfirm-invented.example', vehicleId, requestKey: 'props-cal-noname' }); } catch (e) { refusedNoName = e instanceof CandidateRefused; }
+    await dismissCandidate(db, juan.id, 'domain:newfirm-invented.example');
+    const afterDismiss = await sync();
+    check('Calendar: “Not an LP” is remembered across a re-read; a firm known only by its domain needs its name before it can be added',
+      refusedNoName && !(await listCandidates(db)).some((c) => c.key === 'domain:newfirm-invented.example') && afterDismiss.candidates === 2
+        && !(await db.query(`select 1 from research.note where kind = 'calendar_candidate' and data->>'key' = 'domain:newfirm-invented.example'`)).length,
+      JSON.stringify({ refusedNoName, candidates: afterDismiss.candidates }));
+
+    // "Add as LP prospect": a pursuit in New with the meetings as its calendar touchpoints; the same request again adds nothing; undo removes both.
+    const pursuitsOf = () => db.query<{ id: string; status: string; source: string }>(`select pursuit_id::text id, status::text, source from strategy.pursuit where entity_id = $1`, [wren]);
+    const wrenMeetings = () => db.query<{ ref: string }>(`select source_ref ref from meetings.meeting where source = 'calendar' and entity_id = $1`, [wren]);
+    const added = await addCandidate(db, juan.id, { key: `entity:${wren}`, vehicleId, requestKey: 'props-cal-add-1' });
+    const twice = await addCandidate(db, juan.id, { key: `entity:${wren}`, vehicleId, requestKey: 'props-cal-add-1' });
+    const p1 = await pursuitsOf(), m1 = await wrenMeetings();
+    const audit = await db.query<{ action: string }>(`select action from platform.audit_log where subject_id = $1`, [added.pursuitId]);
+    check('Calendar: “Add as LP prospect” opens one pursuit in New with the meetings as its calendar touchpoints, audited; the same request again adds nothing; it leaves the list',
+      added.created && !twice.created && twice.pursuitId === added.pursuitId && p1.length === 1 && p1[0]!.status === 'new' && p1[0]!.source === 'calendar'
+        && m1.length === 2 && audit.some((a) => a.action === 'pursuit.calendar_added') && !(await listCandidates(db)).some((c) => c.key === `entity:${wren}`),
+      JSON.stringify({ added, twice: twice.created, pursuits: p1.length, meetings: m1.length }));
+    await undoCandidateAdd(db, juan.id, added.pursuitId);
+    check('Calendar: undoing “Add as LP prospect” removes the pursuit and its meetings, and lists the possible LP again',
+      !(await pursuitsOf()).length && !(await wrenMeetings()).length && (await listCandidates(db)).some((c) => c.key === `entity:${wren}`)
+        && (await db.query(`select 1 from platform.audit_log where action = 'pursuit.calendar_added_undone' and subject_id = $1`, [added.pursuitId])).length === 1,
+      JSON.stringify({ pursuits: (await pursuitsOf()).length, meetings: (await wrenMeetings()).length }));
+    const again2 = await addCandidate(db, juan.id, { key: `entity:${wren}`, vehicleId, requestKey: 'props-cal-add-2' });
+    const reread2 = await sync();
+    check('Calendar: once added, the next read keeps its meetings as the firm’s and proposes it no more',
+      again2.created && (await wrenMeetings()).length === 2 && !(await listCandidates(db)).some((c) => c.key === `entity:${wren}`) && reread2.candidates === 1,
+      JSON.stringify({ meetings: (await wrenMeetings()).length, candidates: reread2.candidates }));
+    const research = await researchCandidate(db, juan.id, `entity:${juno}`, 'props-cal-research');
+    const researchAgain = await researchCandidate(db, juan.id, `entity:${juno}`, 'props-cal-research-2');
+    const req = await db.query<{ data: { workflow: string; execution: string; publicNameOnly: boolean } }>(`select data from research.note where kind = 'workflow_request' and entity_id = $1`, [juno]);
+    let refusedDomain = false;
+    try { await researchCandidate(db, juan.id, 'domain:newfirm-invented.example', 'props-cal-research-3'); } catch (e) { refusedDomain = e instanceof CandidateRefused; }
+    check('Calendar: “Research” asks once for the profile workflow by public name, starts nothing, and is refused for a domain we hold no name for',
+      research.created && !researchAgain.created && req.length === 1 && req[0]!.data.workflow === 'research' && req[0]!.data.execution === 'not_started' && req[0]!.data.publicNameOnly && refusedDomain,
+      JSON.stringify({ research, again: researchAgain, requests: req.length, refusedDomain }));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
