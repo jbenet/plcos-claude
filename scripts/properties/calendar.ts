@@ -231,6 +231,10 @@ export async function calendarProperties(check: Check) {
     check('Calendar: any other outside firm is a possible LP too, with only the weak reason, listed after every one with a strong reason',
       !!vendor && vendor.reasons.length === 1 && vendor.reasons[0]!.kind === 'outside' && cands.findIndex((c) => !c.reasons.some(strongReason)) >= 3,
       JSON.stringify(cands.map((c) => [c.key.replace(wren, 'wren').replace(juno, 'juno'), c.reasons.map((r) => r.kind)])));
+    const asideSum = Object.values(cRead.setAside).reduce((x, y) => x + y, 0);
+    check('Calendar: every unmatched meeting with an outside guest is in a possible LP or counted by why it was set aside',
+      cRead.candidateMeetings + asideSum === cRead.unmatchedExternal && cRead.setAside.portfolio >= 1 && cRead.setAside.personalMail >= 1,
+      JSON.stringify({ unmatched: cRead.unmatchedExternal, inCandidates: cRead.candidateMeetings, setAside: cRead.setAside }));
     const stored = (await db.query<{ data: unknown; body: string }>(`select data, body from research.note where kind = 'calendar_candidate'`)).map((n) => JSON.stringify(n));
     check('Calendar: a possible LP keeps no title or description text, and no guest’s address or name',
       stored.length === cRead.candidates && stored.every((n) => !/Secret|coffee|catch-up|intro|lunch|chat|@|\bana\b|\bben\b|juno\.invented|Wren Holdings|Juno Park/i.test(n)),

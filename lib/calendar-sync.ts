@@ -6,7 +6,7 @@ import type { Db, Queryable } from '@/lib/db';
 import type { ImportProgress } from '@/lib/import-jobs/types';
 import { appendAudit } from '@/modules/platform';
 import { MATCHED_BY_AFFILIATE, MATCHED_BY_NAME } from '@/lib/calendar-match';
-import { dismissedKeys, investorFields, notLpEntities, storeCandidates, wordingOf, type Candidate, type CandidateMeeting, type CandidateReason } from '@/lib/calendar-candidates';
+import { dismissedKeys, investorFields, notLpKinds, storeCandidates, wordingOf, type Candidate, type CandidateMeeting, type CandidateReason } from '@/lib/calendar-candidates';
 import { finishRun, startRun } from '@/modules/sources';
 
 /**
@@ -50,6 +50,10 @@ export interface CalendarSyncResult {
   byAffiliate: number;
   /** Possible LPs proposed (lib/calendar-candidates.ts): groups of unmatched meetings with a reason to think so. */
   candidates: number;
+  /** Unmatched meetings that are in some possible LP (several meetings with one firm make one group). */
+  candidateMeetings: number;
+  /** Why the unmatched meetings with an outside guest became no possible LP, counted by meeting (its first guest's reason). */
+  setAside: { portfolio: number; appUser: number; personalMail: number; notAnLp: number };
   /** Coverage: distinct outside guests, those known by address or firm domain, meetings with an outside guest, and those no LP matched. */
   guests: number;
   guestsKnown: number;
@@ -196,7 +200,7 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
   if (rt.mode === 'off') return { off: rt.why };
   const now = o.now ?? new Date();
   const from = new Date(now.getTime() - CALENDAR_WINDOW.pastDays * DAY), to = new Date(now.getTime() + CALENDAR_WINDOW.futureDays * DAY);
-  const r: CalendarSyncResult = { people: 0, skipped: [], calendars: 0, events: 0, matched: 0, byName: 0, byAffiliate: 0, candidates: 0, guests: 0, guestsKnown: 0, externalEvents: 0, unmatchedExternal: 0, added: 0, updated: 0, affinity: 0, removed: 0, complete: true,
+  const r: CalendarSyncResult = { people: 0, skipped: [], calendars: 0, events: 0, matched: 0, byName: 0, byAffiliate: 0, candidates: 0, candidateMeetings: 0, setAside: { portfolio: 0, appUser: 0, personalMail: 0, notAnLp: 0 }, guests: 0, guestsKnown: 0, externalEvents: 0, unmatchedExternal: 0, added: 0, updated: 0, affinity: 0, removed: 0, complete: true,
     window: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) } };
   const run = await startRun('calendar', 'read', actor);
   try {
@@ -309,34 +313,43 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
     // Possible LPs (lib/calendar-candidates.ts): an unmatched meeting's outside guests, grouped by the firm we hold for
     // them (their firm, or the one at their domain), the person when they have none, or else their domain. Never a
     // portfolio company, someone using this app, a personal address we hold nobody for, or a group set aside as not an LP.
-    const notLp = await notLpEntities(db);
+    const { portfolio, appUsers } = await notLpKinds(db);
+    const notLp = new Set([...portfolio, ...appUsers]);
+    const why = (ids: string[]): keyof CalendarSyncResult['setAside'] => (ids.some((x) => appUsers.has(x)) ? 'appUser' : 'portfolio');
     const dismissed = await dismissedKeys(db);
     type Group = { key: string; entityId: string | null; domain: string | null; held: 'person' | 'org' | null; persons: Set<string>;
       meetings: Map<string, CandidateMeeting>; guests: Map<string, { domain: string; held: 'person' | 'org' | null }>; words: Set<string>; vehicles: Set<string> };
     const proposals = new Map<string, Group>();
     const propose = (k: string, e: CalendarEvent, holders: Set<string>, outside: string[]) => {
       const touched = new Set<Group>();
+      let aside: keyof CalendarSyncResult['setAside'] | null = null;
+      const setAside = (w: keyof CalendarSyncResult['setAside']) => { aside ??= w; };
       for (const a of outside) {
         const d = domainOf(a), p = parties.get(a);
         let entityId: string | null = null, held: Group['held'] = null, guestHeld: Group['held'] = null;
         if (p) {
-          if (notLp.has(p.person) || p.firms.some((f) => notLp.has(f))) continue;
-          entityId = p.firms[0] ?? p.person; held = p.firms[0] ? 'org' : 'person'; guestHeld = 'person';
+          // Someone using this app, or someone whose every firm is a portfolio company of ours, is never an LP; a person
+          // with another firm besides a portfolio company is grouped under that other firm.
+          if (notLp.has(p.person)) { setAside(why([p.person])); continue; }
+          const firms = p.firms.filter((f) => !notLp.has(f));
+          if (p.firms.length && !firms.length) { setAside(why(p.firms)); continue; }
+          entityId = firms[0] ?? p.person; held = firms[0] ? 'org' : 'person'; guestHeld = 'person';
         } else {
-          if (PUBLIC_MAIL.has(d)) continue;
-          const orgs = orgsAt.get(d) ?? [];
-          if (orgs.some((o) => notLp.has(o))) continue;
-          if (orgs[0]) { entityId = orgs[0]; held = 'org'; guestHeld = 'org'; }
+          if (PUBLIC_MAIL.has(d)) { setAside('personalMail'); continue; }
+          const orgs = (orgsAt.get(d) ?? []);
+          if (orgs.length && orgs.every((o) => notLp.has(o))) { setAside(why(orgs)); continue; }
+          const firm = orgs.find((o) => !notLp.has(o));
+          if (firm) { entityId = firm; held = 'org'; guestHeld = 'org'; }
         }
         const key = entityId ? `entity:${entityId}` : `domain:${d}`;
-        if (dismissed.has(key)) continue;
+        if (dismissed.has(key)) { setAside('notAnLp'); continue; }
         const g = proposals.get(key) ?? { key, entityId, domain: entityId ? null : d, held, persons: new Set<string>(), meetings: new Map(), guests: new Map(), words: new Set<string>(), vehicles: new Set<string>() };
         proposals.set(key, g);
         if (p) g.persons.add(p.person);
         g.guests.set(a, { domain: d, held: guestHeld });
         touched.add(g);
       }
-      if (!touched.size) return;
+      if (!touched.size) { if (aside) r.setAside[aside]++; return; }
       const text = `${e.summary} ${e.description ?? ''}`;
       const words = wordingOf(text);
       const named = vehicles.filter((v) => [v.name, ...v.aliases].some((x) => x.trim().length >= 3 && nameRe(x).test(text))).map((v) => v.name);
@@ -406,6 +419,7 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
         guests: [...g.guests.values()].sort((a, b) => a.domain.localeCompare(b.domain) || String(a.held).localeCompare(String(b.held))) });
     }
     r.candidates = proposed.length;
+    r.candidateMeetings = new Set(proposed.flatMap((c) => c.meetings.map((m) => m.k))).size;
 
     await o.progress?.('Writing meetings', users.length + 1, users.length + 1);
     await db.transaction(async (tx) => {
@@ -434,10 +448,10 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
     if (r.added || r.removed) await (await import('@/lib/reconcile')).reconcile(actor);
 
     const noKey = r.skipped.filter((s) => s.why === NO_KEY).length;
-    const counts = { people: r.people, skipped: r.skipped.length, calendars: r.calendars, events: r.events, matched: r.matched, byName: r.byName, byAffiliate: r.byAffiliate, candidates: r.candidates, guests: r.guests, guestsKnown: r.guestsKnown, externalEvents: r.externalEvents, unmatchedExternal: r.unmatchedExternal, added: r.added, updated: r.updated, affinity: r.affinity, removed: r.removed, complete: r.complete };
+    const counts = { people: r.people, skipped: r.skipped.length, calendars: r.calendars, events: r.events, matched: r.matched, byName: r.byName, byAffiliate: r.byAffiliate, candidates: r.candidates, candidateMeetings: r.candidateMeetings, setAside: r.setAside, guests: r.guests, guestsKnown: r.guestsKnown, externalEvents: r.externalEvents, unmatchedExternal: r.unmatchedExternal, added: r.added, updated: r.updated, affinity: r.affinity, removed: r.removed, complete: r.complete };
     await appendAudit({ actorId: actor, action: 'calendar.read', subjectType: 'source', detail: { ...counts, skippedWhy: r.skipped.map((s) => s.why) } }, db);
     await finishRun(run, { status: 'ok', requests: 0, records: r.events, newRecords: r.added,
-      note: `${r.people} people's calendars (${r.calendars} calendars${r.skipped.length ? `, ${r.skipped.length} people not read${noKey ? `, ${noKey} with no key` : ''}` : ''}) · ${r.events} meetings, ${r.matched} with an LP (${r.byName} by name only, ${r.byAffiliate} of them by someone at the firm), ${r.unmatchedExternal} of ${r.externalEvents} with an outside guest unmatched, ${r.candidates} possible LPs · ${r.guestsKnown} of ${r.guests} outside guests known · ${r.added} new, ${r.updated} kept, ${r.affinity} already Affinity's, ${r.removed} removed${r.complete ? '' : ' · not every calendar was read whole, so none was removed for being gone'}`,
+      note: `${r.people} people's calendars (${r.calendars} calendars${r.skipped.length ? `, ${r.skipped.length} people not read${noKey ? `, ${noKey} with no key` : ''}` : ''}) · ${r.events} meetings, ${r.matched} with an LP (${r.byName} by name only, ${r.byAffiliate} of them by someone at the firm), ${r.unmatchedExternal} of ${r.externalEvents} with an outside guest unmatched, ${r.candidates} possible LPs from ${r.candidateMeetings} of them (set aside: ${r.setAside.portfolio} portfolio, ${r.setAside.appUser} our people, ${r.setAside.personalMail} personal mail, ${r.setAside.notAnLp} not an LP) · ${r.guestsKnown} of ${r.guests} outside guests known · ${r.added} new, ${r.updated} kept, ${r.affinity} already Affinity's, ${r.removed} removed${r.complete ? '' : ' · not every calendar was read whole, so none was removed for being gone'}`,
       detail: counts });
     return r;
   } catch (e) {
