@@ -95,8 +95,15 @@ export function reasonText(r: CandidateReason): string {
 
 /** Never an LP: a portfolio company of ours, or someone using this app (lib/reconcile, lpUniverse). */
 export async function notLpEntities(q: Queryable): Promise<Set<string>> {
-  return new Set((await q.query<{ id: string }>(`select identity.canonical_entity_id(company_entity)::text id from network.portfolio
-      union select identity.canonical_entity_id(entity_id)::text from identity.source_record where source = 'app_user'`)).map((r) => r.id));
+  const { portfolio, appUsers } = await notLpKinds(q);
+  return new Set([...portfolio, ...appUsers]);
+}
+
+/** The two kinds apart, so a calendar read can say which one set a meeting aside. */
+export async function notLpKinds(q: Queryable): Promise<{ portfolio: Set<string>; appUsers: Set<string> }> {
+  const rows = await q.query<{ id: string; kind: string }>(`select identity.canonical_entity_id(company_entity)::text id, 'portfolio' kind from network.portfolio
+      union select identity.canonical_entity_id(entity_id)::text, 'app_user' from identity.source_record where source = 'app_user'`);
+  return { portfolio: new Set(rows.filter((r) => r.kind === 'portfolio').map((r) => r.id)), appUsers: new Set(rows.filter((r) => r.kind === 'app_user').map((r) => r.id)) };
 }
 
 /** The investor fields on record for each entity (canonical id → the fields, sorted). */
