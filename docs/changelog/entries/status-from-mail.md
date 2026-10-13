@@ -16,3 +16,5 @@ false turns it off.
 - **13 Oct (feedback 0150):** records count from each vehicle's raise opening, not from 9 Oct, so LPs emailed before 9 Oct
   move too. Only a person's undo of a Reconciliation move holds the records back; an LP a person added after we emailed
   them still moves.
+- **13 Oct, later:** a whole Gmail thread counts for a raise once one message in it does, so a reply to a linked pitch
+  moves the LP to Discussing; a message reported again with its LP links it and moves them at once.

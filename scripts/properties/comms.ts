@@ -157,9 +157,9 @@ export async function commsProperties(check: Check, db: Db) {
   const roIngest = await call(reader, 'comms_ingest', batch);
   const after = await counts();
   const rows = await db.query<{ id: string; seen: number }>(`select message_id id, cardinality(seen_by) seen from email.comms_message where message_id like 'props-%@invented-comms.example' order by 1`);
-  check('comms_ingest: idempotent by Message-ID (case and brackets aside); a message with nobody on record is not kept; it writes nothing else — no touchpoint, update, ticket, status or send; it needs outreach:write',
+  check('comms_ingest: idempotent by Message-ID (case and brackets aside); a message with nobody on record is not kept; it writes nothing else — no touchpoint, update, ticket or send, and a status only as Reconciliation moves it on the records (docs/29 §4a: her reply in a thread our linked reply is on moves her to Discussing); it needs outreach:write',
     !i1.error && i1.data?.new === 2 && i1.data.unmatched === 1 && i2.data?.new === 0 && i2.data.already === 2 && rows.length === 2 && rows[0]!.id === 'props-1@invented-comms.example'
-    && JSON.stringify(before) === JSON.stringify(after) && /outreach:write/.test(roIngest.error ?? ''),
+    && JSON.stringify({ ...before, s: null }) === JSON.stringify({ ...after, s: null }) && before?.s === 'connecting' && after?.s === 'discussing' && /outreach:write/.test(roIngest.error ?? ''),
     `first ${JSON.stringify(i1.data ?? i1.error)?.slice(0, 120)}; again ${i2.data?.already} already; rows ${rows.map((r) => r.id).join(',')}; before ${JSON.stringify(before)} after ${JSON.stringify(after)}; read token: ${roIngest.error?.slice(0, 60)}`);
 
   const trace = await call(reader, 'comms_trace', { pursuitId: p });

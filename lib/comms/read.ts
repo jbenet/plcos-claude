@@ -163,7 +163,16 @@ export async function tracePairs(pairs: Array<{ entityId: string; vehicleId: str
     const key = `${p.entityId}:${p.vehicleId}`;
     const w = windows.get(p.vehicleId);
     const merged = mergeTrace(touches.get(key) ?? [], messages.get(p.entityId) ?? [], links.get(p.entityId) ?? []);
-    merged.touches = merged.touches.filter((t) => t.source !== 'gmail' || (w ? aboutThisRaise(t, w) : !t.vehicleId || t.vehicleId === p.vehicleId));
+    const counts = (t: Touchpoint) => (w ? aboutThisRaise(t, w) : !t.vehicleId || t.vehicleId === p.vehicleId);
+    // A Gmail thread that counts for this raise counts whole (feedback 0150, 13 Oct 2026): the LP's reply to our pitch,
+    // or our follow-up, belongs to the raise the pitch was linked to, though only the pitch carried the pursuit.
+    const threads = new Set(merged.touches.filter((t) => t.source === 'gmail' && counts(t))
+      .map((t) => merged.messageOf.get(t.touchpointId)?.threadId).filter((x): x is string => !!x));
+    const sameThread = (t: Touchpoint) => {
+      const m = merged.messageOf.get(t.touchpointId);
+      return !!m?.threadId && threads.has(m.threadId) && (!m.vehicleId || m.vehicleId === p.vehicleId);
+    };
+    merged.touches = merged.touches.filter((t) => t.source !== 'gmail' || counts(t) || sameThread(t));
     out.set(key, merged);
   }
   return out;
