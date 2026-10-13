@@ -170,8 +170,8 @@ export async function mailActionProperties(check: Check, db: Db) {
   const t = (channel: string, direction: string, on: string, extra: Record<string, unknown> = {}) =>
     ({ touchpointId: on, channel, direction, on: new Date(on), viaOrganization: null, attendees: [], aboutBasis: null, summary: null, groupSize: 2, ...extra }) as never;
   const at = new Date('2026-10-12T00:00:00Z');
-  const sf = (status: string, touches: never[], setAt: string | null = null, since: string | null = '2026-10-09') =>
-    statusFromRecords({ status: status as never, statusSetAt: setAt ? new Date(setAt) : null }, touches, at, since)?.to ?? null;
+  const sf = (status: string, touches: never[], heldSince: string | null = null, since: string | null = '2026-10-01') =>
+    statusFromRecords({ status: status as never }, touches, at, since ? new Date(since) : null, heldSince ? new Date(heldSince) : null)?.to ?? null;
   const pure = {
     oursFromSelected: sf('selected', [t('email', 'ours', '2026-10-10')]),
     oursFromConnecting: sf('connecting', [t('email', 'ours', '2026-10-10')]),
@@ -185,7 +185,7 @@ export async function mailActionProperties(check: Check, db: Db) {
     future: sf('connecting', [t('email', 'theirs', '2026-10-20')]),
     afterPerson: sf('connecting', [t('email', 'theirs', '2026-10-10')], '2026-10-11'),
     viaFirm: sf('connecting', [t('email', 'theirs', '2026-10-10', { viaOrganization: 'Invented Firm' })]),
-    off: sf('connecting', [t('email', 'theirs', '2026-10-10')], null, null),
+    noWindow: sf('selected', [t('email', 'ours', '2026-09-01')], null, null),
   };
   const statusOf = async (id: string) => (await db.one<{ status: string }>(`select status::text status from strategy.pursuit where pursuit_id = $1`, [id]))?.status;
   const movedBy = await db.one<{ handle: string; reason: string | null }>(`select u.handle, p.status_reason reason from strategy.pursuit p join platform.app_user u on u.id = p.status_set_by where p.pursuit_id = $1`, [p2]);
@@ -197,15 +197,24 @@ export async function mailActionProperties(check: Check, db: Db) {
   const sent = await call(writer, 'comms_ingest', { messages: [{ messageId: '<mail-4@invented-mail.example>', gmailMessageId: 'g-mail-4',
     date: new Date(Date.now() - 1_800_000).toISOString(), direction: 'sent', from: juanEmail, to: ['yara@invented-mail.example'], subject: 'The fund', pursuitId: p4 }] });
   const s4 = await statusOf(p4);
+  // A person added an LP as Selected after we had emailed them (feedback 0150): not an undo, so the email still moves them.
+  const lp5 = await entity('Invented Mail LP Five', 'person');
+  const p5 = await pursuit(lp5, fund.id, 'new');
+  await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'zane@invented-mail.example', 'props:mail', current_date, 'medium')`, [lp5]);
+  const { setStatus: setStatusEarly } = await import('../../modules/strategy');
+  await setStatusEarly(juan.id, p5, { status: 'selected' });
+  const sent5 = await call(writer, 'comms_ingest', { messages: [{ messageId: '<mail-5@invented-mail.example>', gmailMessageId: 'g-mail-5',
+    date: new Date(Date.now() - 7_200_000).toISOString(), direction: 'sent', from: juanEmail, to: ['zane@invented-mail.example'], subject: 'The SPV', pursuitId: p5 }] });
+  const s5 = await statusOf(p5);
   const { setStatus } = await import('../../modules/strategy');
   await setStatus(juan.id, p2, { status: 'connecting' });
   await reconcilePursuit(p2);
   const held = await statusOf(p2);
-  check('Status on the records (Juan, 9 Oct 2026, "Auto, with undo"): our email moves to Connecting, their reply or a meeting with them to Discussing; never backward, never from or to Committed or Passed, not on an event, a firm\'s record, history before the start date, the future, or a record older than a person\'s own setting; off when unset. The LP\'s Gmail reply moved them, by Reconciliation, saying why; setting it back holds',
+  check('Status on the records (Juan, 9 Oct 2026, "Auto, with undo"): our email moves to Connecting, their reply or a meeting with them to Discussing; never backward, never from or to Committed or Passed, not on an event, a firm\'s record, history before the raise opened, the future, or a record older than a person\'s undo; a person\'s setting that undid nothing does not hold an earlier email back. The LP\'s Gmail reply moved them, by Reconciliation, saying why; setting it back holds',
     pure.oursFromSelected === 'connecting' && pure.oursFromConnecting === null && pure.replyFromNew === 'discussing' && pure.meeting === 'discussing'
-    && [pure.event, pure.fromDiscussing, pure.fromCommitted, pure.fromPassed, pure.history, pure.future, pure.afterPerson, pure.viaFirm, pure.off].every((x) => x === null)
-    && s2 === 'discussing' && s3 === 'connecting' && !sent.error && s4 === 'connecting' && movedBy?.handle === 'reconciliation' && /^Reconciliation: a reply from them/.test(movedBy.reason ?? '') && held === 'connecting',
-    `pure ${JSON.stringify(pure)}; after ingest p2 ${s2} (${JSON.stringify(movedBy)}), p3 ${s3}; our email to a Selected LP: ${s4} ${sent.error ?? ''}; after a person set it back and reconcile: ${held}`);
+    && [pure.event, pure.fromDiscussing, pure.fromCommitted, pure.fromPassed, pure.history, pure.future, pure.afterPerson, pure.viaFirm].every((x) => x === null) && pure.noWindow === 'connecting'
+    && s2 === 'discussing' && s3 === 'connecting' && !sent.error && s4 === 'connecting' && !sent5.error && s5 === 'connecting' && movedBy?.handle === 'reconciliation' && /^Reconciliation: a reply from them/.test(movedBy.reason ?? '') && held === 'connecting',
+    `pure ${JSON.stringify(pure)}; after ingest p2 ${s2} (${JSON.stringify(movedBy)}), p3 ${s3}; our email to a Selected LP: ${s4} ${sent.error ?? ''}; emailed before a person added them: ${s5} ${sent5.error ?? ''}; after a person set it back and reconcile: ${held}`);
 
   for (const c of [writer, reader, spvReader]) await c.close();
 }

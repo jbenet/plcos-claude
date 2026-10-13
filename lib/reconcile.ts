@@ -3,7 +3,7 @@ import { getDb, type Queryable } from '@/lib/db';
 import { shortDate } from '@/lib/time';
 import { openTicket } from '@/modules/governance';
 import { finishRun, startRun } from '@/modules/sources';
-import { CHANNEL_LABEL, isAutoReply, isEvent, type Touchpoint } from '@/modules/meetings';
+import { CHANNEL_LABEL, isAutoReply, isEvent, raiseWindows, type Touchpoint } from '@/modules/meetings';
 import { sentByThem, tracePairs } from '@/lib/comms/read';
 import { STEP_LABEL, closeStates, type CloseTrack, type CommitmentEvent } from '@/modules/pipeline';
 import {
@@ -162,19 +162,20 @@ const FORWARD = ['new', 'sourcing', 'selected', 'connecting', 'discussing'] as c
 export interface RecordMove { to: 'connecting' | 'discussing'; reason: string; on: Date }
 
 /**
- * Where the records on file move the status (Juan, 9 Oct 2026, "Auto, with undo"; docs/29 §4). Forward only: our
+ * Where the records on file move the status (Juan, 9 Oct 2026, "Auto, with undo"; docs/29 §4a). Forward only: our
  * email or message moves an LP to Connecting, a reply from them or a meeting or call with them (not our event) to
- * Discussing. Only records since `since`, not in the future, and newer than the status's last setting, so a person
- * who sets it back undoes the move until something new happens. Null when nothing moves.
+ * Discussing. Records count from `since` — the raise's opening (Juan, 13 Oct 2026, feedback 0150: "All the ones that
+ * have sent email should be set to (at least) Connecting") — and not in the future. `heldSince` is when a person set
+ * back a move Reconciliation made: only records after it count, so the undo holds until something new happens. A
+ * person's setting that undid nothing (an LP added as Selected after we emailed them) does not hold the records back.
  */
 export function statusFromRecords(
-  p: Pick<Pursuit, 'status' | 'statusSetAt'>, touches: Touchpoint[], now = new Date(),
-  since: string | null = config.reconcile.statusFromRecordsSince,
+  p: Pick<Pursuit, 'status'>, touches: Touchpoint[], now = new Date(), since: Date | null = null, heldSince: Date | null = null,
 ): RecordMove | null {
-  if (!since) return null;
+  if (!config.reconcile.statusFromRecords) return null;
   const at = (FORWARD as readonly string[]).indexOf(p.status);
   if (at < 0) return null;
-  const from = Math.max(new Date(since).getTime(), p.statusSetAt ? p.statusSetAt.getTime() + 1 : 0);
+  const from = Math.max(since?.getTime() ?? 0, heldSince ? heldSince.getTime() + 1 : 0);
   const fresh = touches
     .filter((t) => !t.viaOrganization && t.on && t.on.getTime() >= from && t.on.getTime() <= now.getTime()
       && !isAutoReply({ direction: t.direction, aboutBasis: t.aboutBasis ?? t.summary }))
@@ -190,6 +191,18 @@ export function statusFromRecords(
     return { to: 'connecting', reason: `Reconciliation: our email, ${shortDate(reached.on!)}`, on: reached.on! };
   }
   return null;
+}
+
+/** For each pursuit, when a person last set back a status Reconciliation had moved: the undo statusFromRecords honours. */
+async function undoneAt(db: Queryable, actor: string, only?: string): Promise<Map<string, Date>> {
+  const rows = await db.query<{ id: string; at: Date | string }>(
+    `select p.pursuit_id::text id, p.status_set_at at from strategy.pursuit p
+      where p.status_set_by is distinct from $1 and p.status_set_at is not null and ($2::text is null or p.pursuit_id::text = $2)
+        and exists (select 1 from platform.audit_log a where a.action = 'pursuit.status_set' and a.actor_id = $1
+                     and a.subject_type = 'pursuit' and a.subject_id = p.pursuit_id::text and a.at <= p.status_set_at)`,
+    [actor, only ?? null],
+  );
+  return new Map(rows.map((r) => [r.id, new Date(r.at)]));
 }
 
 export interface ReconcileCounts {
@@ -327,7 +340,7 @@ export async function reconcile(runBy: string | null = null): Promise<ReconcileC
  * server reads every LP again at its next start (issue 0137: its open proposals for the conversation
  * rungs are applied or withdrawn without waiting for the next Affinity translation).
  */
-export const RECONCILE_RULES = '0137';
+export const RECONCILE_RULES = '0150';
 
 /** At start: run once when the last run was under other rules. Never throws; a failure is in its run receipt. */
 export async function reconcileIfRulesChanged(): Promise<void> {
@@ -392,6 +405,7 @@ async function propose(only?: string): Promise<ReconcileCounts> {
       union select identity.canonical_entity_id(entity_id)::text from identity.source_record where source = 'app_user'`,
   )).map((r) => r.id));
   const retracted = await retractedRefs(db, only);
+  const [windows, held] = await Promise.all([raiseWindows(), undoneAt(db, actor, only)]);
   const recorded = 'Recorded by Reconciliation from the records on file, without an approval (issue 0137, Juan, 8 Oct 2026).';
   for (const live0 of live) {
     let p = live0;
@@ -409,7 +423,7 @@ async function propose(only?: string): Promise<ReconcileCounts> {
       continue;
     }
     // The status, forward on the records (Juan, 9 Oct 2026): undone by a person setting it again.
-    const move = statusFromRecords(p, touched);
+    const move = statusFromRecords(p, touched, new Date(), windows.get(p.vehicleId)?.opens ?? null, held.get(p.pursuitId) ?? null);
     if (move) {
       await db.transaction((tx) => setStatuses(actor, [{ pursuitId: p.pursuitId, status: move.to, reason: move.reason }], tx));
       counts.moved = (counts.moved ?? 0) + 1;

@@ -10,6 +10,9 @@ moves an LP's status forward on the records on file (docs/29 §4a):
 - **Undo** by setting the status back: Reconciliation does not move it again until something new happens. The status
   says it was Reconciliation and why ("Reconciliation: a reply from them, 9 Oct").
 
-It runs on every Reconciliation pass, so at once after juanmail reports a reply. `config.reconcile.statusFromRecordsSince`
-set to null turns it off.
+It runs on every Reconciliation pass, so at once after juanmail reports a reply. `config.reconcile.statusFromRecords`
+false turns it off.
 - **12 Oct:** our own sent email now moves the status inside the `comms_ingest` call too; before, only replies did, and our email waited for a later full pass.
+- **13 Oct (feedback 0150):** records count from each vehicle's raise opening, not from 9 Oct, so LPs emailed before 9 Oct
+  move too. Only a person's undo of a Reconciliation move holds the records back; an LP a person added after we emailed
+  them still moves.
