@@ -141,6 +141,26 @@ export async function calendarProperties(check: Check) {
     const after = await db.query<{ n: number }>(`select count(*)::int n from meetings.meeting where source = 'calendar' and held_on = '2026-09-11'`);
     check('Calendar: “Not this LP” undoes a name match, and the next read does not make it again',
       undone && after[0]?.n === 0 && reread.added === 0, JSON.stringify({ undone, after: after[0]?.n, added: reread.added }));
+
+    // Addresses Affinity holds for a person (never claims): Rhea is known only through her latest Affinity record.
+    const rhea = await entity('person', 'Invented Rhea'), kestrel = await entity('org', 'Invented Kestrel Fund');
+    await db.query(`insert into identity.source_record(source, source_id, entity_id, resolved_by) values ('affinity', 'person:900001', $1, 'human:fixture')`, [rhea]);
+    await db.query(`insert into sources.raw_record(source, kind, source_id, payload_hash, payload, fetched_at) values
+      ('affinity', 'person', '900001', 'props-cal-old', '{"primaryEmailAddress": "rhea@former-invented.example", "emailAddresses": ["rhea@former-invented.example"]}', '2026-01-01'),
+      ('affinity', 'person', '900001', 'props-cal-new', '{"primaryEmailAddress": "Rhea@Kestrel-Invented.example", "emailAddresses": ["rhea.alt@kestrel-invented.example", 7]}', '2026-06-01')`);
+    await db.query(`insert into identity.affiliation (person_entity, org_entity, kind, role, source, as_of, certainty) values ($1, $2, 'staff', 'Invented', 'fixture', now(), 'inferred')`, [rhea, kestrel]);
+    await db.query(`insert into strategy.pursuit (entity_id, vehicle_id, owner_id) values ($1, (select id from platform.vehicle order by slug limit 1), $2::uuid)`, [kestrel, juan.id]);
+    await fakeCalendar(dir, juan.email, { id: 'primary' }, [
+      ev('aff2', '2026-09-20T15:00:00Z', [juan.email, 'rhea.alt@kestrel-invented.example']),
+      ev('aff3', '2026-09-21T15:00:00Z', [juan.email, 'someone.new@kestrel-invented.example']),
+      ev('aff4', '2026-09-22T15:00:00Z', [juan.email, 'rhea@former-invented.example']),
+    ]);
+    await sync();
+    const affRows = await db.query<{ entity: string; day: string; summary: string | null }>(
+      `select entity_id::text entity, held_on::text "day", summary from meetings.meeting where source = 'calendar' and held_on between '2026-09-20' and '2026-09-22' order by held_on, entity_id::text`);
+    check('Calendar: the addresses Affinity holds for a person match by address (the person and their LP firm), and their domain matches the firm, never by name; an address only on an older copy of the record does not count',
+      JSON.stringify(affRows.map((x) => [x.day, x.entity, x.summary])) === JSON.stringify([['2026-09-20', rhea, null], ['2026-09-20', kestrel, null], ['2026-09-21', kestrel, null]].sort((a, b) => `${a[0]}${a[1]}`.localeCompare(`${b[0]}${b[1]}`))),
+      JSON.stringify(affRows.map((x) => [x.day, x.entity === kestrel ? 'kestrel' : x.entity === rhea ? 'rhea' : x.entity, x.summary ? 'by name' : ''])));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

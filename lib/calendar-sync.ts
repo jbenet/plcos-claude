@@ -88,6 +88,21 @@ async function lpUniverse(q: Queryable): Promise<{ lps: Set<string>; contactOf: 
   return { lps, contactOf };
 }
 
+/**
+ * Addresses Affinity holds for its people (primary and others), from the latest copy of each person record, matched by
+ * callers filtering on `email` (lowercased). Affinity's addresses never became claims (lib/outreach/addresses.ts), so
+ * reading claims alone left nearly every meeting matched by name only.
+ */
+const AFFINITY_PERSON_EMAILS = `
+    select lower(trim(e.v)) email, identity.canonical_entity_id(s.entity_id)::text id
+      from sources.raw_record r
+      cross join lateral (select r.payload->>'primaryEmailAddress' v
+                          union select jsonb_array_elements_text(case when jsonb_typeof(r.payload->'emailAddresses') = 'array' then r.payload->'emailAddresses' else '[]'::jsonb end)) e
+      join identity.source_record s on s.source = 'affinity' and s.source_id = 'person:' || r.source_id
+     where r.source = 'affinity' and r.kind = 'person' and e.v ~ '^\\s*[^\\s@]+@[^\\s@]+\\.[^\\s@]+\\s*$'
+       and not exists (select 1 from sources.raw_record n where n.source = 'affinity' and n.kind = 'person' and n.source_id = r.source_id
+                          and (n.fetched_at, n.id) > (r.fetched_at, r.id))`;
+
 /** The LP firms holding each of these email domains: a firm's own email-domain or email claims, or its current people's emails. */
 async function firmsByDomain(domains: string[], lps: Set<string>, q: Queryable): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>();
@@ -102,7 +117,12 @@ async function firmsByDomain(domains: string[], lps: Set<string>, q: Queryable):
       from research.claim c left join research.source_doc s on s.doc_id = c.source
       join identity.affiliation a on identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id(c.entity_id) and a.ended_on is null
      where c.superseded_by is null and c.field ~ '(^|\\.)email$' and lower(regexp_replace(trim(c.value), '^.*@', '')) = any($1::text[])
-       and c.source !~* '^dakota' and coalesce(s.origin, '') !~* 'dakota'`, [domains]);
+       and c.source !~* '^dakota' and coalesce(s.origin, '') !~* 'dakota'
+    union
+    select regexp_replace(m.email, '^.*@', ''), identity.canonical_entity_id(a.org_entity)::text
+      from (${AFFINITY_PERSON_EMAILS}) m
+      join identity.affiliation a on identity.canonical_entity_id(a.person_entity) = m.id::uuid and a.ended_on is null
+     where regexp_replace(m.email, '^.*@', '') = any($1::text[])`, [domains]);
   for (const r of rows) if (lps.has(r.id)) out.set(r.d, [...new Set([...(out.get(r.d) ?? []), r.id])].sort());
   return out;
 }
@@ -113,11 +133,15 @@ const NOT_A_PERSON = /(@resource\.calendar\.google\.com|@group\.calendar\.google
 async function partiesOf(addresses: string[], q: Queryable): Promise<Map<string, { person: string; firms: string[] }>> {
   const out = new Map<string, { person: string; firms: string[] }>();
   if (!addresses.length) return out;
-  const people = await q.query<{ email: string; id: string }>(`select distinct on (lower(trim(c.value))) lower(trim(c.value)) email, identity.canonical_entity_id(c.entity_id)::text id
-      from research.claim c left join research.source_doc d on d.doc_id = c.source
-     where c.superseded_by is null and c.field ~ '(^|\\.)email$' and lower(trim(c.value)) = any($1::text[])
-       and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'
-     order by lower(trim(c.value)), c.entity_id`, [addresses]);
+  // A claim first (rank 0), then the address Affinity holds for a person (rank 1).
+  const people = await q.query<{ email: string; id: string }>(`select distinct on (email) email, id from (
+      select lower(trim(c.value)) email, identity.canonical_entity_id(c.entity_id)::text id, 0 rank
+        from research.claim c left join research.source_doc d on d.doc_id = c.source
+       where c.superseded_by is null and c.field ~ '(^|\\.)email$' and lower(trim(c.value)) = any($1::text[])
+         and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'
+      union all
+      select email, id, 1 from (${AFFINITY_PERSON_EMAILS}) a where email = any($1::text[])) x
+     order by email, rank, id`, [addresses]);
   if (!people.length) return out;
   const firms = await q.query<{ person: string; firm: string }>(`select distinct identity.canonical_entity_id(person_entity)::text person, identity.canonical_entity_id(org_entity)::text firm
       from identity.affiliation where ended_on is null and identity.canonical_entity_id(person_entity) = any($1::uuid[])`, [[...new Set(people.map((p) => p.id))]]);
