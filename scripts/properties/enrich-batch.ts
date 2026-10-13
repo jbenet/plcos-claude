@@ -131,4 +131,28 @@ export async function enrichBatchProperties(check: Check) {
     check('W5 --tighten --vehicle takes only that vehicle, at every stage', JSON.stringify(focused) === JSON.stringify(['spvLate']),
       `Invented fixture picked ${JSON.stringify(focused)}.`);
   } finally { await rm(fv, { recursive: true, force: true }); }
+
+  // w1 --search (the Astra "Search pass", 13 Oct 2026): pages-only findings, and two cuts minutes apart never share LPs.
+  const sv = await mkdtemp(join(tmpdir(), 'batch-search-'));
+  const sdir = join(sv, 'data/demo/enrich');
+  try {
+    for (const folder of ['raw', 'strategy', 'batches']) await mkdir(join(sdir, folder), { recursive: true });
+    const cands = ['pagesA', 'pagesB', 'searched'].map((key) => ({ key, name: `Invented ${key}`, domains: [], org: `Invented Org ${key}`,
+      pursuits: [{ vehicle: 'Invented Fund', status: 'selected' }], contact: { meetings: 0, groupMeetings: 0, lastFromThem: null, lastTouch: null } }));
+    const jsonl = (xs: unknown[]) => xs.map(x => JSON.stringify(x)).join('\n');
+    await writeFile(join(sdir, 'candidates.jsonl'), jsonl(cands));
+    await writeFile(join(sdir, 'research-set.jsonl'), jsonl(cands));
+    for (const c of cands) await writeFile(join(sdir, 'raw', `${c.key}.json`), JSON.stringify({ key: c.key,
+      researched: { at: '2026-09-28', method: c.key === 'searched' ? 'search' : 'pages' }, identity: { match: 'confirmed' } }));
+    const cut = async (prefix: string) => {
+      await promisify(execFile)(process.execPath, ['--import', import.meta.resolve('tsx'), resolve('scripts/enrich-batch.ts'), 'w1', prefix, '1', '--search', '--max', '1'],
+        { cwd: sv, env: { ...process.env, DATA_PROFILE: 'demo', DATABASE_URL: '', TSX_TSCONFIG_PATH: resolve('tsconfig.json') } });
+      const files = (await readdir(join(sdir, 'batches'))).filter(f => f.startsWith(prefix));
+      return (await Promise.all(files.map(f => readFile(join(sdir, 'batches', f), 'utf8')))).join('').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l).key);
+    };
+    const first = await cut('astra-aaaaaaaa-'), second = await cut('astra-bbbbbbbb-'), third = await cut('astra-cccccccc-');
+    check('w1 --search takes pages-only findings, and an open Astra batch holds its LPs from the next cut',
+      first.length === 1 && second.length === 1 && first[0] !== second[0] && [...first, ...second].every((k) => k.startsWith('pages')) && !third.length,
+      `Invented fixture cut ${JSON.stringify([first, second, third])}.`);
+  } finally { await rm(sv, { recursive: true, force: true }); }
 }

@@ -11,9 +11,10 @@ export const MODELS = ['gpt-6-astra', 'gpt-6-sol'] as const;
  * Guessed from Oct runs: a W1+W5 batch of 5 took 40–90 min, a w5t batch of 8 took 6–9 min (Juan, 12 Oct: "make sure
  * astra doesnt do silly things and run up the token bill").
  */
-export const RUN_LIMIT_MS: Record<string, number> = { w1w5: 2 * 3600_000, w1: 90 * 60_000, w5: 45 * 60_000, w5t: 25 * 60_000 };
+export const RUN_LIMIT_MS: Record<string, number> = { w1w5: 2 * 3600_000, w1: 90 * 60_000, w5: 45 * 60_000, w5t: 25 * 60_000,
+  w1s: 90 * 60_000, w5r: 45 * 60_000 };
 /** Workflows that research the public web; the others work from local files only and get no web search. */
-export const WEB_WORKFLOWS: readonly string[] = ['w1w5', 'w1'];
+export const WEB_WORKFLOWS: readonly string[] = ['w1w5', 'w1', 'w1s'];
 /** After both models report "at capacity", the runner claims nothing for this long. */
 export const CAPACITY_WAIT_MS = 30 * 60_000;
 
