@@ -16,7 +16,9 @@ Thu 15 Oct 2026; an API key bills separately, but keep it small).
 
 ## The steps, per new message
 
-1. **Report the metadata** — `comms_ingest` (`POST /api/outreach/comms`), as today. Free. If the message is a reply
+1. **Report the metadata** — `comms_ingest` (`POST /api/outreach/comms`), as today. Free. Pass `pursuitId` whenever
+   you know the vehicle (Raise does): an unlinked message counts for a raise only when its subject names the vehicle or
+   its Gmail thread holds a linked one. Sending an old message again with `pursuitId` links it. If the message is a reply
    from the LP, PLC OS records the conversation rungs it supports (LP opted in) on its own: Reconciliation, as for
    Affinity's replies, undoable on the LP's timeline. It also moves the status forward on its own (Juan, 9 Oct 2026):
    our email to Connecting, their reply or a meeting to Discussing, never to Committed or Passed (docs/29 §4a). So

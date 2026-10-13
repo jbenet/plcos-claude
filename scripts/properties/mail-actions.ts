@@ -206,15 +206,29 @@ export async function mailActionProperties(check: Check, db: Db) {
   const sent5 = await call(writer, 'comms_ingest', { messages: [{ messageId: '<mail-5@invented-mail.example>', gmailMessageId: 'g-mail-5',
     date: new Date(Date.now() - 7_200_000).toISOString(), direction: 'sent', from: juanEmail, to: ['zane@invented-mail.example'], subject: 'The SPV', pursuitId: p5 }] });
   const s5 = await statusOf(p5);
+  // Our pitch reported without its LP, then again with it (feedback 0150): the second report links it and moves them.
+  const lp6 = await entity('Invented Mail LP Six', 'person');
+  const p6 = await pursuit(lp6, fund.id, 'selected');
+  await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'uma@invented-mail.example', 'props:mail', current_date, 'medium')`, [lp6]);
+  const pitch6 = { messageId: '<mail-6@invented-mail.example>', gmailMessageId: 'g-mail-6', threadId: 'thread-6',
+    date: new Date(Date.now() - 7_200_000).toISOString(), direction: 'sent', from: juanEmail, to: ['uma@invented-mail.example'], subject: 'Hello' };
+  await call(writer, 'comms_ingest', { messages: [pitch6] });
+  const s6before = await statusOf(p6);
+  const relink = await call(writer, 'comms_ingest', { messages: [{ ...pitch6, pursuitId: p6 }] });
+  const s6 = await statusOf(p6);
+  // Their reply in the same Gmail thread, reported without the LP: the thread counts for the pitch's raise.
+  await call(writer, 'comms_ingest', { messages: [{ messageId: '<mail-7@invented-mail.example>', gmailMessageId: 'g-mail-7', threadId: 'thread-6',
+    date: new Date(Date.now() - 3_600_000).toISOString(), direction: 'received', from: 'uma@invented-mail.example', to: [juanEmail], subject: 'Re: Hello' }] });
+  const s6reply = await statusOf(p6);
   const { setStatus } = await import('../../modules/strategy');
   await setStatus(juan.id, p2, { status: 'connecting' });
   await reconcilePursuit(p2);
   const held = await statusOf(p2);
-  check('Status on the records (Juan, 9 Oct 2026, "Auto, with undo"): our email moves to Connecting, their reply or a meeting with them to Discussing; never backward, never from or to Committed or Passed, not on an event, a firm\'s record, history before the raise opened, the future, or a record older than a person\'s undo; a person\'s setting that undid nothing does not hold an earlier email back. The LP\'s Gmail reply moved them, by Reconciliation, saying why; setting it back holds',
+  check('Status on the records (Juan, 9 Oct 2026, "Auto, with undo"): our email moves to Connecting, their reply or a meeting with them to Discussing; never backward, never from or to Committed or Passed, not on an event, a firm\'s record, history before the raise opened, the future, or a record older than a person\'s undo; a person\'s setting that undid nothing does not hold an earlier email back; a pitch reported again with its LP links and moves them, and their reply in that Gmail thread counts. The LP\'s Gmail reply moved them, by Reconciliation, saying why; setting it back holds',
     pure.oursFromSelected === 'connecting' && pure.oursFromConnecting === null && pure.replyFromNew === 'discussing' && pure.meeting === 'discussing'
     && [pure.event, pure.fromDiscussing, pure.fromCommitted, pure.fromPassed, pure.history, pure.future, pure.afterPerson, pure.viaFirm].every((x) => x === null) && pure.noWindow === 'connecting'
-    && s2 === 'discussing' && s3 === 'connecting' && !sent.error && s4 === 'connecting' && !sent5.error && s5 === 'connecting' && movedBy?.handle === 'reconciliation' && /^Reconciliation: a reply from them/.test(movedBy.reason ?? '') && held === 'connecting',
-    `pure ${JSON.stringify(pure)}; after ingest p2 ${s2} (${JSON.stringify(movedBy)}), p3 ${s3}; our email to a Selected LP: ${s4} ${sent.error ?? ''}; emailed before a person added them: ${s5} ${sent5.error ?? ''}; after a person set it back and reconcile: ${held}`);
+    && s2 === 'discussing' && s3 === 'connecting' && !sent.error && s4 === 'connecting' && !sent5.error && s5 === 'connecting' && s6before === 'selected' && !relink.error && relink.data?.reconciled >= 1 && s6 === 'connecting' && s6reply === 'discussing' && movedBy?.handle === 'reconciliation' && /^Reconciliation: a reply from them/.test(movedBy.reason ?? '') && held === 'connecting',
+    `pure ${JSON.stringify(pure)}; after ingest p2 ${s2} (${JSON.stringify(movedBy)}), p3 ${s3}; our email to a Selected LP: ${s4} ${sent.error ?? ''}; emailed before a person added them: ${s5} ${sent5.error ?? ''}; pitch without its LP ${s6before}, linked after ${s6} (reconciled ${relink.data?.reconciled ?? relink.error}), reply in its thread ${s6reply}; after a person set it back and reconcile: ${held}`);
 
   for (const c of [writer, reader, spvReader]) await c.close();
 }

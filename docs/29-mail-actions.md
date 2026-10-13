@@ -82,6 +82,9 @@ for the vehicle the page is under. `statusFromRecords` in `lib/reconcile.ts`, on
 - a person who sets back a move Reconciliation made undoes it: only records after their setting count. A person's
   setting that undid nothing (an LP added as Selected after we emailed them) does not hold an earlier email back.
   `config.reconcile.statusFromRecords` false turns it off.
+- a Gmail message counts for a vehicle when `comms_ingest` named its pursuit, when its subject names the vehicle inside
+  the raise window, or (13 Oct 2026) when another message in the same Gmail thread counts: their reply to a linked
+  pitch is about the same raise. Reporting a message again with its `pursuitId` links it and runs Reconciliation.
 
 The status says it was Reconciliation (`status_set_by`) and why ("Reconciliation: a reply from them, 9 Oct"), with a
 `pursuit.status_set` audit row like any other.

@@ -105,6 +105,7 @@ export async function ingest(ctx: Ctx, raw: Record<string, unknown>) {
   const [team, about] = await Promise.all([teamAddresses(db),
     db.query<{ slug: string; name: string; aliases: string[] }>(`select slug, name, coalesce(aliases, '{}') aliases from platform.vehicle`)]);
   const out: Array<{ messageId: string; status: 'new' | 'already' | 'unmatched' }> = [];
+  const relinked: string[] = [];
   for (const m of a.messages) {
     const at = new Date(m.date);
     if (at.getTime() > Date.now() + SKEW_MS) throw new OutreachRefused(400, `A message is dated in the future (${m.gmailMessageId}).`);
@@ -120,7 +121,7 @@ export async function ingest(ctx: Ctx, raw: Record<string, unknown>) {
     // A message with nobody on record is not kept: it is about no LP here.
     if (!entities.length) { out.push({ messageId: key, status: 'unmatched' }); continue; }
     const ab = aboutRaise(m.subject ?? '', [m.from, ...m.to], about, []);
-    const r = await db.one<{ fresh: boolean }>(`insert into email.comms_message (message_id, has_message_id, gmail_id, thread_id, sent_at, direction, from_addr, to_addrs, cc_addrs,
+    const r = await db.one<{ fresh: boolean; changed: boolean }>(`insert into email.comms_message (message_id, has_message_id, gmail_id, thread_id, sent_at, direction, from_addr, to_addrs, cc_addrs,
         subject, entity_ids, pursuit_id, about, about_vehicles, about_basis, mailbox_of, token_id, seen_by)
       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::uuid[], $12, $13, $14, $15, $16, $17, array[$16]::uuid[])
       on conflict (message_id) do update set
@@ -130,15 +131,17 @@ export async function ingest(ctx: Ctx, raw: Record<string, unknown>) {
         seen_by = array(select distinct x from unnest(email.comms_message.seen_by || excluded.seen_by) x order by x),
         updated_at = case when email.comms_message.entity_ids @> excluded.entity_ids and email.comms_message.seen_by @> excluded.seen_by
                             and (email.comms_message.pursuit_id is not null or excluded.pursuit_id is null) then email.comms_message.updated_at else now() end
-      returning (xmax = 0) as fresh`,
+      returning (xmax = 0) as fresh, updated_at = now() as changed`,
     [key, real, m.gmailMessageId, m.threadId ?? null, at, m.direction === 'sent' ? 'ours' : 'theirs', m.from, m.to, m.cc, m.subject ?? null,
       entities, pursuitId, ab.about, ab.vehicles, ab.basis, owner.id, ctx.env.tokenId]);
     out.push({ messageId: key, status: r?.fresh ? 'new' : 'already' });
+    // Sent again with the LP it is about (a pursuit it lacked), or another LP on it: Reconciliation reads it again.
+    if (!r?.fresh && r?.changed) relinked.push(key);
   }
   const n = (s: string) => out.filter((x) => x.status === s).length;
   // A new reply from an LP is a reply on file: Reconciliation records the conversation rungs it supports, as it
   // does after Affinity's (Juan, 8 Oct 2026, issue 0137; 9 Oct 2026, docs/29). Only those LPs, here and now.
-  const fresh = out.filter((x) => x.status === 'new').map((x) => x.messageId);
+  const fresh = [...out.filter((x) => x.status === 'new').map((x) => x.messageId), ...relinked];
   const reconciled = fresh.length ? await reconcileAfterMail(fresh, db) : 0;
   await appendAudit({ actorId: owner.id, action: 'comms.ingested', subjectType: 'mcp_token', subjectId: ctx.env.tokenId,
     detail: { messages: a.messages.length, new: n('new'), already: n('already'), unmatched: n('unmatched'), reconciled } }, db);
