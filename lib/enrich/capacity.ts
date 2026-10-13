@@ -24,9 +24,10 @@ const KINDS: Array<[string, RegExp]> = [
   ['individual', /\b(net worth|personal wealth|personally worth)\b/i],
 ];
 
-/** A dollar amount in words: "$800M", "$1.2 billion", "US$ 3bn". The first one. */
+/** A dollar amount in words: "$800M", "$1.2 billion", "US$ 3bn", "$2,780,000,000". The first one. */
 export function parseUsd(text: string): number | null {
-  const m = /(?:us)?\$\s?(\d+(?:[.,]\d+)?)\s?(k|thousand|m|mm|mn|million|b|bn|billion)?\b/i.exec(text);
+  // Thousands groups first ("$2,780,000,000" was read as $2,780), then a decimal point or comma.
+  const m = /(?:us)?\$\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?)\s?(k|thousand|m|mm|mn|million|b|bn|billion)?\b/i.exec(text);
   if (!m) return null;
   const n = Number(m[1]!.replace(/,(?=\d{3}\b)/g, '').replace(',', '.'));
   const unit = (m[2] ?? '').toLowerCase();
