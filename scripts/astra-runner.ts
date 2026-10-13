@@ -38,7 +38,7 @@ const REPO = process.cwd();
 // real ceiling, and "at capacity" pauses claiming); slots past the codex worktrees use plain folders.
 const SLOTS = Math.max(1, Math.min(12, Number(process.env.ASTRA_SLOTS ?? 8)));
 const POLL_MS = 60_000;
-const WORKFLOWS = ['w1w5', 'w1', 'w5', 'w5t'] as const;
+const WORKFLOWS = ['w1w5', 'w1', 'w5', 'w5t', 'w1s', 'w5r'] as const;
 type Job = { id: string; workflow: (typeof WORKFLOWS)[number]; size: number; focus?: string[] };
 /** What this runner can do beyond the first runners: `focus` = cut a batch for named vehicles (the night plan, migration 027). */
 const FEATURES = ['focus'] as const;
@@ -182,10 +182,10 @@ async function work(slot: Slot, job: Job, root: string) {
   const env = { ...process.env, DATA_PROFILE: 'real' };
   await reportJob(job.id, 'running', { slot: slot.name });
   // Cut one batch at a time, so two runs never take the same LPs.
-  const mode = job.workflow === 'w5' || job.workflow === 'w5t' ? 'w5' : 'w1';
+  const mode = job.workflow === 'w5' || job.workflow === 'w5t' || job.workflow === 'w5r' ? 'w5' : 'w1';
   const prefix = batchPrefix(job.id);
   const cut = cutting.then(() => run('npx', ['tsx', 'scripts/enrich-batch.ts', mode, prefix, String(job.size), '--max', '1',
-    ...(job.workflow === 'w5t' ? ['--tighten'] : []), ...(job.focus?.length ? ['--vehicle', job.focus.join(',')] : [])], { cwd: REPO, env, timeout: 600_000 }));
+    ...(job.workflow === 'w5t' ? ['--tighten'] : job.workflow === 'w1s' ? ['--search'] : job.workflow === 'w5r' ? ['--revise'] : []), ...(job.focus?.length ? ['--vehicle', job.focus.join(',')] : [])], { cwd: REPO, env, timeout: 600_000 }));
   cutting = cut.catch(() => undefined);
   try { await cut; } catch { return reportJob(job.id, 'failed', { message: 'The batch cutter failed; see the runner log on the Mac.' }); }
   const batch = `${prefix}01`, file = join(batches, `${batch}.${mode === 'w1' ? 'jsonl' : 'txt'}`);
@@ -196,7 +196,7 @@ async function work(slot: Slot, job: Job, root: string) {
   const skip = new Set(keys);
   const values: Record<string, string> = { worker: slot.folder, repo: REPO, data: root, count: String(keys.length), batch,
     rawExamples: mode === 'w5' ? '' : await examples(join(enrich, 'raw'), skip, 3),
-    strategyExamples: job.workflow === 'w1' ? '' : await examples(join(enrich, 'strategy'), skip, 2) };
+    strategyExamples: job.workflow === 'w1' || job.workflow === 'w1s' ? '' : await examples(join(enrich, 'strategy'), skip, 2) };
   const templates = join(REPO, 'scripts', 'astra', 'templates');
   const template = await readFile(join(templates, `${job.workflow}.md`), 'utf8');
   const brief = fill(template, { ...values, common: fill(await readFile(join(templates, 'common.md'), 'utf8'), values) });
@@ -204,7 +204,7 @@ async function work(slot: Slot, job: Job, root: string) {
   await mkdir(join(astra, 'runs'), { recursive: true });
   await writeFile(`${base}-brief.md`, brief);
   const protocol = mode === 'w1' ? 'w1-profile.md' : 'w5-strategy.md';
-  const runId = await beginRun({ parentRunId: null, workflow: mode === 'w1' ? 'W1' : 'W5', operation: job.workflow === 'w1w5' ? 'astra profile+strategy' : job.workflow === 'w5t' ? 'astra shorten strategies' : `astra ${mode}`,
+  const runId = await beginRun({ parentRunId: null, workflow: mode === 'w1' ? 'W1' : 'W5', operation: job.workflow === 'w1w5' ? 'astra profile+strategy' : job.workflow === 'w5t' ? 'astra shorten strategies' : job.workflow === 'w1s' ? 'astra search pass' : job.workflow === 'w5r' ? 'astra revise strategies' : `astra ${mode}`,
     protocol: { version: null, hash: sha(template + await readFile(join(REPO, 'docs', 'workflows', protocol), 'utf8')) },
     source: 'chatgpt', agent: 'astra-runner', model: MODELS[0], launchFolder: REPO, workerFolder: slot.folder,
     batch: { id: batch, manifest: `enrich/batches/${basename(file)}`, hash: sha(text), planned: keys.length } });
@@ -212,8 +212,9 @@ async function work(slot: Slot, job: Job, root: string) {
   const started = Date.now();
   const result = await codex(slot, brief, base, enrich);
   if (result.capacity) capacityUntil = Date.now() + CAPACITY_WAIT_MS;
-  const raw = mode === 'w1' ? await writtenSince(join(enrich, 'raw'), keys, started) : [];
-  const strategies = job.workflow === 'w1' ? [] : await writtenSince(join(enrich, 'strategy'), await withAliases(enrich, keys), started, true);
+  // A search pass revises the finding on file, which can sit under an identity alias.
+  const raw = mode === 'w1' ? await writtenSince(join(enrich, 'raw'), job.workflow === 'w1s' ? await withAliases(enrich, keys) : keys, started) : [];
+  const strategies = job.workflow === 'w1' || job.workflow === 'w1s' ? [] : await writtenSince(join(enrich, 'strategy'), await withAliases(enrich, keys), started, true);
   const pushed = (raw.length ? await push('W1', runId, raw) : 0) + (strategies.length ? await push('W5', runId, strategies) : 0);
   const written = raw.length + strategies.length;
   const why = slot.cancelled ? 'Stopped from the page.' : result.capacity ? 'Both models were at capacity.' : !result.finished ? 'The worker ended without a final message.' : null;

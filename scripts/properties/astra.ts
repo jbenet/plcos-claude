@@ -25,6 +25,9 @@ export async function astraProperties(check: Check) {
   const local = codexArgs({ model: 'gpt-6-astra', worker: '/w', enrich: '/d/enrich', last: '/l.md', web: false });
   check('astra strategy-only runs get no web search, and every workflow has a time limit', local.includes('tools.web_search=false')
     && !WEB_WORKFLOWS.includes('w5t') && ASTRA_WORKFLOWS.every((w) => RUN_LIMIT_MS[w]! > 0 && RUN_LIMIT_MS[w]! <= 2 * 3600_000), local.join(' '));
+  const templates = await Promise.all(ASTRA_WORKFLOWS.map((w) => readFile(`scripts/astra/templates/${w}.md`, 'utf8').then(() => true, () => false)));
+  check('astra has a brief for every workflow; the search pass searches and revising strategies does not',
+    templates.every(Boolean) && WEB_WORKFLOWS.includes('w1s') && !WEB_WORKFLOWS.includes('w5r'), ASTRA_WORKFLOWS.join(' '));
   check('astra falls back only on capacity with no final message', shouldFallBack('', 'model is at capacity') && !shouldFallBack('done', 'model is at capacity') && !shouldFallBack('', 'error'), 'fallback');
   check('astra batch prefix is short and the runner\'s', batchPrefix('0123456789abcdef') === 'astra-01234567-', batchPrefix('0123456789abcdef'));
 

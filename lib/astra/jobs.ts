@@ -6,10 +6,10 @@ import type { Db, Queryable } from '@/lib/db';
  * trigger astra automatically"). The server queues and records only; the runner cuts each batch on the Mac,
  * so no name or record content ever reaches these tables, and nothing here launches anything.
  */
-export const ASTRA_WORKFLOWS = ['w1w5', 'w1', 'w5', 'w5t'] as const;
+export const ASTRA_WORKFLOWS = ['w1w5', 'w1', 'w5', 'w5t', 'w1s', 'w5r'] as const;
 export type AstraWorkflow = (typeof ASTRA_WORKFLOWS)[number];
 export const WORKFLOW_LABEL: Record<AstraWorkflow, string> = { w1w5: 'Profile, then strategy (W1+W5)', w1: 'Profile (W1)', w5: 'Strategy (W5)',
-  w5t: 'Shorten strategies (W5)' };
+  w5t: 'Shorten strategies (W5)', w1s: 'Search pass (W1)', w5r: 'Revise strategies (W5)' };
 /** What a runner from before w5t can run: one that names no workflows in its poll is handed only these. */
 export const FIRST_WORKFLOWS: readonly AstraWorkflow[] = ['w1w5', 'w1', 'w5'];
 export type AstraStatus = 'queued' | 'claimed' | 'running' | 'done' | 'failed' | 'cancelled';

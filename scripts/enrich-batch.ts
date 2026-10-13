@@ -142,6 +142,8 @@ async function main() {
   const batched = new Set<string>();
   /** w5: keys in a batch of either mode (new or revise) not yet written since the batch was cut (v09). */
   const openW5 = new Set<string>();
+  /** w1 --search: keys in an Astra batch cut within OPEN_HOURS, by when it was cut. */
+  const openW1 = new Map<string, number>();
   for (const entry of await readdir(join(dir, 'batches'), { withFileTypes: true }).catch(() => [])) {
     // Run folders (e.g. w5gap-20260927/) sit beside the batch files; only files are batches.
     if (!entry.isFile()) continue;
@@ -153,6 +155,12 @@ async function main() {
     // strategy re-pinned without a new `made.at` stayed "in an open batch" long after that batch had
     // finished, and 28 stale strategies went unbatched. Batches finish within the hour.
     // The Astra runner's W5 batches (astra-<job>-NN.txt) hold their keys the same way, so two runs never share LPs.
+    // A search pass's Astra batch (astra-<job>-NN.jsonl) holds its keys the same way: their pages-only findings stay
+    // pages-only until the run writes, so without this two runs cut minutes apart would research the same LPs.
+    if (mode === 'w1' && withSearch && /^astra-[\w-]+\.jsonl$/.test(f)) {
+      const cut = (await stat(join(dir, 'batches', f))).mtime.getTime();
+      if (Date.now() - cut < OPEN_HOURS * 3_600_000) for (const l of lines(text)) openW1.set(JSON.parse(l).key, Math.max(cut, openW1.get(JSON.parse(l).key) ?? 0));
+    }
     if (mode === 'w5' && /^([suv]\d+|astra-[\w-]+)\.txt$/.test(f)) {
       const cut = (await stat(join(dir, 'batches', f))).mtime.getTime();
       if (Date.now() - cut < OPEN_HOURS * 3_600_000) for (const k of lines(text).map((x) => x.trim())) openW5.add(`${k} ${cut}`);
@@ -233,7 +241,7 @@ async function main() {
     if (!focused(c)) return false;
     if (tighten) return tightRank.has(c.key);
     if (batched.has(c.key) && (mode === 'w1' ? !f : !strategies.has(c.key))) return false;
-    if (mode === 'w1') return !f || (withSearch && pagesOnly(f));
+    if (mode === 'w1') return !f || (withSearch && pagesOnly(f) && !(openW1.has(c.key) && Date.parse(f.researched.at) < openW1.get(c.key)!));
     const resolved = f && (f.identity.match === 'confirmed' || f.identity.match === 'probable');
     const s = strategies.get(c.key);
     const engaged = ['discussing', 'committed'].includes(c.pursuits[0]?.status ?? '');
