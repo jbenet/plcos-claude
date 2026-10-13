@@ -160,7 +160,7 @@ export const BLOCKED_DOMAINS = [
   'businessprofiles.com', 'buzzfile.com', 'findlps.com', 'allfamilyoffices.com', 'praxisrock.com', 'activefamilyoffices.com',
   'relationshipscience.com', 'askforfunding.com', 'leadferret.com', 'reachinbox.ai', 'peoplesearch.com', 'veripages.com',
   'dastelefonbuch.de', 'venturebanc.com', 'familyofficehub.io', 'fundinfolks.com', 'opendatany.com', 'inforcapital.com',
-  'angelbacked.co', 'highperformr.ai', 'scalelist.com', 'theofficialboard.com', 'getemail.io', 'allpeople.com', 'konaequity.com',
+  'angelbacked.co', 'highperformr.ai', 'connectsafely.ai', 'scalelist.com', 'theofficialboard.com', 'getemail.io', 'allpeople.com', 'konaequity.com',
   'realtyhop.com', 'getprospect.com', 'officialusa.com', ...BROKER_DOMAINS,
 ];
 export function isBroker(url: string | null | undefined): boolean {
