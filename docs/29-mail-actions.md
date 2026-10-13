@@ -76,9 +76,12 @@ for the vehicle the page is under. `statusFromRecords` in `lib/reconcile.ts`, on
 - our email or message moves an LP from New, Sourcing or Selected to **Connecting**;
 - a reply from them (as §4 reads it), or a meeting or call with them (not our event), moves them to **Discussing**;
 - forward only, never from or to Committed or Passed, never for a portfolio company or our team or on a firm's record;
-- only records on or after `config.reconcile.statusFromRecordsSince` (9 Oct 2026; null turns it off), so LPs do not
-  move on their history, and only records newer than the status's last setting: a person who sets it back undoes the
-  move until something new happens.
+- records count from the vehicle's raise opening (Juan, 13 Oct 2026, feedback 0150: "All the ones that have sent email
+  should be set to (at least) Connecting. if they replied, moves to Discussing"; from 9 Oct to 13 Oct only records from
+  9 Oct counted), and not in the future;
+- a person who sets back a move Reconciliation made undoes it: only records after their setting count. A person's
+  setting that undid nothing (an LP added as Selected after we emailed them) does not hold an earlier email back.
+  `config.reconcile.statusFromRecords` false turns it off.
 
 The status says it was Reconciliation (`status_set_by`) and why ("Reconciliation: a reply from them, 9 Oct"), with a
 `pursuit.status_set` audit row like any other.
