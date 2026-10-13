@@ -37,9 +37,11 @@ interface Props {
   initialFilters?: Record<string, string>;
   showVehicle: boolean;
   asOf: string;
+  /** Shown under the table while New is the one status on screen: possible LPs from the calendar (components/strategy/PossibleLps.tsx). */
+  newSection?: React.ReactNode;
 }
 
-export function PipelineTable({ packed, statuses, rungNames, initialStatus, initialFilters, showVehicle, asOf }: Props) {
+export function PipelineTable({ packed, statuses, rungNames, initialStatus, initialFilters, showVehicle, asOf, newSection }: Props) {
   const router = useRouter();
   const given = useMemo(() => unpackRows<PipelineRow>(packed), [packed]);
   // Move to Selected and Set status show at once, ahead of the server (useMove).
@@ -235,6 +237,7 @@ export function PipelineTable({ packed, statuses, rungNames, initialStatus, init
           </div>
         )}
       </div>
+      {one?.id === 'new' && newSection}
       <UndoToast state={mv} onUndo={() => void mv.undo()} />
     </section>
   );

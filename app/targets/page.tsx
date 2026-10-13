@@ -1,6 +1,7 @@
 import { coalescePage } from '@/lib/page-render';
 import { Page } from '@/components/shell/Page';
 import { PipelineTable } from '@/components/strategy/PipelineTable';
+import { PossibleLps } from '@/components/strategy/PossibleLps';
 import { vehicleSelection } from '@/lib/session';
 import { packRows } from '@/lib/packed-rows';
 import { pipelineData } from '@/lib/authz/read/pipeline';
@@ -81,6 +82,7 @@ async function Pipeline({ searchParams }: { searchParams: Promise<Record<string,
         initialStatus={initial}
         initialFilters={filters}
         showVehicle={!current}
+        newSection={<PossibleLps vehicle={current} vehicles={selection.all} />}
       />
 
 
