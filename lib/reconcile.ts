@@ -340,7 +340,7 @@ export async function reconcile(runBy: string | null = null): Promise<ReconcileC
  * server reads every LP again at its next start (issue 0137: its open proposals for the conversation
  * rungs are applied or withdrawn without waiting for the next Affinity translation).
  */
-export const RECONCILE_RULES = '0150';
+export const RECONCILE_RULES = '0150-threads';
 
 /** At start: run once when the last run was under other rules. Never throws; a failure is in its run receipt. */
 export async function reconcileIfRulesChanged(): Promise<void> {
