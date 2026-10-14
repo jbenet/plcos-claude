@@ -8,9 +8,9 @@ Postgres 16.
 
 | What | Before | After |
 |---|---|---|
-| /all/calendar | 11.6 MB | 6.9 MB |
-| /neurotech/calendar | — | 5.6 MB |
-| /neurotech/pipeline | 2.75 MB | 2.36 MB |
+| /all/calendar | 11.6 MB | 5.5 MB |
+| /neurotech/calendar | 5.6 MB (after the first change below) | 4.5 MB |
+| /neurotech/pipeline | 2.75 MB | 2.19 MB |
 | Every vehicle's list, rebuilt after a status move | ~1.9 s | ~1.4 s |
 | JuanMail's queue read (a page of 50, cached list) | ~1.2 s | ~0.46 s, same answer |
 
@@ -20,6 +20,10 @@ Postgres 16.
   - Unique text with a few shapes is split at its last `=`, `:` or `/`. The heads are shared and the tails are sent as
     they are. A tail that is the same as an earlier text column's tail is sent as `0`. For example, a calendar row's
     link `/meetings?e=<LP>&m=<meeting>` ends in its own id's meeting, and the links went from 5.1 MB to 0.8 MB.
+  - A shared column with 36 distinct values or fewer (a lane, a standing, a vehicle) sends one character per row.
+- **The calendar's week grid** was sent as plain rows (1.1 MB); it is packed like the list. It reads each row's dates
+  once instead of once per lane and week on every click, and the numbers above the list are counted in one pass. Both
+  render the same markup as before on 300 random calendars.
 - **The list rebuild after a status move:**
   - Each LP's touchpoint summary is made in one pass instead of a dozen filters.
   - "On file" finds the first meeting, reply and event without sorting every touchpoint.
