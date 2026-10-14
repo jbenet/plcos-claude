@@ -25,7 +25,7 @@ export const SYNC_SCOPES = [SYNC_SNAPSHOT, SYNC_PUSH, SYNC_ADMIN] as const;
 export type SyncScopeName = (typeof SYNC_SCOPES)[number];
 
 export interface Endpoint { name: string; route: string; policy: Policy; grant: readonly ('admin' | 'team' | 'viewer')[] }
-export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles' | 'jobs' | 'feedback' | 'identity' | 'astra' | 'screen', Endpoint> = {
+export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles' | 'jobs' | 'feedback' | 'identity' | 'astra', Endpoint> = {
   snapshot: { name: 'sync_snapshot', route: 'GET /api/sync/snapshot', grant: ['admin'],
     policy: { risk: 'read', scopes: [SYNC_SNAPSHOT], ticket: 'none', approval: false } },
   // It writes research files the normal import then maps, through the importer's own validators: guarded writes.
@@ -46,9 +46,6 @@ export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles' | 'jobs' | 
     policy: { risk: 'write-guarded', scopes: [SYNC_ADMIN], ticket: 'none', approval: false } },
   // The Mac's Astra runner (lib/sync/astra.ts, docs/30): polls for the runs a person queued on Developer → Astra and reports counts.
   astra: { name: 'astra_runner', route: 'POST /api/sync/astra', grant: ['admin'],
-    policy: { risk: 'write-guarded', scopes: [SYNC_ADMIN], ticket: 'none', approval: false } },
-  // A vehicle's field screened across our records (lib/sync/screen.ts): counts only, or the top matches added as New.
-  screen: { name: 'vehicle_screen', route: 'POST /api/sync/screen', grant: ['admin'],
     policy: { risk: 'write-guarded', scopes: [SYNC_ADMIN], ticket: 'none', approval: false } },
 };
 
