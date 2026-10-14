@@ -85,7 +85,6 @@ Left as they are:
   property suite asserts this on purpose, and a retry would spend the Affinity call budget again.
 - A token for one vehicle can ask the emailed-parties check about any address, and learn whether PLC OS or Affinity
   holds it and Affinity's last email date. Only JuanMail calls it today, with Juan's own token.
-
 - When two people propose the same address, the note names the first. Only JuanMail proposes today, for one sender.
 - When `comms_ingest` matches a message, it reconciles that person's LPs on every vehicle, not only the token's.
   Reconciliation reads only records on file and would make the same moves on its next full pass.
