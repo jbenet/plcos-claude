@@ -49,12 +49,18 @@ asking the login shell for PATH once (a Finder-launched app has almost none).
 
 Token sign-in is not acceptable for people (Juan, 12 Oct 2026). The app holds a real session of yours:
 
-1. The core asks the server to start a pairing (`POST /api/desktop/pair`, `op: start`). It gets a secret device
-   code and a short code to show.
+1. The core asks the server to start a pairing (`POST /api/desktop/pair`, `op: start`) with a PKCE challenge and its
+   loopback port. It gets a short code to show.
 2. It opens `<server>/desktop/pair?code=<short code>` in your normal browser, where you are already signed in with
    Google. The page shows the same short code and the device's name; **Allow** approves it.
-3. The core polls (`op: poll`) with the device code and receives a session cookie for you, signed exactly as the
-   Google sign-in signs one (`lib/auth/session.ts`), for the same number of days. It is kept in the macOS Keychain.
+3. The server sends your browser to `http://127.0.0.1:<port>/__desktop/callback` with a one-time grant. The core
+   exchanges it (`op: claim`) with the PKCE verifier only it holds, and receives a session cookie for you, signed
+   exactly as the Google sign-in signs one (`lib/auth/session.ts`), for the same number of days. It is kept in the
+   macOS Keychain.
+
+Why a loopback redirect and not polling, as JuanMail does: with polling, whoever starts a pairing could send someone
+the link and collect that person's session when they press Allow. Here the grant only ever reaches the browser's own
+machine, and only the app that started the pairing can exchange it.
 
 So every action from the app is yours in the audit log. "Sign out everywhere" (raising your session epoch) signs the
 app out too. Google's sign-in never runs inside the app's window (Google refuses embedded web views). A pairing is

@@ -92,7 +92,7 @@ const state = {
   user: null,               // { id, handle, name, access }
   remote: null,             // /api/desktop/info of the live server
   jar: readJson(JAR_FILE, {}), // logical name → value (never the session)
-  pairing: null,            // { deviceCode, userCode, url, started, state }
+  pairing: null,            // { verifier, userCode, url, started, expires, state }
   lastWriteAt: 0,
   local: null,              // set by the local copy manager (docs/31 §3)
   stats: { remote: 0, local: 0, static: 0, fallback: 0, writes: 0 },
@@ -206,36 +206,30 @@ async function signOutLocally(why) {
 }
 
 async function startPairing() {
-  const r = await serverJson('/api/desktop/pair', { method: 'POST', body: { op: 'start', device: os.hostname().replace(/\.local$/, '') } });
+  // PKCE: only this process holds the verifier, so a grant carried to any other app is useless (docs/31 §2).
+  const verifier = randomBytes(32).toString('base64url');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  const r = await serverJson('/api/desktop/pair', { method: 'POST', body: { op: 'start', device: os.hostname().replace(/\.local$/, ''), challenge, port: PORT } });
   if (!r.json?.ok) throw new Error(r.json?.error || `the server answered ${r.status}`);
-  state.pairing = { deviceCode: r.json.deviceCode, userCode: r.json.userCode, url: r.json.url, started: Date.now(), expires: Date.now() + r.json.expiresIn * 1000, state: 'pending', tries: 0 };
+  state.pairing = { verifier, userCode: r.json.userCode, url: r.json.url, started: Date.now(), expires: Date.now() + r.json.expiresIn * 1000, state: 'pending' };
   openInBrowser(r.json.url);
-  pollPairing();
   return state.pairing;
 }
 
-async function pollPairing() {
+/** The browser arrives at /__desktop/callback with the grant once the person pressed Allow. */
+async function finishPairing(grant, code) {
   const p = state.pairing;
-  if (!p || p.state !== 'pending') return;
-  if (Date.now() > p.expires) { p.state = 'expired'; return; }
-  try {
-    const r = await serverJson('/api/desktop/pair', { method: 'POST', body: { op: 'poll', deviceCode: p.deviceCode } });
-    p.tries = 0;
-    if (r.json?.state === 'approved') {
-      state.session = { name: r.json.cookie.name, value: r.json.cookie.value };
-      await secrets.set(`${r.json.cookie.name}=${r.json.cookie.value}`);
-      p.state = 'approved';
-      await refreshInfo();
-      log('paired as', state.user?.handle);
-      state.local?.onSignedIn?.();
-      return;
-    }
-    if (r.json?.state === 'denied' || r.json?.state === 'expired') { p.state = r.json.state; return; }
-  } catch (e) {
-    // Give up after three failures in a row (JuanMail: no infinite retries); the page offers to start again.
-    if (++p.tries >= 3) { p.state = 'failed'; p.error = String(e?.message ?? e); return; }
-  }
-  setTimeout(pollPairing, 2000);
+  if (!p || p.state !== 'pending' || code !== p.userCode || Date.now() > p.expires) return 'This sign-in was not started by this app, or it expired. Start again from the app.';
+  const r = await serverJson('/api/desktop/pair', { method: 'POST', body: { op: 'claim', grant, verifier: p.verifier } });
+  if (!r.json?.ok) { p.state = 'failed'; p.error = r.json?.error || `the server answered ${r.status}`; return p.error; }
+  state.session = { name: r.json.cookie.name, value: r.json.cookie.value };
+  await secrets.set(`${r.json.cookie.name}=${r.json.cookie.value}`);
+  p.state = 'approved';
+  delete p.verifier;
+  await refreshInfo();
+  log('paired as', state.user?.handle);
+  state.local?.onSignedIn?.();
+  return null;
 }
 
 function openInBrowser(url) {
@@ -377,7 +371,7 @@ function pairPage() {
   const waiting = p && p.state === 'pending';
   const body = waiting
     ? `<h1>Allow this Mac in your browser</h1>
-       <p>Your browser opened PLC OS. Check it shows this code, then press <b>Allow</b>.</p>
+       <p>Your browser opened PLC OS. Check it shows this code, then press <b>Allow</b>. The browser comes back to this Mac to finish.</p>
        <div class="code">${esc(p.userCode)}</div>
        <p>Browser didn't open? <a class="link" href="${esc(p.url)}" target="_blank" rel="noopener">Open the page</a>. If it asked you to sign in first, open it again after signing in.</p>
        <script>setInterval(async()=>{try{const r=await fetch('/__desktop/status');const s=await r.json();if(s.paired)location.href='/';else if(s.pairing!=='pending')location.reload()}catch{}},1500)</script>`
@@ -438,6 +432,15 @@ const server = http.createServer(async (req, res) => {
       if (!KEY || k !== KEY) { res.writeHead(403).end('wrong key'); return; }
       const to = url.searchParams.get('to') ?? '/';
       res.writeHead(303, { location: to.startsWith('/') && !to.startsWith('//') ? to : '/', 'set-cookie': `${KEY_COOKIE}=${KEY}; Path=/; HttpOnly; SameSite=Strict` }).end();
+      return;
+    }
+    // The browser, sent here by the server after you press Allow: no launch key (it is another browser), but it
+    // carries a one-time grant that only this process's verifier can exchange.
+    if (url.pathname === '/__desktop/callback' && req.method === 'GET') {
+      const why = await finishPairing(url.searchParams.get('grant') ?? '', url.searchParams.get('code') ?? '').catch((e) => String(e?.message ?? e));
+      res.writeHead(why ? 400 : 200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+        .end(why ? page('Not signed in · PLC OS', `<h1>Not signed in</h1><p>${esc(why)}</p>`)
+          : page('Signed in · PLC OS', `<h1>PLC OS is signed in</h1><p>The app on this Mac now acts as <b>${esc(state.user?.name ?? 'you')}</b>. You can close this tab and go back to the app.</p>`));
       return;
     }
     if (!keyOk(req)) { res.writeHead(403, { 'content-type': 'text/plain' }).end('Open PLC OS from the app.'); return; }

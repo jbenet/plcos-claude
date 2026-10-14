@@ -11,10 +11,12 @@ export async function decidePairingAction(form: FormData): Promise<void> {
   const { decidePairing, normalizeCode } = await import('@/lib/desktop/pair');
   const code = normalizeCode(String(form.get('code') ?? ''));
   const allow = form.get('decision') === 'allow';
-  const p = code ? decidePairing(code, user, allow) : null;
-  if (p) {
+  const d = code ? decidePairing(code, user, allow) : null;
+  if (d) {
     const { appendAudit } = await import('@/modules/platform');
-    await appendAudit({ actorId: user.id, action: allow ? 'desktop.pair_allowed' : 'desktop.pair_refused', subjectType: 'app_user', subjectId: user.id, detail: { device: p.device } });
+    await appendAudit({ actorId: user.id, action: allow ? 'desktop.pair_allowed' : 'desktop.pair_refused', subjectType: 'app_user', subjectId: user.id, detail: { device: d.pending.device } });
   }
-  redirect(`/desktop/pair?code=${encodeURIComponent(code ?? '')}&done=${p ? (allow ? 'allowed' : 'refused') : 'gone'}`);
+  // Allowed: on to the app's own loopback address on this machine, which finishes the sign-in (docs/31 §2).
+  if (d?.redirect) redirect(d.redirect);
+  redirect(`/desktop/pair?code=${encodeURIComponent(code ?? '')}&done=${d ? 'refused' : 'gone'}`);
 }
