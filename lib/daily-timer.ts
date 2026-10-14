@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { config } from '@/config/deployment';
 import { getDb, type Db } from '@/lib/db';
 import { withImportLock } from '@/lib/db/advisory';
-import { queueImportJob, importJobStatus } from '@/lib/import-jobs/server';
+import { holdImports, queueImportJob, importJobStatus } from '@/lib/import-jobs/server';
 import type { ImportJob } from '@/lib/import-jobs/types';
 
 const g = globalThis as typeof globalThis & { __dailyTimer?: NodeJS.Timeout };
@@ -21,19 +21,23 @@ export async function runDailyJobs(db: Db, at: string, now = new Date(), queue =
   // The slice only lands Affinity's records; translate maps them onto LPs (last email, statuses), so a read that is
   // never translated changes nothing anyone sees (13 Oct 2026: LP pages showed no Affinity email after 8 Oct).
   const steps = [['affinity', 'slice'], ['affinity', 'translate'], ['linear'], ['spv-stance'], ['calendar']] as const;
-  for (const [kind, operation] of steps) {
-    if (lockLost()) throw new Error('Daily lock lost.');
-    let job = await queue(db, kind, actor.id, {
-      schedule: 'daily', ...(operation ? { operation, options: {} } : {}),
-    });
-    while (job.status === 'queued' || job.status === 'running') {
-      await delay(1000); // GUESS: one-second completion polling keeps this small queue responsive.
+  // The whole chain counts as importing, so /api/health shows no gap between two steps (8 Oct 2026).
+  const release = holdImports();
+  try {
+    for (const [kind, operation] of steps) {
       if (lockLost()) throw new Error('Daily lock lost.');
-      await importJobStatus(db);
-      job = (await db.one<ImportJob>('select * from platform.import_job where id=$1', [job.id]))!;
+      let job = await queue(db, kind, actor.id, {
+        schedule: 'daily', ...(operation ? { operation, options: {} } : {}),
+      });
+      while (job.status === 'queued' || job.status === 'running') {
+        await delay(1000); // GUESS: one-second completion polling keeps this small queue responsive.
+        if (lockLost()) throw new Error('Daily lock lost.');
+        await importJobStatus(db);
+        job = (await db.one<ImportJob>('select * from platform.import_job where id=$1', [job.id]))!;
+      }
+      if (job.status !== 'completed') throw new Error('Daily import failed.');
     }
-    if (job.status !== 'completed') throw new Error('Daily import failed.');
-  }
+  } finally { release(); }
   if (lockLost()) throw new Error('Daily lock lost.');
   if (process.env.BACKUP_COMMAND) await promisify(exec)(process.env.BACKUP_COMMAND);
 }

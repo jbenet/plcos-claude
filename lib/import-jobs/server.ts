@@ -9,12 +9,18 @@ import { createImportJob,failImportJob,IMPORT_FAILURE } from './store';
 import type { ImportJob,ImportKind } from './types';
 
 // Both handles and receipts survive Next module reloads. Workers belong to this process.
-const g=globalThis as typeof globalThis & {__importChildren?:Set<string>;__importProgress?:Map<string,ImportJob>;__importFollowUps?:Map<string,{actor:string;input:Record<string,unknown>}>};
+const g=globalThis as typeof globalThis & {__importChildren?:Set<string>;__importHolds?:Set<symbol>;__importProgress?:Map<string,ImportJob>;__importFollowUps?:Map<string,{actor:string;input:Record<string,unknown>}>};
 const children=g.__importChildren??=new Set<string>();
 const progress=g.__importProgress??=new Map<string,ImportJob>();
 // An import asked for while one of its kind runs (a push mid-import, 7 Oct 2026): run once more after it, so the
 // new files are read. In memory: a restart loses it, and the restart's recovery or the next push queues anew.
 const followUps=g.__importFollowUps??=new Map<string,{actor:string;input:Record<string,unknown>}>();
+// Work about to start an import with no worker running yet: a finished job's follow-up being queued, a daily chain between
+// steps. /api/health counts these with the workers, so a deploy never sees a gap between two jobs as idle (8 Oct 2026:
+// deploys in that gap killed Affinity translate twice, which is why the deploy used to wait 5 clear minutes).
+const holds=g.__importHolds??=new Set<symbol>();
+/** Count as importing until the returned release is called; call it in a finally. */
+export function holdImports():()=>void {const h=Symbol();holds.add(h);return ()=>{holds.delete(h);};}
 /** Queue `kind` again when its running job ends, here or after a restart's recovery; one pending run per kind. */
 export function importAfterRunning(kind:ImportKind,actor:string,input:Record<string,unknown>={}):void {followUps.set(kind,{actor,input});}
 async function runFollowUp(db:Db,id:string):Promise<void> {
@@ -57,9 +63,11 @@ export function launchImportJob(db:Db,id:string,options?:{demoRoot?:string}):voi
   let didStop=false;
   const stopped=(code:number|null)=>{
     if(didStop)return;didStop=true;
+    // Held from before the worker leaves the count until its follow-up, if any, has a worker of its own.
+    const release=holdImports();
     dispose();children.delete(id);
-    if(code===0){void logStopped(db,id).then(()=>runFollowUp(db,id)).catch(()=>{});return;}
-    void recordWorkerExit(db,id,'Worker exited before completion. Review committed results before retrying.').then(()=>logStopped(db,id)).then(()=>runFollowUp(db,id)).catch(()=>{});
+    if(code===0){void logStopped(db,id).then(()=>runFollowUp(db,id)).catch(()=>{}).finally(release);return;}
+    void recordWorkerExit(db,id,'Worker exited before completion. Review committed results before retrying.').then(()=>logStopped(db,id)).then(()=>runFollowUp(db,id)).catch(()=>{}).finally(release);
   };
   try {
     if(db.kind==='pglite') {

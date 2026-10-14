@@ -66,8 +66,8 @@ export async function deployToolingProperties(check: Check): Promise<void> {
   check('IMAGE context ignores data and secrets', ['data/*', '**/plcos-data', '.env', 'node_modules'].every(l => ignore.split('\n').includes(l)), '.dockerignore second fence.');
 
   // ---- a deploy waits for running imports (7 Oct 2026: deploys restarted the server under every findings import)
-  const g = globalThis as { __importChildren?: Set<string> };
-  const had = g.__importChildren;
+  const g = globalThis as { __importChildren?: Set<string>; __importHolds?: Set<symbol> };
+  const had = g.__importChildren, hadHolds = g.__importHolds;
   try {
     g.__importChildren = new Set();
     const idle = await healthRoute().json() as Record<string, unknown>;
@@ -76,7 +76,13 @@ export async function deployToolingProperties(check: Check): Promise<void> {
     check('HEALTH counts running import workers, and says nothing of them when there are none',
       idle.ok === true && !('importing' in idle) && busy.importing === 2 && Object.keys(busy).every(k => ['ok', 'commit', 'importing'].includes(k)),
       `idle ${JSON.stringify(idle)}; busy ${JSON.stringify(busy)}`);
-  } finally { g.__importChildren = had; }
+    // 8 Oct 2026: the count dropped to nothing between two queued jobs, and a deploy restarted the server in that gap.
+    g.__importChildren = new Set();
+    g.__importHolds = new Set([Symbol('between-jobs')]);
+    const between = await healthRoute().json() as Record<string, unknown>;
+    check('HEALTH counts work between two import jobs (a follow-up being queued, a daily chain), so it shows no gap',
+      between.importing === 1, `between ${JSON.stringify(between)}`);
+  } finally { g.__importChildren = had; g.__importHolds = hadHolds; }
   const ship = await readFile('scripts/ship.sh', 'utf8');
   const deployFn = ship.split('deploy() {')[1] ?? '';
   check('SHIP --deploy waits while /api/health counts running imports, before it pushes',

@@ -82,7 +82,8 @@ function builtFrom(): string | null {
  * Fixed, DB-free liveness, with no application data. On a deployed image it also names the commit it was built
  * from, so `scripts/ship.sh --deploy` can tell when Railway is serving what it pushed (5 Oct 2026). While import
  * workers this server started are running it counts them (`importing`), so a deploy can wait rather than restart
- * the server under them (7 Oct 2026). A count only, read from lib/import-jobs/server.ts's handle set.
+ * the server under them (7 Oct 2026). A count only, read from lib/import-jobs/server.ts's handle set and its holds
+ * (work between two jobs, so the count has no gap a deploy could slip into).
  */
 export function healthRoute(): Response;
 export function healthRoute(request: Request): Response | Promise<Response>;
@@ -92,7 +93,8 @@ export function healthRoute(request?: Request): Response | Promise<Response> {
   // check stays synchronous and never touches the database.
   if (request && new URL(request.url).searchParams.get('affinity') === '1') return affinityUsage();
   const commit = builtFrom();
-  const importing = (globalThis as { __importChildren?: Set<string> }).__importChildren?.size ?? 0;
+  const g = globalThis as { __importChildren?: Set<string>; __importHolds?: Set<symbol> };
+  const importing = (g.__importChildren?.size ?? 0) + (g.__importHolds?.size ?? 0);
   return Response.json({ ok: true, ...(commit ? { commit } : {}), ...(importing ? { importing } : {}) });
 }
 
