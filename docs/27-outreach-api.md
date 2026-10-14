@@ -114,6 +114,10 @@ take it as `targetId` (routes_to) and `nodeId` (routes_through).
                 "contacts": [{ "name": "Ana Invented", "email": "ana@invented.example", "source": "gmail", "confirmedAt": "2026-10-04", "confirmedBy": "Juan" }] },
     "owner": "Juan",
     "status": { "value": "discussing", "label": "Discussing", "setAt": "2026-10-01", "setBy": "Juan" },
+    "score": { "value": 72, "kind": "fit", "stale": false, "label": "Fit", "basis": "Fit assessment", "at": "2026-09-28" },
+    "capacity": "$1–5M", "routes": 3,
+    "evidence": { "rung": 2, "needs": 3, "label": "Meeting held",
+                  "rungs": [{ "key": "connector_willing", "label": "Connector willing", "state": "on" }, "…six in all"] },
     "passed": false,
     "nextStep": "Send the deck", "nextStepOn": "2026-10-08",
     "read": { "value": "interested", "label": "Interested", "on": "2026-10-01", "suggested": false },
@@ -145,6 +149,14 @@ take it as `targetId` (routes_to) and `nodeId` (routes_through).
   "cursor": "2026-10-04T18:05:00Z", "redacted": "1 sentence with a health detail redacted." } }
 ```
 
+- **The pipeline page's columns (14 Oct 2026, feedback 0158).** Every row carries `score`, `capacity`, `routes` and
+  `evidence`, the same values as the Score, Capacity, Routes and Evidence columns on the pipeline page. `score` is `null`
+  when unscored; otherwise `value` (0–100), `kind` (`fit` or `provisional`), `stale`, the page's `label`, the `basis` it
+  rests on and the day it was made (`at`). A score describes the evidence on file, not a probability of commitment.
+  `capacity` is the page's text, or `null` when not known or withheld at the reader's access. `routes` counts recorded
+  warm intro routes (`null` when no route count is on file); `routes_to` (§4a) lists them. `evidence` is the consent ladder:
+  six `rungs` in order, each `on`, `file` (a record supports it, nobody has accepted it yet), `na` or `off`; `rung` is the
+  0-based index of the highest accepted rung (−1 for none), `needs` the first rung with nothing on file, and `label` the page's words for where the LP stands.
 - **A material's link (8 Oct 2026).** Each material carries `link`: the DocSend or file link a person pasted for it on
   the materials page, or `null`. Capital OS stores it as written (https only) and never opens it or calls DocSend; offer
   it in a draft when `allowed` is true.

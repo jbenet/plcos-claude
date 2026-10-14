@@ -13,7 +13,7 @@ import { tracePairs } from '@/lib/comms/read';
 import { SOURCE_LABEL, traceState, type Merged } from '@/lib/comms/trace';
 import { CLOSE_STATE_LABEL, closeStates, currentIndications, indicatedTotals, vehicleTotals, type CloseState } from '@/modules/pipeline';
 import { listVehicles, type AppUser, type Vehicle } from '@/modules/platform';
-import { STATUS_LABEL, lpContactsFor, type PursuitStatus } from '@/modules/strategy';
+import { RUNGS, RUNG_LABEL, STATUS_LABEL, lpContactsFor, type PursuitStatus } from '@/modules/strategy';
 
 /**
  * The mail desk's reads (docs/27-outreach-api.md §3): GET /api/outreach/vehicles and /queue, and the MCP
@@ -400,6 +400,8 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
       entity: { id: r.entityId, name: r.name, kind: isPerson ? 'person' : 'org', contacts },
       owner: r.owner,
       status: { value: r.status, label: STATUS_LABEL[r.status], setAt: day(m?.set_at), setBy: m?.source === 'us' ? m.set_by : m?.source ?? null },
+      // The pipeline page's Score, Capacity, Routes and Evidence columns, from the same row (feedback 0158).
+      ...pipelineColumns(r),
       ...(w ? {
         nextStep: clean(r.next), nextStepOn: r.nextOn?.slice(0, 10) ?? null,
         read: r.read ? { value: READS.find((x) => READ_LABEL[x] === r.read) ?? null, label: r.read, on: r.readOn?.slice(0, 10) ?? null, suggested: r.readSuggested } : null,
@@ -441,6 +443,23 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
       ...(fitted.length < rows.length ? { heldBack: `${rows.length - fitted.length} row${rows.length - fitted.length === 1 ? '' : 's'} held back to fit the answer's size limit; nextCursor continues from here.` } : {}),
       redacted: redacted ? `${redacted} sentence${redacted === 1 ? '' : 's'} with a health detail redacted.` : null },
     coverage: queueCoverage(vehicles, a.includePassed),
+  };
+}
+
+/**
+ * The pipeline page's Score, Capacity, Routes and Evidence columns for one row (components/strategy/PipelineTable.tsx),
+ * so the mail desk's pipeline matches ours (feedback 0158). Values come from the same pipeline row, already redacted
+ * for the reader; a score describes the evidence on file, not a probability of commitment.
+ */
+function pipelineColumns(r: Awaited<ReturnType<typeof pipelineData>>['rows'][number]) {
+  const stale = /stale/i.test(r.scoreKind), fit = r.scoreKind.startsWith('Fit');
+  return {
+    score: r.score === null ? null : { value: r.score, kind: fit ? 'fit' as const : 'provisional' as const, stale: !fit && stale,
+      label: fit ? 'Fit' : stale ? 'Provisional, stale' : 'Provisional', basis: r.scoreKind, at: day(r.scoreAt) },
+    capacity: r.capacity && !/unknown/i.test(r.capacity) ? r.capacity : null,
+    routes: r.route,
+    evidence: { rung: r.rung, needs: r.needs, label: r.rungLabel,
+      rungs: RUNGS.map((k, i) => ({ key: k, label: RUNG_LABEL[k], state: r.rungs[i] ?? 'off' })) },
   };
 }
 

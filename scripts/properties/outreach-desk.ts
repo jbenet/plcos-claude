@@ -173,6 +173,17 @@ export async function outreachDeskProperties(check: Check, db: Db) {
       && passedOnly.status === 400 && passedM.data?.rows?.length === 1 && passedM.data.rows[0].passed === true,
       `default: ${plain.json?.data?.total} rows, passed ${(plain.json?.data?.rows ?? []).some((r: Row) => r.pursuitId === p3) ? 'INCLUDED' : 'left out'}; includePassed: ${withPassed.json?.data?.total}, the passed row ${pr ? `marked ${pr.passed}, bucket ${pr.bucket}` : 'MISSING'}; bucket=passed alone: ${passedOnly.status}; MCP: ${passedM.data?.rows?.[0]?.passed}`);
 
+    // ── The pipeline page's columns (feedback 0158) ─────────────────────────────────────
+    type Cols = { score: { value: number; kind: string; label: string } | null; capacity: string | null; routes: number | null;
+      evidence: { rung: number; needs: number; label: string; rungs: Array<{ key: string; label: string; state: string }> } };
+    const colRows = plain.json.data.rows as Array<Row & Cols>;
+    check('Outreach desk: each queue row carries the pipeline page\'s Score, Capacity, Routes and Evidence',
+      colRows.length > 0 && colRows.every((r) => 'score' in r && 'capacity' in r && 'routes' in r
+        && (r.score === null || (typeof r.score.value === 'number' && ['fit', 'provisional'].includes(r.score.kind)))
+        && r.evidence.rungs.length === 6 && typeof r.evidence.label === 'string'
+        && r.evidence.rungs.every((g) => ['on', 'na', 'off', 'file'].includes(g.state))),
+      `${colRows.length} rows; first: ${JSON.stringify(colRows[0] ? { score: colRows[0].score, capacity: colRows[0].capacity, routes: colRows[0].routes, evidence: colRows[0].evidence?.label } : null)}`);
+
     // ── Paging: every row exactly once ─────────────────────────────────────────────────
     const all = (plain.json.data.rows as Row[]).map((r) => r.pursuitId);
     const walk = async (page: (cursor: string | null) => Promise<any>) => {
