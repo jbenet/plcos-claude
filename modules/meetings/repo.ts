@@ -304,43 +304,45 @@ export async function colleagueTouchpointsFor(entityId: string, vehicleId: strin
  */
 export function summarize(all: Touchpoint[], now = new Date()): TouchpointSummary {
   // One pass over the touchpoints, then one over their contacts; it was a dozen filters per LP, most
-  // of a pipeline rebuild's summary time at 150k touchpoints (performance pass, 14 Oct 2026).
+  // of a pipeline rebuild's summary time at 150k touchpoints (performance pass, 14 Oct 2026). Instants are
+  // compared as numbers and days kept as day numbers: Date comparisons and ISO strings were most of what was left.
   const at = now.getTime();
   const contact: Touchpoint[] = [];
-  const days = new Set<string>();
-  let total = 0, last: Touchpoint | null = null, lastFromThem: Date | null = null, upcoming: Date | null = null;
-  let withRead: Touchpoint | null = null, research: Date | null = null;
+  const days = new Set<number>();
+  let total = 0, last: Touchpoint | null = null, lastMs = 0, lastFromThem: Date | null = null, fromThemMs = 0, upcoming: Date | null = null;
+  let withRead: Touchpoint | null = null, readMs = 0, research: Date | null = null;
   let firmTotal = 0, firmLast: Date | null = null, firmNext: Date | null = null;
   for (const t of all) {
+    const on = t.on ? t.on.getTime() : null;
     if (t.viaOrganization) {
       firmTotal += 1;
-      if (t.on && t.on.getTime() <= at) { if (!firmLast || t.on > firmLast) firmLast = t.on; }
-      else if (!t.on && t.scheduledFor && t.scheduledFor.getTime() > at && (!firmNext || t.scheduledFor < firmNext)) firmNext = t.scheduledFor;
+      if (on !== null && on <= at) { if (!firmLast || on > firmLast.getTime()) firmLast = t.on; }
+      else if (on === null && t.scheduledFor && t.scheduledFor.getTime() > at && (!firmNext || t.scheduledFor.getTime() < firmNext.getTime())) firmNext = t.scheduledFor;
       continue;
     }
     total += 1;
-    if (!t.on || t.on.getTime() > at) {
+    if (on === null || on > at) {
       // An event of ours is not a meeting with them (N81): it is a touch, not a meeting on record.
-      if (!t.on && t.scheduledFor && t.scheduledFor.getTime() > at && !isEvent(t) && (!upcoming || t.scheduledFor < upcoming)) upcoming = t.scheduledFor;
+      if (on === null && t.scheduledFor && t.scheduledFor.getTime() > at && !isEvent(t) && (!upcoming || t.scheduledFor.getTime() < upcoming.getTime())) upcoming = t.scheduledFor;
       continue;
     }
-    // Held: dated today or before.
-    if (t.read && (!withRead || when(t) > when(withRead))) withRead = t;
-    if (t.channel === 'research') { if (!research || t.on > research) research = t.on; continue; }
+    // Held: dated today or before. `when` is `on` here.
+    if (t.read && (!withRead || on > readMs)) { withRead = t; readMs = on; }
+    if (t.channel === 'research') { if (!research || on > research.getTime()) research = t.on; continue; }
     contact.push(t);
     // One meeting recorded twice — a note and a calendar entry for the same day — is one meeting.
-    if ((t.channel === 'meeting' || t.channel === 'call') && !isEvent(t)) days.add(t.on.toISOString().slice(0, 10));
-    if (!last || when(t) > when(last)) last = t;
+    if ((t.channel === 'meeting' || t.channel === 'call') && !isEvent(t)) days.add(Math.floor(on / 86_400_000));
+    if (!last || on > lastMs) { last = t; lastMs = on; }
     // An automatic reply is no word from them (N81): nobody wrote it, and nothing is owed. Nor is
     // coming to our event: twenty people in a room is not their answer to us.
-    if ((t.direction === 'theirs' || t.direction === 'both') && !isAutoReply(t) && !isEvent(t) && (!lastFromThem || t.on > lastFromThem)) lastFromThem = t.on;
+    if ((t.direction === 'theirs' || t.direction === 'both') && (!lastFromThem || on > fromThemMs) && !isAutoReply(t) && !isEvent(t)) { lastFromThem = t.on; fromThemMs = on; }
   }
   let awaitingSince: Date | null = null;
   for (const t of contact) {
-    if (t.direction === 'ours' && (!lastFromThem || t.on! > lastFromThem) && (!awaitingSince || t.on! < awaitingSince)) awaitingSince = t.on!;
+    if (t.direction === 'ours' && (!lastFromThem || t.on!.getTime() > fromThemMs) && (!awaitingSince || t.on!.getTime() < awaitingSince.getTime())) awaitingSince = t.on!;
   }
   return {
-    meetingDates: [...days].sort().map((d) => new Date(`${d}T00:00:00Z`)),
+    meetingDates: [...days].sort((a, b) => a - b).map((d) => new Date(d * 86_400_000)),
     lastTouch: last?.on ?? null,
     lastTouchChannel: last?.channel ?? null,
     lastFromThem,
