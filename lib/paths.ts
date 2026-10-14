@@ -16,13 +16,13 @@ export const MODULE_PAGES: Record<string, string> = {
 };
 /** The page's name → the address's. */
 export const PAGE_MODULES: Record<string, string> = Object.fromEntries(Object.entries(MODULE_PAGES).map(([path, page]) => [page, path]));
-/** The modules scoped by path, served from app/[vehicle]: the four since N1, and LP stats. */
-const VEHICLE_ROUTES = new Set(['visualizations', 'strategy', 'calendar', 'fit', 'stats']);
+/** The modules scoped by path, served from app/[vehicle]: the four since N1, LP stats and conversion (docs/33). */
+const VEHICLE_ROUTES = new Set(['visualizations', 'strategy', 'calendar', 'fit', 'stats', 'conversion']);
 /** First segments that are pages of their own, never a vehicle. */
 export const RESERVED = new Set([
   '_next', 'api', 'developer', 'dev', 'issues', 'agents', 'm', 'today', 'approvals', 'standup', 'everything', 'orgs', 'rnd', 'access-denied',
   'research', 'forecast', 'content', 'performance', 'library', 'relationships', 'operations', 'plays', 'settings', 'system',
-  'calendar', 'visualizations', 'fit', 'stats', 'favicon.ico', 'setup', 'signin', 'auth', ...Object.values(MODULE_PAGES), ...Object.keys(MODULE_PAGES),
+  'calendar', 'visualizations', 'fit', 'stats', 'conversion', 'favicon.ico', 'setup', 'signin', 'auth', ...Object.values(MODULE_PAGES), ...Object.keys(MODULE_PAGES),
 ]);
 /** The Developer section's pages that live outside /dev. */
 export const DEV_PAGES: Record<string, string> = { issues: '/issues', agents: '/agents' };
