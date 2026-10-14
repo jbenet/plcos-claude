@@ -18,12 +18,16 @@ import type { AppUser } from '@/modules/platform';
 
 const TTL_MS = 10 * 60_000;
 const MAX_PENDING = 50;
+/** Unanswered pairings one address may hold at once; a person needs one. */
+export const PENDING_PER_ADDRESS = 3;
 
 export interface Pending {
   userCode: string;
   challenge: string;
   port: number;
   device: string;
+  /** The address that started it, as the trusted proxy reports it; null when unknown. */
+  ip: string | null;
   created: number;
   approvedBy: AppUser | null;
   grantHash: string | null;
@@ -55,15 +59,26 @@ export const normalizeCode = (s: string | null | undefined): string | null => {
 /** A plain device label, from what the app says it is. */
 const deviceLabel = (s: unknown): string => (typeof s === 'string' ? s.replace(/[^\p{L}\p{N} ._'’()-]/gu, '').trim().slice(0, 60) : '') || 'a Mac';
 
-export function startPairing(device: unknown, challenge: unknown, port: unknown, now = Date.now()): { userCode: string; expiresIn: number } {
+/**
+ * Anyone may start a pairing (nobody is signed in on the app yet), so one address holds at most a few unanswered
+ * ones, and when the whole table is full the oldest unanswered one makes room: a stream of starts can delay a
+ * pairing, never block everyone's.
+ */
+export function startPairing(device: unknown, challenge: unknown, port: unknown, now = Date.now(), ip: string | null = null): { userCode: string; expiresIn: number } {
   sweep(now);
   if (typeof challenge !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(challenge)) throw new Error('A PKCE challenge (S256, base64url) is required.');
   const p = Number(port);
   if (!Number.isInteger(p) || p < 1024 || p > 65535) throw new Error('A loopback port is required.');
-  if (pairs().size >= MAX_PENDING) throw new Error('Too many pairings are waiting. Try again in a few minutes.');
+  const open = [...pairs().values()].filter((x) => !x.approvedBy);
+  if (ip && open.filter((x) => x.ip === ip).length >= PENDING_PER_ADDRESS) throw new Error('Too many pairings are waiting from this address. Finish one or try again in a few minutes.');
+  if (pairs().size >= MAX_PENDING) {
+    const oldest = open.sort((a, b) => a.created - b.created)[0];
+    if (!oldest) throw new Error('Too many pairings are waiting. Try again in a few minutes.');
+    pairs().delete(oldest.userCode);
+  }
   let userCode = shortCode();
   while (pairs().has(userCode)) userCode = shortCode();
-  pairs().set(userCode, { userCode, challenge, port: p, device: deviceLabel(device), created: now, approvedBy: null, grantHash: null, denied: false });
+  pairs().set(userCode, { userCode, challenge, port: p, device: deviceLabel(device), ip, created: now, approvedBy: null, grantHash: null, denied: false });
   return { userCode, expiresIn: TTL_MS / 1000 };
 }
 

@@ -17,7 +17,8 @@ export const POST = withRoute('app/api/desktop/pair/route.ts#POST', async (reque
   const headers = { 'cache-control': 'no-store' };
   if (body.op === 'start') {
     try {
-      const p = startPairing(body.device, body.challenge, body.port);
+      const { clientIp } = await import('@/lib/settings/floodgate');
+      const p = startPairing(body.device, body.challenge, body.port, Date.now(), clientIp(request.headers));
       return Response.json({ ok: true, ...p, url: `${base}/desktop/pair?code=${encodeURIComponent(p.userCode)}` }, { headers });
     } catch (e) {
       return Response.json({ ok: false, error: e instanceof Error ? e.message : 'Could not start.' }, { status: 400, headers });

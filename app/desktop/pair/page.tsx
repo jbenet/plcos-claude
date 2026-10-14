@@ -26,7 +26,7 @@ export default async function DesktopPairPage({ searchParams }: { searchParams: 
             {done === 'gone' && <p className={s.error} role="alert">That code has expired or was already used. Start again from the app.</p>}
             {!done && (!p || p.approvedBy) && <p className={s.error} role="alert">No app is waiting for code {code ?? raw ?? ''}. It may have expired; start again from the app.</p>}
             {!done && p && !p.approvedBy && <>
-              <p>The PLC OS app on <b>{p.device}</b> asks to act as <b>{user.name}</b>. Its actions will be yours, as in this browser.</p>
+              <p>A PLC OS app that says it is on <b>{p.device}</b> asks to act as <b>{user.name}</b>. Its actions will be yours, as in this browser.</p>
               <p>Allow only if you just started signing in from the app <b>on this computer</b>: it finishes here, on this machine.</p>
               <p>Check the app shows the same code:</p>
               <p style={{ fontFamily: 'var(--mono, monospace)', fontSize: 28, letterSpacing: 4, margin: '8px 0 0' }}>{p.userCode}</p>

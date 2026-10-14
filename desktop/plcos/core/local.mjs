@@ -28,7 +28,7 @@ const WRITE_SETTLE_MS = Number(env.PLCOS_DESKTOP_SETTLE_MS || 5_000);
 const IDLE_SYNC_MS = 15_000;
 const BUSY_SYNC_MS = 2_000;
 /** Paths the live server always answers: sign-in, the app's own pages, server state (jobs, Astra, imports). */
-const REMOTE_ONLY = [/^\/api\//, /^\/auth\//, /^\/signin/, /^\/setup/, /^\/desktop\//, /^\/dev(\/|$)/, /^\/developer(\/|$)/, /^\/issues(\/|$)/, /^\/agents(\/|$)/];
+const REMOTE_ONLY = [/^\/settings(\/|$)/, /^\/preferences(\/|$)/, /^\/api\//, /^\/auth\//, /^\/signin/, /^\/setup/, /^\/desktop\//, /^\/dev(\/|$)/, /^\/developer(\/|$)/, /^\/issues(\/|$)/, /^\/agents(\/|$)/];
 
 const sh = (cmd, args, opts = {}) => new Promise((resolve, reject) => {
   execFile(cmd, args, { maxBuffer: 64 * 1024 * 1024, timeout: opts.timeout ?? 15 * 60_000, ...opts }, (err, stdout, stderr) => {

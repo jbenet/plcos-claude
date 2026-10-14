@@ -1,7 +1,7 @@
 /** The desktop app's pairing and build excludes (docs/31). Pure: no database, no network. */
 import { createHash, randomBytes } from 'node:crypto';
-import { buildExcludes } from '../../lib/desktop/build';
-import { claimPairing, decidePairing, normalizeCode, resetPairings, startPairing } from '../../lib/desktop/pair';
+import { BUILD_INCLUDES, buildExcludes } from '../../lib/desktop/build';
+import { claimPairing, decidePairing, normalizeCode, pendingPairing, resetPairings, startPairing } from '../../lib/desktop/pair';
 import type { AppUser } from '../../modules/platform';
 import type { Check } from './harness';
 
@@ -43,7 +43,23 @@ export async function desktopProperties(check: Check) {
   check('desktop pairing expires after ten minutes', claimPairing(g4, e.verifier, 10 * 60_000 + 1) === null, 'expired');
   resetPairings();
 
-  const ex = buildExcludes('data/real');
-  check('desktop build leaves out dependencies, data, git, env and source maps',
-    ['./node_modules', './data', './.git', './.env', './.next/cache', '*.map'].every((x) => ex.includes(x)), ex.join(' '));
+  const ex = buildExcludes();
+  const leftOut = ['node_modules', 'data', 'pgdata', '.git', '.env', 'issues', 'desktop', '.next-real', '.next-cloud-copy'];
+  check('desktop build takes only an allowlist, without dependencies, data, git, env or other builds',
+    leftOut.every((x) => !BUILD_INCLUDES.includes(x)) && BUILD_INCLUDES.every((x) => !x.includes('/') && !x.startsWith('.next-')), BUILD_INCLUDES.join(' '));
+  check('desktop build leaves out Next’s cache, source maps, logs and env files',
+    ['./.next/cache', '*.map', '*.log', '.env', '.env.*'].every((x) => ex.includes(x)), ex.join(' '));
+
+  // A stream of starts from one address cannot fill the table, and a full table makes room.
+  resetPairings();
+  const many = () => pkce().challenge;
+  for (let i = 0; i < 3; i++) startPairing('Mac', many(), 47100, 1000, '203.0.113.9');
+  let capped = '';
+  try { startPairing('Mac', many(), 47100, 1000, '203.0.113.9'); } catch (err) { capped = String(err); }
+  check('desktop pairing holds a few unanswered pairings per address', capped.includes('this address'), capped);
+  for (let i = 0; i < 47; i++) startPairing('Mac', many(), 47100, 2000 + i, null);
+  const room = startPairing('Mac', many(), 47100, 5000, '198.51.100.7');
+  check('desktop pairing makes room when full by dropping the oldest unanswered one',
+    pendingPairing(room.userCode, 5000) !== null, room.userCode);
+  resetPairings();
 }
