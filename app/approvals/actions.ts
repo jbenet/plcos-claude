@@ -125,3 +125,26 @@ async function agentActorIds(): Promise<Set<string>> {
   const rows = await (await getDb()).query<{ id: string }>(`select id::text from platform.app_user where handle = 'mail-desk'`);
   return new Set(rows.map((r) => r.id));
 }
+
+/**
+ * Decide the open batch of Affinity writes (Juan, 14 Oct 2026): the checked items are written to Affinity, one by one,
+ * and the rest rejected. Refused, with nothing decided, when the batch was decided already or the checked items would
+ * take more requests than one batch may.
+ */
+export async function decideAffinityBatch(formData: FormData): Promise<void> {
+  const user = await requireAction('app/approvals/actions.ts#decideAffinityBatch', formData);
+  const { decideWriteBatch, WriteBatchRefused } = await import('@/lib/affinity-writes-decide');
+  const batchId = String(formData.get('batchId') ?? '');
+  const approve = String(formData.get('decision')) === 'approve' ? [...new Set(formData.getAll('itemId').map(String))] : [];
+  const q = new URLSearchParams({ view: 'affinity' });
+  try {
+    const r = await decideWriteBatch(user, batchId, approve);
+    q.set('written', String(r.written));
+    if (r.failed) q.set('failed', String(r.failed));
+  } catch (err) {
+    if (!(err instanceof WriteBatchRefused)) throw err;
+    q.set('error', err.message);
+  }
+  revalidatePath('/approvals');
+  redirect(`/approvals?${q.toString()}`);
+}

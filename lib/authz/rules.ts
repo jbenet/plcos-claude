@@ -11,6 +11,8 @@ export const actionRules = {
   'app/approvals/actions.ts#decideMany': { action: 'approve', scope: 'tickets' },
   // Agent tickets in a batch (5 Oct 2026): each checked ticket is checked as one decision would be.
   'app/approvals/actions.ts#decideAgentBatch': { action: 'approve', scope: 'tickets' },
+  // Affinity writes by batch (14 Oct 2026): only an admin writes to Affinity.
+  'app/approvals/actions.ts#decideAffinityBatch': { action: 'admin', scope: 'global' },
   'app/dev/affinity/actions.ts#runConnectionTest': { action: 'admin', scope: 'global' },
   'app/dev/affinity/actions.ts#runDiscovery': { action: 'admin', scope: 'global' },
   'app/dev/affinity/actions.ts#runSliceAction': { action: 'admin', scope: 'global' },
