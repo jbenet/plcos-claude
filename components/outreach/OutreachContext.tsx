@@ -9,6 +9,7 @@ import { restrictionsFor, type Restriction } from '@/modules/coordination';
 import { CHANNEL_LABEL, aboutThisRaise, raiseWindows } from '@/modules/meetings';
 import { listVehicles } from '@/modules/platform';
 import { STATUS_LABEL, type PursuitStatus } from '@/modules/strategy';
+import { Info } from '@/components/ui/Info';
 import s from './context.module.css';
 
 /**
@@ -74,12 +75,12 @@ export async function OutreachContext({ entityId, vehicleId, pursuitId, connecto
     <div className={`card ${s.ctx}`} id="outreach-context" data-outreach-context>
       <div className="chead">
         <h2>Before you send</h2>
-        <span className="lbl">from the comms trace · no approval needed</span>
+        <span className="lbl">no approval needed <Info>Read from the comms trace: Affinity&rsquo;s emails, meetings and calls, and the {trace.messages.length} Gmail messages juanmail reported, one row per message. Not the app&rsquo;s own log. A person needs no approval to send (Juan, 5 Oct 2026); an autonomous agent does.</Info></span>
       </div>
 
       {barred.length > 0 && (
         <div className={s.stop} role="alert" data-restriction>
-          <b>Restriction on file</b>
+          <b>Restriction on file</b> <Info>It attaches to them, not to a channel or a connector: no other route may get round it (rule 8).</Info>
           {barred.map((r) => (
             <p key={r.restrictionId}>
               {r.entityId === connectorId ? `${connectorName ?? 'The connector'}: ` : ''}
@@ -88,7 +89,6 @@ export async function OutreachContext({ entityId, vehicleId, pursuitId, connecto
               <span className="muted"> · {r.recordedByName ?? 'unattributed'}, {shortDate(r.recordedAt)}</span>
             </p>
           ))}
-          <p className="muted">It attaches to them, not to a channel or a connector: another route to the same approach gets round it (rule 8).</p>
         </div>
       )}
 
@@ -98,10 +98,10 @@ export async function OutreachContext({ entityId, vehicleId, pursuitId, connecto
           <p className={s.big} data-owes={here.owes?.by ?? 'none'}>
             {here.owes?.by === 'us' ? <>We do — they wrote last, {shortDate(here.owes.since)}</>
               : here.owes?.by === 'them' ? <>They do — we wrote last, {shortDate(here.owes.since)}</>
-                : <>Nobody yet — no exchange on record for {vehicle.name}</>}
+                : <>Nobody yet</>}
           </p>
           <div className="lbl" style={{ marginTop: 10 }}>Last touches</div>
-          {here.last.length === 0 ? <p className="muted">None on record for {vehicle.name}.</p> : (
+          {here.last.length === 0 ? <p className="muted">None yet.</p> : (
             <ul className={s.list}>
               {here.last.map((t, i) => (
                 <li key={i}>
@@ -121,9 +121,9 @@ export async function OutreachContext({ entityId, vehicleId, pursuitId, connecto
               {words && thread.subject ? <>&ldquo;{thread.subject}&rdquo; · </> : ''}{thread.messages} message{thread.messages === 1 ? '' : 's'}, last {shortDate(thread.last)}.
               {' '}On it from the team: <b>{thread.team.join(', ') || 'nobody on the team'}</b>{thread.holder ? <> · held by <b>{thread.holder}</b></> : ''}.
             </p>
-          ) : <p className="muted">No Gmail thread reported for them yet. juanmail reports the messages it sees; until then the trace is Affinity&rsquo;s.</p>}
-          <div className="lbl" style={{ marginTop: 10 }}>Other vehicles in play</div>
-          {others.length === 0 ? <p className="muted">Only {vehicle.name}.</p> : (
+          ) : <p className="muted">No Gmail thread yet.</p>}
+          {others.length > 0 && <div className="lbl" style={{ marginTop: 10 }}>Other vehicles in play</div>}
+          {others.length > 0 && (
             <ul className={s.list}>
               {others.map((o) => (
                 <li key={o.vehicle_id}>
@@ -145,9 +145,9 @@ export async function OutreachContext({ entityId, vehicleId, pursuitId, connecto
           {row?.materials.length ? (
             <li>
               Materials: {row.materials.map((m, i) => <span key={i}>{i ? ' · ' : ''}{m.title} <span className={m.allowed ? s.ok : s.no}>{m.allowed ? 'may go' : 'may not'}</span></span>)}
-              <span className="muted"> — checked again when a send is marked (rule 11).</span>
+              <Info>Checked again when a send is marked (rule 11).</Info>
             </li>
-          ) : !row ? <li className="muted">The send gate on Materials checks each material against {vehicle.exemption} before it goes.</li> : null}
+          ) : !row ? <li className="muted">Each material is checked against {vehicle.exemption} before it goes.</li> : null}
         </ul>
       </div>
 
@@ -157,11 +157,6 @@ export async function OutreachContext({ entityId, vehicleId, pursuitId, connecto
           <ul className={s.list}>{mismatches.slice(0, 4).map((f, i) => <li key={i}>{f.text}</li>)}</ul>
         </div>
       )}
-      <p className="cover">
-        <b>What this reads:</b> the comms trace — Affinity&rsquo;s emails, meetings and calls, and the Gmail messages
-        juanmail reported ({trace.messages.length}), one row per message — not the app&rsquo;s own log. A person needs no
-        approval to send (Juan, 5 Oct 2026); an autonomous agent does.
-      </p>
     </div>
   );
 }

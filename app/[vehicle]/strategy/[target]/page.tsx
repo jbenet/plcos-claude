@@ -16,7 +16,7 @@ import { listExposures } from '@/modules/pipeline';
 import { listPursuits, RUNG_LABEL, RUNG_REQUIRES, RUNGS, STATUS_LABEL, rungIndex } from '@/lib/authz/read/strategy';
 import { SpvNote } from '@/components/strategy/SpvCard';
 import { listAsks, restrictionsFor } from '@/modules/coordination';
-import { listMeetings } from '@/modules/meetings';
+import { meetingsOn } from '@/modules/meetings';
 import {
   assessVehicle, boardFor, commitmentsFor, listUsers, needsFor,
   LEVER_LABEL, LEVER_MEANS, NEED_CALLS_FOR, NEED_LABEL,
@@ -113,7 +113,7 @@ async function TargetStrategy({
     listExposures(vehicle.id),
     listPursuits(vehicle.id),
     listAsks(vehicle.id),
-    listMeetings(),
+    meetingsOn(''),
     restrictionsFor(target),
     peopleAt(target),
     orgsFor(target),

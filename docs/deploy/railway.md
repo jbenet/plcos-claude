@@ -118,12 +118,12 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
 | `DAKOTA_USERNAME` | optional |  | Leave unset: enter it in Settings → Connections, encrypted with PLCOS_SECRET (decision C: Dakota moves to the cloud). An env value still wins. |
 | `DAKOTA_PASSWORD` | optional | yes | Leave unset: enter it in Settings → Connections, encrypted with PLCOS_SECRET. An env value still wins. |
 | `CLOUDSDK_AUTH_ACCESS_TOKEN` | never |  | **Never set** on Railway. |
-| `MAILGUARD_URL` | optional |  | Leave unset: enter it in Settings → Connections. An env value still wins. |
+| `MAILGUARD_URL` | never |  | A setting, not a variable: an Admin enters it in Settings → Connections → Mailguard address. Set here it would win over the setting; only the Mac's Keychain script sets it. |
 | `MAILGUARD_TOKEN` | never | yes | **Never set** on Railway. |
 | `ANTHROPIC_API_KEY` | optional | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
 | `ANTHROPIC_MODEL` | optional |  | Leave unset (the default works). |
 | `FEEDBACK_EXPORT_TOKEN` | optional | yes | Leave unset: enter it in Settings → Connections, encrypted with PLCOS_SECRET. An env value still wins. |
-| `SCHEDULE_DAILY_AT` | later |  | `03:00` (UTC), the day after a manual Affinity sync works from Railway. |
+| `SCHEDULE_DAILY_AT` | optional |  | Unset runs the daily jobs at `03:00` UTC on Railway (since 14 Oct 2026); `off` turns them off, `HH:MM` moves them. |
 | `PAGE_WARM` | optional |  | Leave unset (the default works). |
 | `BACKUP_COMMAND` | required-real |  | Leave unset: no S3 for now. Railway backs up its volumes, and the Mac keeps encrypted pulls (§8). |
 | `BACKUP_BUCKET` | required-real |  | Leave unset (no S3 for now, §8). |
@@ -194,6 +194,12 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
    address, not 192.0.2.1. If it does not, set the hop count in Settings → Connections.
 6. **Deploys from then on:** Juan fast-forwards `deploy` after `scripts/ship.sh` passes. Rollback is one
    click: Deployments → an earlier one → Redeploy.
+7. **Deploys by any thread (14 Oct 2026).** Juan: merges must not deploy on their own, but every Claude thread may
+   deploy without asking him. A thread runs the **Deploy to Railway** GitHub Action
+   (`.github/workflows/deploy.yml`) with the GitHub MCP tool `actions_run_trigger` (`run_workflow`, workflow
+   `deploy.yml`, ref `master`); `.claude/settings.json` allows that tool. The Action waits until `/api/health` has
+   shown no `importing` for 5 minutes, fast-forwards `deploy` to master, then checks that Railway serves the commit
+   and `/signin` answers 200. A thread never pushes `deploy` itself.
 
 ## 5. Moving the database (one evening, rehearsed first)
 

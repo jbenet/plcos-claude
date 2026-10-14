@@ -23,7 +23,7 @@ export const FAKE_DOMAIN = 'fake-gmail.example.test';
 interface FakeKey { mailbox: string; tool: string; grant: string[]; systemGrant: string[]; revoked: boolean; expiresAt?: string; drafts: string[]; calendar?: 'ok' | 'off' | 'reconnect'; notifyFlag?: boolean }
 /** An event as mailguard presents it (presentEvent), with what the properties need. */
 export interface FakeEvent {
-  id: string; status: 'confirmed' | 'tentative' | 'cancelled'; summary: string; description?: string;
+  id: string; status: 'confirmed' | 'tentative' | 'cancelled'; summary: string; description?: string; location?: string; colorId?: string;
   start: { dateTime?: string; date?: string }; end: { dateTime?: string; date?: string };
   iCalUID: string; recurringEventId?: string;
   organizer: { email: string; self?: boolean };

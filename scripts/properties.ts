@@ -42,6 +42,7 @@ async function main() {
   await step('deploy-tooling', async () => (await import('./properties/deploy-tooling')).deployToolingProperties(check));
   await step('enrich-batch', async () => (await import('./properties/enrich-batch')).enrichBatchProperties(check));
   await step('team-edges', async () => (await import('./properties/team-edges')).teamEdgesProperties(check));
+  await step('packed-rows', async () => (await import('./properties/packed-rows')).packedRowsProperties(check));
   await step('alias-join', async () => (await import('./properties/alias-join')).aliasJoinProperties(check));
   await step('w3-alias-keys', async () => (await import('./properties/w3-alias-keys')).w3AliasKeyProperties(check));
   await step('strip-dakota', async () => (await import('./properties/strip-dakota')).stripDakotaProperties(check));
@@ -54,6 +55,7 @@ async function main() {
   await step('import-jobs', async () => (await import('./properties/import-jobs')).importJobProperties(check));
   await step('workflow-api', async () => (await import('./properties/workflow-api')).workflowApiProperties(check));
   await step('workflow-spend', async () => (await import('./properties/workflow-spend')).workflowSpendProperties(check));
+  await step('astra', async () => (await import('./properties/astra')).astraProperties(check));
   await step('cloud-w1c', async () => (await import('./properties/cloud-w1c')).cloudW1cProperties(check));
   await step('sync-runs', async () => (await import('./properties/sync-runs')).syncRunsProperties(check));
   await step('sync-vehicles', async () => (await import('./properties/sync-vehicles')).syncVehiclesProperties(check));

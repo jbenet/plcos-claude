@@ -169,6 +169,14 @@ export const config = {
    * lib/connectors/mailguard/fake.ts.
    */
   email: {
+    /**
+     * Writing drafts in PLC OS. Off by Juan's decision of 12 Oct 2026 ("Maybe remove or disable all those
+     * features for now. May bring back later."): JuanMail writes the drafts now. Set this to true to bring drafting back.
+     * Off hides the draft boxes and refuses the draft actions and the attachment route; the mailguard key,
+     * the calendar read and every MCP tool, draft tools included, stay as they are. The e2e check turns it
+     * on for its own demo server only (EMAIL_DRAFTING=1, scripts/e2e.ts), so the drafting code stays tested.
+     */
+    drafting: PROFILE === 'demo' && process.env.EMAIL_DRAFTING === '1',
     provider: 'mailguard' as 'mailguard' | 'off',
     mailguard: {
       /** Mailguard's origin, e.g. https://mail.example.com. An address in the live server’s environment wins (scripts/with-mailguard-token.sh). */
@@ -278,6 +286,15 @@ export const config = {
     /** How long top_connectors plans routes before it answers with what it inspected (rule 7). GUESS. */
     connectorsBudgetMs: 15_000,
   },
+  /**
+   * Reconciliation (lib/reconcile.ts). Juan, 9 Oct 2026, chose "Auto, with undo" (and kept it beside Raise's status
+   * picker): the records on file move a status forward on their own — our email to Connecting, their reply or a
+   * meeting to Discussing — never to Committed or Passed, and never back over a person's undo. Records count from the
+   * vehicle's raise opening (Juan, 13 Oct 2026, feedback 0150), not from 9 Oct as at first. False turns it off.
+   */
+  reconcile: {
+    statusFromRecords: true as boolean,
+  },
   warehouse: {
     enabled: false,
     canonMode: 'inProcess' as CanonMode,
@@ -373,6 +390,8 @@ export const config = {
     domains: [
       { match: ['netho'], label: 'neurotech', terms: ['neuro*', 'brain', 'bci', 'brain-computer', 'connectom*', 'whole-brain', 'neuromodulation'] },
       { match: ['prime intellect'], label: 'AI and compute', terms: ['artificial intelligence', 'ai', 'machine learning', 'llm*', 'gpu*', 'compute', 'deep learning'] },
+      // Gordian Bio: in vivo pooled screening of gene therapies for target discovery (obesity, ageing diseases). 13 Oct 2026.
+      { match: ['gordian'], label: 'biotech', terms: ['biotech*', 'life science*', 'biopharma*', 'pharma*', 'therapeutic*', 'drug discovery', 'drug development', 'target discovery', 'gene therap*', 'genomic*', 'genetic medicine*', 'in vivo', 'single-cell', 'functional genomics', 'longevity', 'aging', 'ageing', 'geroscience', 'obesity', 'metabolic disease*', 'biology'] },
       { match: ['persona'], label: 'robotics', terms: ['robot*', 'humanoid*', 'automation', 'manufactur*'] },
       // Demo: SPV — Cortex is an invented neurotech company.
       { match: ['cortex'], label: 'neurotech', terms: ['neuro*', 'brain', 'bci', 'brain-computer', 'neuromodulation'] },

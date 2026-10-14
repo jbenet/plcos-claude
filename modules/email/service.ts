@@ -39,6 +39,14 @@ export class DraftRefused extends Error {
   }
 }
 
+/**
+ * Drafting in PLC OS is off by Juan's decision of 12 Oct 2026 (config.email.drafting): the pages hide the
+ * draft boxes and the draft actions and attachment route answer with this. The service itself still drafts,
+ * for the MCP draft tools the outside mail tool calls.
+ */
+export const DRAFTING_OFF = 'Email drafting is off in PLC OS (12 Oct 2026); drafts are written in JuanMail.';
+export const draftingOn = (): boolean => config.email.drafting;
+
 export interface Actor { id: string; handle: string; name: string; email: string }
 
 const INSTRUMENT: Record<string, string> = { fund: 'lp_commitment', spv: 'spv', grant_rail: 'grant' };

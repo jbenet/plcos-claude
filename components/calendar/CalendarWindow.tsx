@@ -18,15 +18,16 @@ const short = (stamp: number) => formatDate(new Date(stamp), { day: '2-digit', m
  * Its styles come from the page (app/[vehicle]/calendar/window.module.css), so the component also
  * renders in plain Node, where the property checks draw it.
  */
-export function CalendarWindow({ rows, first, weeks, now, look = {} }: {
-  rows: DatedRow[]; first: string; weeks: number; now?: string; look?: Record<string, string>;
+export function CalendarWindow({ rows, lanes: given, first, weeks, now, look = {} }: {
+  /** The rows touching these weeks; `lanes` names every lane with a row anywhere, so an empty one still shows. */
+  rows: DatedRow[]; lanes?: DatedRow['lane'][]; first: string; weeks: number; now?: string; look?: Record<string, string>;
 }) {
   const s = new Proxy(look, { get: (o, k: string) => o[k] ?? '' });
   const [chosen, setChosen] = useState<{ lane: DatedRow['lane']; week: number } | null>(null);
   const start = new Date(first).getTime();
   const today = now ? new Date(now).getTime() : Date.now();
   const bins = Array.from({ length: weeks }, (_, i) => ({ start: start + i * WEEK, end: start + (i + 1) * WEEK }));
-  const lanes = [...new Set(rows.map((r) => r.lane))];
+  const lanes = given ?? [...new Set(rows.map((r) => r.lane))];
   const overlaps = (r: DatedRow, week: number) => new Date(r.from).getTime() < bins[week]!.end && new Date(r.to ?? r.from).getTime() >= bins[week]!.start;
   const counts = lanes.map((lane) => bins.map((_, week) => rows.filter((r) => r.lane === lane && overlaps(r, week)).length));
   const peak = Math.max(1, ...counts.flat());

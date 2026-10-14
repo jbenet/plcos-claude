@@ -23,7 +23,8 @@ export async function listEntities(ids?: string[]): Promise<Entity[]> {
   const db = await getDb();
   const rows = await db.query<Row>(
     `select ${COLS} from identity.entity where merged_into is null and retired_at is null
-      ${ids ? 'and entity_id in (select identity.canonical_entity_id(id) from unnest($1::uuid[]) id)' : ''} order by display_name`,
+      ${ids ? `and entity_id in (select case when x.merged_into is null then x.entity_id else identity.canonical_entity_id(x.entity_id) end
+        from unnest($1::uuid[]) id join identity.entity x on x.entity_id = id)` : ''} order by display_name`,
     ids ? [ids] : [],
   );
   return rows.map(toEntity);

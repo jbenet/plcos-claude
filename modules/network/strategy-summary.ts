@@ -1,4 +1,5 @@
 import { getDb } from '@/lib/db';
+import { buildCache, routesRevisions } from '@/lib/build-cache';
 import { lpContactsFor } from '@/modules/strategy/lp-contacts';
 import { revisionFor } from './cache';
 import type { EvidenceTier, Route } from './types';
@@ -9,6 +10,27 @@ export interface RecordedRoute {
 }
 /** Stored evidence only. Contact endpoints represent their LP without adding a tie or
  * upgrading a tier. Repeated searches/evidence for the same entity chain count once. */
+// Only the fields shown, built per route as a flat array (hop ids and names side by side; both are
+// required on every hop): a nested jsonb_build_object per hop cost ~3x more on a 3,000-LP vehicle.
+type Flat = [string, string, Route['weakestTier'], Route['viaContact'] | null, string[], string[]];
+type StoredRow = { target_id: string; computed_at: Date; routes: Flat[] | null; input_revision: string; revision: string };
+/**
+ * Every stored search for one kind of vehicle, by target, kept by the routes revision (network 021):
+ * only a route computation changes them, so a status move or a note leaves this read standing.
+ * Shared between requests: read it, never change it.
+ */
+const storedRoutes = buildCache(async (kind: string) => {
+  const db = await getDb();
+  const rows = await db.query<StoredRow>(`select c.target_id, c.computed_at,
+       (select jsonb_agg(jsonb_build_array(r->'fromEntity', r->'fromName', r->'weakestTier', r->'viaContact',
+          jsonb_path_query_array(r, '$.hops[*].toEntity'), jsonb_path_query_array(r, '$.hops[*].toName')))
+        from jsonb_array_elements(coalesce(c.search->'routes','[]'::jsonb)) r) routes,
+       c.input_revision::text, c.revision
+      from network.route_cache c
+      where c.vehicle_kind = $1`, [kind]);
+  return new Map(rows.map(r => [r.target_id, r]));
+}, 4, routesRevisions);
+
 export async function strategyRouteSummaries(ids: string[], kind: string): Promise<Map<string, RecordedRoute>> {
   if (!ids.length) return new Map();
   const db = await getDb();
@@ -18,16 +40,8 @@ export async function strategyRouteSummaries(ids: string[], kind: string): Promi
   versioned.catch(() => undefined); // awaited below
   const contacts = await lpContactsFor(ids);
   const all = [...new Set([...ids, ...[...contacts.values()].flatMap(cs => cs.map(c => c.entityId))])];
-  // Only the fields shown, built per route as a flat array (hop ids and names side by side; both are
-  // required on every hop): a nested jsonb_build_object per hop cost ~3x more on a 3,000-LP vehicle.
-  type Flat = [string, string, Route['weakestTier'], Route['viaContact'] | null, string[], string[]];
-  const [flat, version] = await Promise.all([db.query<{ target_id: string; computed_at: Date; routes: Flat[] | null; input_revision: string; revision: string }>(`select c.target_id, c.computed_at,
-       (select jsonb_agg(jsonb_build_array(r->'fromEntity', r->'fromName', r->'weakestTier', r->'viaContact',
-          jsonb_path_query_array(r, '$.hops[*].toEntity'), jsonb_path_query_array(r, '$.hops[*].toName')))
-        from jsonb_array_elements(coalesce(c.search->'routes','[]'::jsonb)) r) routes,
-       c.input_revision::text, c.revision
-      from network.route_cache c
-      where c.target_id = any($1::uuid[]) and c.vehicle_kind = $2`, [all, kind]), versioned]);
+  const [stored, version] = await Promise.all([storedRoutes(kind), versioned]);
+  const flat = [...new Set(all)].flatMap(id => { const r = stored.get(id); return r ? [r] : []; });
   const rows = flat.map(r => ({ ...r, current: r.input_revision === version.revision && r.revision === version.generation, routes: (r.routes ?? []).map(([fromEntity, fromName, weakestTier, viaContact, ids, names]) =>
     ({ fromEntity, fromName, weakestTier, viaContact, hops: ids.map((toEntity, i) => ({ toEntity, toName: names[i]! })) }) as unknown as Route) }));
   const byTarget = new Map(rows.map(r => [r.target_id, r]));

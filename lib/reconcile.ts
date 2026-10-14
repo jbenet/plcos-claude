@@ -1,13 +1,15 @@
+import { config } from '@/config/deployment';
 import { getDb, type Queryable } from '@/lib/db';
 import { shortDate } from '@/lib/time';
 import { openTicket } from '@/modules/governance';
 import { finishRun, startRun } from '@/modules/sources';
-import { CHANNEL_LABEL, isAutoReply, isEvent, type Touchpoint } from '@/modules/meetings';
+import { CHANNEL_LABEL, isAutoReply, isEvent, raiseWindows, type Touchpoint } from '@/modules/meetings';
 import { sentByThem, tracePairs } from '@/lib/comms/read';
 import { STEP_LABEL, closeStates, type CloseTrack, type CommitmentEvent } from '@/modules/pipeline';
 import {
   LadderRefused, ON_RECORD_RUNGS, RUNGS, RUNG_LABEL, getPursuit, listPursuits, recordClimbOnRecord, retractedRefs, rungIndex,
   type ClimbRung, type LadderRung, type Pursuit,
+  setStatuses,
 } from '@/modules/strategy';
 
 /**
@@ -28,7 +30,7 @@ import {
  * as one STAGE ticket per pursuit, and a person approves it.
  *
  * What it never does: write a rung without a record behind it, climb for a portfolio company or our
- * own team, set a status, change a read, count an Affinity field or a note as evidence, or approve
+ * own team, set a status other than forward to Connecting or Discussing on a record (statusFromRecords), change a read, count an Affinity field or a note as evidence, or approve
  * anything.
  */
 
@@ -155,8 +157,58 @@ export function onFile(pursuit: Pursuit, touches: Touchpoint[], tracks: CloseTra
   return { byRung, climb, to, key: `${pursuit.rung ?? 'none'}>${climb.map((r) => `${r.rung}=${r.ref}`).join(',')}|meetings=${held}|said=${(h >>> 0).toString(36)}` };
 }
 
+/** The statuses a record can move an LP through, in order. Committed and Passed stay a person's. */
+const FORWARD = ['new', 'sourcing', 'selected', 'connecting', 'discussing'] as const;
+export interface RecordMove { to: 'connecting' | 'discussing'; reason: string; on: Date }
+
+/**
+ * Where the records on file move the status (Juan, 9 Oct 2026, "Auto, with undo"; docs/29 §4a). Forward only: our
+ * email or message moves an LP to Connecting, a reply from them or a meeting or call with them (not our event) to
+ * Discussing. Records count from `since` — the raise's opening (Juan, 13 Oct 2026, feedback 0150: "All the ones that
+ * have sent email should be set to (at least) Connecting") — and not in the future. `heldSince` is when a person set
+ * back a move Reconciliation made: only records after it count, so the undo holds until something new happens. A
+ * person's setting that undid nothing (an LP added as Selected after we emailed them) does not hold the records back.
+ */
+export function statusFromRecords(
+  p: Pick<Pursuit, 'status'>, touches: Touchpoint[], now = new Date(), since: Date | null = null, heldSince: Date | null = null,
+): RecordMove | null {
+  if (!config.reconcile.statusFromRecords) return null;
+  const at = (FORWARD as readonly string[]).indexOf(p.status);
+  if (at < 0) return null;
+  const from = Math.max(since?.getTime() ?? 0, heldSince ? heldSince.getTime() + 1 : 0);
+  const fresh = touches
+    .filter((t) => !t.viaOrganization && t.on && t.on.getTime() >= from && t.on.getTime() <= now.getTime()
+      && !isAutoReply({ direction: t.direction, aboutBasis: t.aboutBasis ?? t.summary }))
+    .sort((a, b) => a.on!.getTime() - b.on!.getTime());
+  const engaged = fresh.find((t) => ((t.channel === 'meeting' || t.channel === 'call') && !isEvent(t))
+    || ((t.channel === 'email' || t.channel === 'message') && t.direction === 'theirs'));
+  if (engaged && at < FORWARD.indexOf('discussing')) {
+    const what = engaged.channel === 'meeting' ? 'a meeting' : engaged.channel === 'call' ? 'a call' : 'a reply from them';
+    return { to: 'discussing', reason: `Reconciliation: ${what}, ${shortDate(engaged.on!)}`, on: engaged.on! };
+  }
+  const reached = fresh.find((t) => (t.channel === 'email' || t.channel === 'message') && t.direction === 'ours');
+  if (reached && at < FORWARD.indexOf('connecting')) {
+    return { to: 'connecting', reason: `Reconciliation: our email, ${shortDate(reached.on!)}`, on: reached.on! };
+  }
+  return null;
+}
+
+/** For each pursuit, when a person last set back a status Reconciliation had moved: the undo statusFromRecords honours. */
+async function undoneAt(db: Queryable, actor: string, only?: string): Promise<Map<string, Date>> {
+  const rows = await db.query<{ id: string; at: Date | string }>(
+    `select p.pursuit_id::text id, p.status_set_at at from strategy.pursuit p
+      where p.status_set_by is distinct from $1 and p.status_set_at is not null and ($2::text is null or p.pursuit_id::text = $2)
+        and exists (select 1 from platform.audit_log a where a.action = 'pursuit.status_set' and a.actor_id = $1
+                     and a.subject_type = 'pursuit' and a.subject_id = p.pursuit_id::text and a.at <= p.status_set_at)`,
+    [actor, only ?? null],
+  );
+  return new Map(rows.map((r) => [r.id, new Date(r.at)]));
+}
+
 export interface ReconcileCounts {
   pursuits: number;
+  /** Pursuits whose status the records moved forward (statusFromRecords). */
+  moved?: number;
   /** Pursuits whose conversation rungs it recorded itself, on the records on file (issue 0137). */
   recorded: number;
   /** Not an LP — a portfolio company of ours, or our own team: nothing recorded or proposed. */
@@ -247,7 +299,7 @@ export async function rungsToRecheck(): Promise<RecheckRow[]> {
             u.name as recorded_by, m.about, m.about_vehicles as vehicles, m.about_basis as basis, m.about_by as by, m.meeting_id is not null as found
        from strategy.ladder_event l
        join strategy.active_pursuit p on p.pursuit_id = l.pursuit_id
-       join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
+       join identity.entity p_e on p_e.entity_id = p.entity_id join identity.entity e on e.entity_id = case when p_e.merged_into is null then p.entity_id else identity.canonical_entity_id(p.entity_id) end
        join platform.vehicle v on v.id = p.vehicle_id
        left join platform.app_user u on u.id = l.recorded_by
        left join meetings.meeting m on m.source = 'affinity' and m.source_ref = substring(l.evidence_ref from '^affinity:(.*)$')
@@ -273,7 +325,7 @@ export async function reconcile(runBy: string | null = null): Promise<ReconcileC
     const counts = await propose();
     await finishRun(run, {
       status: 'ok', requests: 0, records: counts.pursuits, newRecords: counts.proposed,
-      note: `${counts.recorded} recorded from the records on file · ${counts.proposed} new ladder ${counts.proposed === 1 ? 'proposal' : 'proposals'} · ${counts.alreadyOpen} already open · ${counts.inStep} in step${counts.notLp ? ` · ${counts.notLp} not an LP` : ''}${counts.withdrawn ? ` · ${counts.withdrawn} withdrawn` : ''}${counts.rejectedBefore ? ` · ${counts.rejectedBefore} rejected before` : ''}${counts.renewed ? ` · ${counts.renewed} renewed` : ''}`,
+      note: `${counts.recorded} recorded from the records on file · ${counts.proposed} new ladder ${counts.proposed === 1 ? 'proposal' : 'proposals'} · ${counts.alreadyOpen} already open · ${counts.inStep} in step${counts.notLp ? ` · ${counts.notLp} not an LP` : ''}${counts.withdrawn ? ` · ${counts.withdrawn} withdrawn` : ''}${counts.rejectedBefore ? ` · ${counts.rejectedBefore} rejected before` : ''}${counts.renewed ? ` · ${counts.renewed} renewed` : ''}${counts.moved ? ` · ${counts.moved} status ${counts.moved === 1 ? 'move' : 'moves'}` : ''}`,
       detail: { ...counts, rules: RECONCILE_RULES },
     });
     return counts;
@@ -288,7 +340,7 @@ export async function reconcile(runBy: string | null = null): Promise<ReconcileC
  * server reads every LP again at its next start (issue 0137: its open proposals for the conversation
  * rungs are applied or withdrawn without waiting for the next Affinity translation).
  */
-export const RECONCILE_RULES = '0137';
+export const RECONCILE_RULES = '0150-threads';
 
 /** At start: run once when the last run was under other rules. Never throws; a failure is in its run receipt. */
 export async function reconcileIfRulesChanged(): Promise<void> {
@@ -353,6 +405,7 @@ async function propose(only?: string): Promise<ReconcileCounts> {
       union select identity.canonical_entity_id(entity_id)::text from identity.source_record where source = 'app_user'`,
   )).map((r) => r.id));
   const retracted = await retractedRefs(db, only);
+  const [windows, held] = await Promise.all([raiseWindows(), undoneAt(db, actor, only)]);
   const recorded = 'Recorded by Reconciliation from the records on file, without an approval (issue 0137, Juan, 8 Oct 2026).';
   for (const live0 of live) {
     let p = live0;
@@ -368,6 +421,13 @@ async function propose(only?: string): Promise<ReconcileCounts> {
       }
       counts.notLp++;
       continue;
+    }
+    // The status, forward on the records (Juan, 9 Oct 2026): undone by a person setting it again.
+    const move = statusFromRecords(p, touched, new Date(), windows.get(p.vehicleId)?.opens ?? null, held.get(p.pursuitId) ?? null);
+    if (move) {
+      await db.transaction((tx) => setStatuses(actor, [{ pursuitId: p.pursuitId, status: move.to, reason: move.reason }], tx));
+      counts.moved = (counts.moved ?? 0) + 1;
+      p = { ...p, status: move.to, statusSetAt: new Date() };
     }
     // The conversation rungs on the records behind them, recorded here and now. A record a person took back is not used again.
     let f = onFile(p, touched, tracked);

@@ -7,8 +7,10 @@ import { shortDate } from '@/lib/time';
 import { timeline, LANE_LABEL, type Lane } from '@/lib/timeline';
 import type { DatedRow } from '@/lib/lanes';
 import { DatedList } from '@/components/calendar/DatedList';
+import { packRows } from '@/lib/packed-rows';
 import { CalendarWindow } from '@/components/calendar/CalendarWindow';
 import { CalendarStats } from '@/components/calendar/CalendarStats';
+import { Relabel } from '@/components/calendar/Relabel';
 import windowLook from './window.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +36,7 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
 
   const now = new Date();
   // Travel and Events (issue 0021): the team's calendars, on the all-vehicles calendar only — a trip is nobody's raise.
-  const feeds = vehicle ? null : await (await import('@/lib/calendar-feeds')).feedMarks(now, {
+  const feeds = vehicle ? null : await (await import('@/lib/calendar-feeds')).laneMarks(now, {
     from: new Date(now.getTime() - FEED_DAYS.back * 86_400_000), to: new Date(now.getTime() + FEED_DAYS.forward * 86_400_000),
   });
   const marks = [...await timeline(vehicle?.name ?? null, now), ...(feeds?.marks ?? [])].sort((a, b) => a.from.getTime() - b.from.getTime());
@@ -47,6 +49,7 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
     from: m.from.toISOString(),
     to: m.kind === 'span' && m.to.getTime() !== m.from.getTime() ? m.to.toISOString() : null,
     vehicle: m.vehicleName, standing: m.alert ? 'pressing' : m.past ? 'done' : 'ahead', href: m.href,
+    ...('entry' in m && m.entry ? { entry: m.entry as DatedRow['entry'] } : {}),
   }));
   const vehicleNames = [...new Set(marks.map((m) => m.vehicleName).filter((v): v is string => Boolean(v)))].sort();
 
@@ -105,15 +108,16 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
         Calendar · {vehicle ? vehicle.name : 'all vehicles'}
       </div>
       <h1>What is happening, and when</h1>
-      {feeds && feeds.feeds === 0 && (
+      {feeds && feeds.sources === 0 && (
         <p className="note" style={{ marginTop: 6 }}>
-          <b>Travel and Events</b> come from the team’s own calendars: paste calendar addresses in{' '}
-          <a href="/settings?section=email#calendars">Preferences</a>. Read only; nothing is written back.
+          <b>Travel and Events</b> come from the team’s own calendars, read through each person’s mailguard token in{' '}
+          <a href="/settings?section=email#calendars">Preferences</a>: an entry over two or more days with a place is a trip,
+          and a conference, summit or talk is an event. Read only; nothing is written back.
         </p>
       )}
       {feeds && feeds.problems.length > 0 && (
         <p className="note" style={{ marginTop: 6, color: 'var(--amber)' }}>
-          {feeds.problems.map((p) => `${p.person}’s ${p.lane} calendar: ${p.why}`).join(' ')}
+          {feeds.problems.map((p) => `${p.person}’s calendar: ${p.why}`).join(' ')}
         </p>
       )}
       <p className="sublede">
@@ -145,7 +149,7 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
             </span>
           </div>
 
-          <CalendarWindow rows={rows} first={weeks[0]!.start.toISOString()} weeks={weeks.length} now={now.toISOString()} look={windowLook} />
+          <CalendarWindow rows={rows.filter(r => new Date(r.to ?? r.from).getTime() >= first && new Date(r.from).getTime() <= last + 86_400_000)} lanes={[...new Set(rows.map(r => r.lane))]} first={weeks[0]!.start.toISOString()} weeks={weeks.length} now={now.toISOString()} look={windowLook} />
 
         </div>
       )}
@@ -157,7 +161,18 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
           <h2>Every dated thing, in order</h2>
           <span className="lbl">search, lanes and standing filter as you type</span>
         </div>
-        <DatedList rows={rows} vehicles={vehicleNames} />
+        <DatedList packed={packRows(rows)} vehicles={vehicleNames} />
+        {feeds && feeds.hidden.length > 0 && (
+          <div className="cbody" style={{ borderTop: '1px solid var(--line)' }}>
+            <div className="lbl">Marked as meetings here ({feeds.hidden.length})</div>
+            {feeds.hidden.map((h) => (
+              <div key={h.key} style={{ margin: '6px 0' }}>
+                <span className="mono">{shortDate(new Date(h.from))}</span> · {h.title} <span className="muted">· {h.team.join(', ')}</span>
+                <Relabel entry={{ key: h.key, label: 'meeting', by: 'relabelled here' }} />
+              </div>
+            ))}
+          </div>
+        )}
         <p className="cover">
           <b>What this covers:</b> every record in this system that carries a date
           {vehicle ? ` and belongs to ${vehicle.name}` : ' across every vehicle'}. Work nobody has

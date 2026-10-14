@@ -68,7 +68,7 @@ export async function createEmailDraft(env: Envelope, a: {
     const { draft, warnings, blocks } = await draftWithChecks(actor, draftId);
     const vehicle = (await listVehicles()).find((v) => v.id === draft.vehicleId)!;
     return {
-      link: draft.pursuitId ? `/${vehicle.slug}/pipeline/${draft.pursuitId}#email` : `/${vehicle.slug}/routes?target=${draft.entityId ?? ''}`,
+      link: draft.pursuitId ? `/${vehicle.slug}/pipeline/${draft.pursuitId}?tab=email#email` : `/${vehicle.slug}/routes?target=${draft.entityId ?? ''}`,
       data: {
         draftId, status: draft.status, purpose: draft.purpose, vehicle: vehicle.slug, lp: draft.entityName, connector: draft.connectorName,
         // The words you gave come back; words filled in from the records (a strategy's first message, which may

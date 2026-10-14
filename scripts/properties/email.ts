@@ -19,7 +19,7 @@ import type { Db } from '../../lib/db';
 import { ALLOWED, MUST_REFUSE, allowedRequest, parseBase } from '../../lib/connectors/mailguard/allowlist';
 import { DraftOnlyViolation, guarded, mailguardClient, type MailguardTransport } from '../../lib/connectors/mailguard/client';
 import { FAKE_BASE, FAKE_DOMAIN, fakeMintKey, fakeReceive, fakeRevoke, fakeSendInGmail, fakeSetGrant, fakeTransport, readFake } from '../../lib/connectors/mailguard/fake';
-import { CAN_SEND, KNOWN_CAPABILITIES, NOTIFYING, draftOnlyVerdict } from '../../lib/connectors/mailguard/scope';
+import { CAN_SEND, FORWARDING, KNOWN_CAPABILITIES, NOTIFYING, SENDING, draftOnlyVerdict } from '../../lib/connectors/mailguard/scope';
 import { memoryStore } from '../../lib/connectors/mailguard/tokens';
 import { connection, type MailguardRuntime } from '../../lib/connectors/mailguard';
 import { EMAIL_MARKS, EMAIL_NODES, normalizeDoc, renderHtml, renderText, textToDoc, type DocNode } from '../../lib/email/doc';
@@ -67,6 +67,10 @@ const whoami = (capabilities: string[], toolGrant: string[] = capabilities, extr
 
 export async function emailProperties(check: Check, db: Db) {
   const dir = await mkdtemp(join(tmpdir(), 'plcos-mailguard-fake-'));
+  // These properties cover drafting, so they run with it on; drafting off is checked on its own below.
+  const cfg = (await import('../../config/deployment')).config;
+  const wasDrafting = cfg.email.drafting;
+  Object.assign(cfg.email, { drafting: true });
   try {
     // ── 1. Draft-only: the allowlist refuses every send ────────────────────────────────────
     {
@@ -343,8 +347,23 @@ export async function emailProperties(check: Check, db: Db) {
         ['the calendar can answer invitations', whoami(['draft', 'calendar.read', 'calendar.respond']), 'can_notify'],
         ['its own policy grants calendar.*, the system stops invites', whoami(['draft', 'calendar.read'], ['draft', 'calendar.*']), 'can_notify'],
         ['mailguard says it can notify others', { ...whoami(['draft', 'calendar.read']), can_notify_others: true }, 'can_notify'],
+        ['read-only contacts and filters are known, not refused', whoami(['draft', 'contacts.photos', 'filters.read'], ['draft', 'contacts.*', 'filters.read']), 'ok'],
+        ['a contacts permission not known to be read-only is refused', whoami(['draft', 'contacts.write']), 'unknown_capability'],
+        ['queued sending is sending', whoami(['draft', 'send.staged']), 'can_send'],
+        ['a filter can forward mail', whoami(['draft', 'filters.write']), 'can_send'],
+        ['its own policy grants filters.*, the system stops it', whoami(['draft'], ['draft', 'filters.*']), 'tool_grants_send'],
+        ['its own policy grants send.staged, the system stops it', whoami(['draft'], ['draft', 'send.staged']), 'tool_grants_send'],
       ];
       const wrong = cases.filter(([, a, want]) => code(a) !== want).map(([name, a]) => `${name}: ${code(a)}`);
+      // Drafting off (config.email.drafting, 12 Oct 2026): the key needs calendar.read, not draft; sending is refused as ever.
+      const off = (a: unknown) => { const x = draftOnlyVerdict(a, Date.parse('2026-10-03T12:00:00Z'), false); return x.ok ? 'ok' : x.code; };
+      const offCases: Array<[string, unknown, string]> = [
+        ['drafting off: calendar only', whoami(['calendar.read', 'contacts.photos']), 'ok'],
+        ['drafting off: no calendar', whoami(['read.metadata']), 'no_calendar'],
+        ['drafting off: can send', whoami(['calendar.read', 'send']), 'can_send'],
+        ['drafting off: can invite', whoami(['calendar.read', 'calendar.invite']), 'can_notify'],
+      ];
+      for (const [name, a, want] of offCases) if (off(a) !== want) wrong.push(`${name}: ${off(a)}`);
       const sendText = v(whoami(['draft', 'send']));
       const cal = (said: unknown, caps: string[]) => { const x = v({ ...whoami(['draft', ...caps]), ...(said === undefined ? {} : { calendar: said }) }); return x.ok ? `${x.calendar.state}${x.calendar.details ? '+details' : ''}` : x.code; };
       const calStates = [cal(undefined, ['calendar.read']), cal('off', ['calendar.read']), cal('reconnect', ['calendar.read']), cal('ok', []), cal('ok', ['calendar.read']), cal('ok', ['calendar.read', 'calendar.read.details'])].join();
@@ -356,12 +375,13 @@ export async function emailProperties(check: Check, db: Db) {
       for (let i = 0; i < 1000; i++) {
         const caps = pool.filter(() => r() < 0.25);
         const grant = r() < 0.15 ? ['*'] : caps.filter((c) => r() < 0.9);
-        const want = caps.includes('draft') && !caps.includes('send') && caps.every((c) => (KNOWN_CAPABILITIES as readonly string[]).includes(c))
+        const sends = (xs: string[]) => xs.some((c) => SENDING.includes(c) || FORWARDING.includes(c));
+        const want = caps.includes('draft') && !sends(caps) && caps.every((c) => (KNOWN_CAPABILITIES as readonly string[]).includes(c))
           && !caps.some((c) => NOTIFYING.includes(c)) && !grant.some((g) => NOTIFYING.includes(g))
-          && !grant.includes('*') && !grant.includes('send') && grant.every((g) => (KNOWN_CAPABILITIES as readonly string[]).includes(g) || g === 'read.*');
+          && !grant.includes('*') && !sends(grant) && grant.every((g) => (KNOWN_CAPABILITIES as readonly string[]).includes(g) || g === 'read.*');
         const got = v(whoami(caps, grant));
         if (got.ok === want) agree++;
-        if (got.ok && (caps.includes('send') || grant.includes('send') || grant.includes('*') || [...caps, ...grant].some((c) => NOTIFYING.includes(c)))) sendAccepted++;
+        if (got.ok && (sends(caps) || sends(grant) || grant.includes('*') || [...caps, ...grant].some((c) => NOTIFYING.includes(c)))) sendAccepted++;
       }
       check('Email: a mailguard key is drafts-only only when its own whoami says so — send, a calendar invite or answer, an own grant of send, calendar.* or *, anything unknown, no draft, an expired policy or a malformed answer are refused; the calendar is read only with calendar.read on a connected calendar; 1,000 random answers agree and none that can send or notify passes',
         wrong.length === 0 && !sendText.ok && sendText.reason === CAN_SEND && agree === 1000 && sendAccepted === 0,
@@ -513,7 +533,51 @@ export async function emailProperties(check: Check, db: Db) {
       check('Email: forgetting the key removes it here; a move after that is refused and asks for a drafts-only token',
         (await store.get(juan.handle)) === null && !!afterForget && /drafts-only mailguard token/.test(afterForget), afterForget ?? 'moved');
     }
+
+    // ── Drafting off in PLC OS (config.email.drafting, Juan, 12 Oct 2026) ─────────────────────
+    {
+      const { config } = await import('../../config/deployment');
+      const { DRAFTING_OFF } = await import('../../modules/email');
+      const { USER_COOKIE } = await import('../../lib/auth/cookie');
+      const { withDb } = await import('../../lib/db');
+      const { workAsyncStorage } = await import('next/dist/server/app-render/work-async-storage.external');
+      const { workUnitAsyncStorage } = await import('next/dist/server/app-render/work-unit-async-storage.external');
+      const { createRequestStore } = await import('next/dist/server/async-storage/request-store');
+      const { actionAsyncStorage } = await import('next/dist/server/app-render/action-async-storage.external');
+      const { createDraftAction } = await import('../../app/email/actions');
+      const { POST: attach } = await import('../../app/api/email/attachment/route');
+      const juan = (await db.one<{ id: string; handle: string }>("select id::text, handle from platform.app_user where handle = 'juan'"))!;
+      const pursuit = (await db.one<{ id: string; vehicle: string }>('select pursuit_id::text id, vehicle_id::text vehicle from strategy.active_pursuit order by pursuit_id limit 1'))!;
+      const drafts = async () => (await db.one<{ n: number }>('select count(*)::int n from email.draft'))!.n;
+      const was = config.email.drafting;
+      // The config is read-only by type; a property sets it the way railway-setup sets config.data.
+      Object.assign(config.email, { drafting: false });
+      try {
+        const before = await drafts();
+        const headers = new Headers({ host: 'localhost:3211', origin: 'http://localhost:3211', 'sec-fetch-site': 'same-origin', cookie: `${USER_COOKIE}=${juan.handle}` });
+        const store = createRequestStore({ phase: 'action', headers, url: { pathname: '/targets' },
+          rootParams: {}, implicitTags: { tags: [], expirationsByCacheKind: new Map() },
+          resumeDataCache: null, onUpdateCookies: undefined, previewProps: undefined, isHmrRefresh: false,
+          serverComponentsHmrCache: undefined, hmrRefreshHash: undefined, fallbackParams: null });
+        const form = new FormData();
+        form.set('purpose', 'first_message'); form.set('vehicleId', pursuit.vehicle); form.set('pursuitId', pursuit.id);
+        const r = await withDb(db, () => workAsyncStorage.run({ route: '/targets', isStaticGeneration: false } as Parameters<typeof workAsyncStorage.run>[0],
+          () => workUnitAsyncStorage.run(store, () => actionAsyncStorage.run({ isAction: true }, () => createDraftAction(form)))));
+        const file = new FormData();
+        file.set('draftId', '00000000-0000-4000-8000-000000000001'); file.set('file', new File(['invented'], 'invented.txt', { type: 'text/plain' }));
+        const routed = await withDb(db, () => attach(new Request('http://localhost:3211/api/email/attachment', {
+          method: 'POST', headers: { origin: 'http://localhost:3211', cookie: `${USER_COOKIE}=${juan.handle}` }, body: file,
+        })));
+        const routedError = routed.status === 403 ? (await routed.json()).error : `HTTP ${routed.status}`;
+        check('Email: with config.email.drafting off, the draft action and the attachment route refuse in words and write nothing',
+          !r.ok && r.error === DRAFTING_OFF && routedError === DRAFTING_OFF && (await drafts()) === before,
+          JSON.stringify({ action: r.ok ? 'drafted' : r.error, route: routedError }));
+      } finally {
+        Object.assign(config.email, { drafting: was });
+      }
+    }
   } finally {
+    Object.assign(cfg.email, { drafting: wasDrafting });
     await rm(dir, { recursive: true, force: true });
   }
 }

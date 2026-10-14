@@ -1,6 +1,7 @@
 import { coalescePage } from '@/lib/page-render';
 import { notFound } from 'next/navigation';
 import { FloorTabs } from '@/components/floor/FloorTabs';
+import { packRows } from '@/lib/packed-rows';
 import { Page } from '@/components/shell/Page';
 import { boardState } from '@/lib/board';
 import { floorState } from '@/lib/floor';
@@ -151,7 +152,7 @@ async function Visualizations({ params, searchParams }: { params: Promise<{ vehi
         </div>
       </div>
 
-      <FloorTabs state={state} board={board} lenses={lens} />
+      <FloorTabs state={{ ...state, items: packRows(state.items) }} board={{ ...board, territories: packRows(board.territories) }} lenses={lens} />
 
       <p className="note">
         Read as of {shortDate(state.asOf)}. {state.coverage.corpus}.

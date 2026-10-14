@@ -55,7 +55,7 @@ const keyOf = (messageId: string | undefined, gid: string) => {
 async function pursuitFor(ctx: Ctx, pursuitId: string, q: Queryable, write: boolean) {
   const p = await q.one<{ pursuit_id: string; entity_id: string; vehicle_id: string; vehicle: string; slug: string; name: string }>(
     `select p.pursuit_id::text, identity.canonical_entity_id(p.entity_id)::text entity_id, p.vehicle_id::text, v.name vehicle, v.slug, e.display_name name
-       from strategy.pursuit p join platform.vehicle v on v.id = p.vehicle_id join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
+       from strategy.pursuit p join platform.vehicle v on v.id = p.vehicle_id join identity.entity p_e on p_e.entity_id = p.entity_id join identity.entity e on e.entity_id = case when p_e.merged_into is null then p.entity_id else identity.canonical_entity_id(p.entity_id) end
       where p.pursuit_id = strategy.canonical_pursuit_id($1::uuid)`, [pursuitId]);
   if (!p || !can(ctx.env.principal, write ? 'mutate' : 'read', { vehicle: p.vehicle_id })) throw new OutreachRefused(404, 'No such LP on your vehicles.');
   return p;
@@ -74,12 +74,12 @@ async function entitiesOf(addresses: string[], q: Queryable): Promise<string[]> 
   return [...new Set([...people, ...firms])].sort();
 }
 
-/** Reconcile the LPs a batch of new received messages is about: their active pursuits, each once. */
+/** Reconcile the LPs a batch of new messages is about, ours and theirs: their active pursuits, each once (our email moves to Connecting, docs/29 §4a). */
 async function reconcileAfterMail(messageIds: string[], q: Queryable): Promise<number> {
   const pursuits = (await q.query<{ id: string }>(`select distinct p.pursuit_id::text id
       from email.comms_message m cross join lateral unnest(m.entity_ids) x(id)
       join strategy.active_pursuit p on p.entity_id = any(identity.alias_ids(array[identity.canonical_entity_id(x.id)]))
-     where m.message_id = any($1::text[]) and m.direction = 'theirs'`, [messageIds])).map((r) => r.id);
+     where m.message_id = any($1::text[])`, [messageIds])).map((r) => r.id);
   const { reconcilePursuit } = await import('@/lib/reconcile');
   for (const id of pursuits) await reconcilePursuit(id);
   return pursuits.length;
@@ -105,6 +105,7 @@ export async function ingest(ctx: Ctx, raw: Record<string, unknown>) {
   const [team, about] = await Promise.all([teamAddresses(db),
     db.query<{ slug: string; name: string; aliases: string[] }>(`select slug, name, coalesce(aliases, '{}') aliases from platform.vehicle`)]);
   const out: Array<{ messageId: string; status: 'new' | 'already' | 'unmatched' }> = [];
+  const relinked: string[] = [];
   for (const m of a.messages) {
     const at = new Date(m.date);
     if (at.getTime() > Date.now() + SKEW_MS) throw new OutreachRefused(400, `A message is dated in the future (${m.gmailMessageId}).`);
@@ -120,7 +121,7 @@ export async function ingest(ctx: Ctx, raw: Record<string, unknown>) {
     // A message with nobody on record is not kept: it is about no LP here.
     if (!entities.length) { out.push({ messageId: key, status: 'unmatched' }); continue; }
     const ab = aboutRaise(m.subject ?? '', [m.from, ...m.to], about, []);
-    const r = await db.one<{ fresh: boolean }>(`insert into email.comms_message (message_id, has_message_id, gmail_id, thread_id, sent_at, direction, from_addr, to_addrs, cc_addrs,
+    const r = await db.one<{ fresh: boolean; changed: boolean }>(`insert into email.comms_message (message_id, has_message_id, gmail_id, thread_id, sent_at, direction, from_addr, to_addrs, cc_addrs,
         subject, entity_ids, pursuit_id, about, about_vehicles, about_basis, mailbox_of, token_id, seen_by)
       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::uuid[], $12, $13, $14, $15, $16, $17, array[$16]::uuid[])
       on conflict (message_id) do update set
@@ -130,21 +131,23 @@ export async function ingest(ctx: Ctx, raw: Record<string, unknown>) {
         seen_by = array(select distinct x from unnest(email.comms_message.seen_by || excluded.seen_by) x order by x),
         updated_at = case when email.comms_message.entity_ids @> excluded.entity_ids and email.comms_message.seen_by @> excluded.seen_by
                             and (email.comms_message.pursuit_id is not null or excluded.pursuit_id is null) then email.comms_message.updated_at else now() end
-      returning (xmax = 0) as fresh`,
+      returning (xmax = 0) as fresh, updated_at = now() as changed`,
     [key, real, m.gmailMessageId, m.threadId ?? null, at, m.direction === 'sent' ? 'ours' : 'theirs', m.from, m.to, m.cc, m.subject ?? null,
       entities, pursuitId, ab.about, ab.vehicles, ab.basis, owner.id, ctx.env.tokenId]);
     out.push({ messageId: key, status: r?.fresh ? 'new' : 'already' });
+    // Sent again with the LP it is about (a pursuit it lacked), or another LP on it: Reconciliation reads it again.
+    if (!r?.fresh && r?.changed) relinked.push(key);
   }
   const n = (s: string) => out.filter((x) => x.status === s).length;
   // A new reply from an LP is a reply on file: Reconciliation records the conversation rungs it supports, as it
   // does after Affinity's (Juan, 8 Oct 2026, issue 0137; 9 Oct 2026, docs/29). Only those LPs, here and now.
-  const fresh = out.filter((x) => x.status === 'new').map((x) => x.messageId);
+  const fresh = [...out.filter((x) => x.status === 'new').map((x) => x.messageId), ...relinked];
   const reconciled = fresh.length ? await reconcileAfterMail(fresh, db) : 0;
   await appendAudit({ actorId: owner.id, action: 'comms.ingested', subjectType: 'mcp_token', subjectId: ctx.env.tokenId,
     detail: { messages: a.messages.length, new: n('new'), already: n('already'), unmatched: n('unmatched'), reconciled } }, db);
   return { data: {
     new: n('new'), already: n('already'), unmatched: n('unmatched'), messages: out, reconciled,
-    note: 'Metadata only: no touchpoint, status or ticket is written. A new reply from an LP is a reply on file, so Reconciliation records the conversation rungs it supports (LP opted in), undoable on the LP\'s timeline; reconciled counts the LPs it looked at. The LP page and the queue read these with Affinity\'s records, one row per message. A message with nobody on record is not kept.',
+    note: 'Metadata only: no touchpoint, status or ticket is written. Reconciliation runs inside this call for the LPs its new messages are about: a reply from an LP records the conversation rungs it supports (LP opted in), and moves the status forward as docs/29 §4a says (our email to Connecting, their reply to Discussing), all undoable; reconciled counts the LPs it looked at. The LP page and the queue read these with Affinity\'s records, one row per message. A message with nobody on record is not kept.',
   } };
 }
 

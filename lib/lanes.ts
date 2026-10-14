@@ -60,6 +60,8 @@ export interface DatedRow {
   vehicle: string | null;
   standing: 'pressing' | 'ahead' | 'done';
   href: string | null;
+  /** A Travel or Events entry read from the team's calendars: why it is in its lane, and the key to relabel it. */
+  entry?: { key: string; label: 'travel' | 'events' | 'meeting'; by: string };
 }
 
 /**

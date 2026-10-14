@@ -31,8 +31,10 @@ const LOG = 'data/demo/e2e-server.log';
 const TSX = join(ROOT, 'node_modules/.bin/tsx');
 const VIEWER = 'e2e-viewer';
 const MARK = `e2e ${Date.now().toString(36)}`;
-// The launcher runs `next` by name, as npm run would find it.
-const env: NodeJS.ProcessEnv = { ...process.env, DATA_PROFILE: 'demo', PGLITE_DIR: `./${DIR}`, PATH: `${join(ROOT, 'node_modules/.bin')}:${process.env.PATH ?? ''}` };
+// The launcher runs `next` by name, as npm run would find it. Drafting in PLC OS is off since 12 Oct 2026
+// (config.email.drafting); EMAIL_DRAFTING=1 turns it back on for this demo server, so the email check still
+// drives the draft box end to end.
+const env: NodeJS.ProcessEnv = { ...process.env, DATA_PROFILE: 'demo', PGLITE_DIR: `./${DIR}`, EMAIL_DRAFTING: '1', PATH: `${join(ROOT, 'node_modules/.bin')}:${process.env.PATH ?? ''}` };
 delete env.DATABASE_URL;
 Object.assign(process.env, { DATA_PROFILE: 'demo', PGLITE_DIR: `./${DIR}` });
 delete process.env.DATABASE_URL;
@@ -357,7 +359,7 @@ async function main() {
       await card.getByRole('button', { name: 'Test the connection' }).waitFor();
       await card.getByRole('button', { name: 'Test the connection' }).click();
       await card.locator('[role="status"]', { hasText: /drafts-only/ }).waitFor();
-      await page.goto(`${base}/targets/${lp.page.id}`, { waitUntil: 'networkidle' });
+      await page.goto(`${base}/targets/${lp.page.id}?tab=email`, { waitUntil: 'networkidle' });
       const box = page.locator('#email');
       await box.getByRole('button', { name: 'Draft the first message' }).click();
       await box.locator('.ProseMirror').waitFor();
@@ -606,11 +608,12 @@ async function main() {
       await client.close();
       if (!/Approved: 2\b/.test(receipt) || !agentLink.data?.ticketUsed) throw new Error(`batch receipt "${receipt}"; agent link ${agentLink.data?.ticketUsed ?? agentLink.error}`);
       // The LP page: the context panel and the merged timeline.
-      await page.goto(`${base}/targets/${lp.ctx.id}`, { waitUntil: 'networkidle' });
+      await page.goto(`${base}/targets/${lp.ctx.id}?tab=email`, { waitUntil: 'networkidle' });
       const panel = page.locator('[data-outreach-context]');
       const restriction = (await panel.locator('[data-restriction]').innerText()).replace(/\s+/g, ' ');
       const owes = await panel.locator('[data-owes]').getAttribute('data-owes');
       const thread = (await panel.locator('[data-thread]').innerText()).replace(/\s+/g, ' ');
+      await page.goto(`${base}/targets/${lp.ctx.id}`, { waitUntil: 'networkidle' });
       const timeline = (await page.locator('#timeline').innerText()).replace(/\s+/g, ' ');
       if (!/no calls, email only/.test(restriction) || owes !== 'us' || !thread.includes(lp.juan.name) || !/Gmail, via juanmail/.test(timeline) || !/also in Gmail/.test(timeline)) {
         throw new Error(`restriction "${restriction.slice(0, 60)}"; owes ${owes}; thread "${thread.slice(0, 80)}"; timeline gmail ${/Gmail, via juanmail/.test(timeline)}, matched ${/also in Gmail/.test(timeline)}`);
@@ -774,6 +777,7 @@ async function main() {
 
     const contextText = `Context from the team (${MARK})`;
     await check('LP page: add context (a note)', async () => {
+      await page.goto(`${base}/targets/${target.id}?tab=strategy`, { waitUntil: 'networkidle' });
       await page.getByLabel('Context or a correction').fill(contextText);
       await page.getByRole('button', { name: 'Add it' }).click();
       await page.getByText('Added. The strategy below is due a re-think.').waitFor();

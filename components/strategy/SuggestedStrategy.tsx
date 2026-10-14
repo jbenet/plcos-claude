@@ -3,6 +3,7 @@ import { shortDate } from '@/lib/time';
 import { suggestionsFor } from '@/lib/authz/read/strategy';
 import type { Strategy } from '@/lib/enrich/strategy';
 import { decideSuggestionAction } from '@/app/targets/actions';
+import { Info } from '@/components/ui/Info';
 
 /**
  * A strategy proposed for this LP (N64, docs/19, W5): the angle, the way in, the next action and
@@ -30,6 +31,7 @@ export async function SuggestedStrategy({ pursuitId, vehicleName, context = [] }
         <span className="lbl">
           {s.status === 'proposed' ? 'ready for review' : s.status === 'accepted' ? `accepted${s.decidedByName ? ` by ${s.decidedByName}` : ''}` : `dismissed${s.decidedByName ? ` by ${s.decidedByName}` : ''}`}
           {' · '}{s.madeBy}, {shortDate(s.madeAt)}
+          <Info>Proposed, not decided. Written from public sources and our records. Accepting makes the next action this LP&rsquo;s next step; the status, the ladder and the money don&rsquo;t move, and nothing is sent.</Info>
         </span>
       </div>
       <div className="cbody">
@@ -70,11 +72,6 @@ export async function SuggestedStrategy({ pursuitId, vehicleName, context = [] }
           </form>
         ) : s.decisionNote ? <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>&ldquo;{s.decisionNote}&rdquo;{s.decidedAt ? ` — ${shortDate(s.decidedAt)}` : ''}</p> : null}
       </div>
-      <p className="cover">
-        <b>Proposed, not decided.</b> Written from public sources and our records. Accepting makes
-        the next action this LP&rsquo;s next step; the status, the ladder and the money don&rsquo;t move, and
-        nothing is sent.
-      </p>
     </div>
   );
 }

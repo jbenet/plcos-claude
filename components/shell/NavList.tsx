@@ -32,10 +32,11 @@ const SCROLL_KEY = 'capitalos.nav.scroll';
  * preference that resets on every reload is not a preference.
  */
 export function NavList({
-  vehicles, current: cookieVehicle, asked, approvals, issues,
+  vehicles, asked, approvals, issues,
 }: {
   vehicles: NavVehicle[];
-  current: string | null;
+  /** The remembered vehicle (cookie). Kept for callers; the rail selects from the address alone (issue 0148). */
+  current?: string | null;
   /** The address the browser asked for, when the proxy rewrote it (null otherwise). */
   asked?: string | null;
   approvals: number;
@@ -61,7 +62,12 @@ export function NavList({
   // Every vehicle module carries its vehicle in the path now (N65), and so does the overview.
   const isModule = (s: string | undefined) => Boolean(s) && (s === 'overview' || modulesForKind('fund').some((mod) => mod.path === s) || s === 'spv' || s === 'grants');
   const fromPath = isModule(seg2) ? (seg1 === 'all' ? null : seg1 ?? null) : undefined;
-  const current = fromPath === undefined ? cookieVehicle : fromPath;
+  /**
+   * Only a vehicle's own pages select a vehicle (issue 0148). Elsewhere (Developer, Settings, Today)
+   * nothing is selected, so the remembered cookie vehicle is not shown as if the page were about it.
+   * `undefined` = no vehicle page; `null` = All vehicles.
+   */
+  const current: string | null | undefined = fromPath;
   const [, start] = useTransition();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(STATIC_SECTIONS.filter((s) => s.defaultCollapsed).map((s) => [s.id, true])),
@@ -71,11 +77,22 @@ export function NavList({
   // Read the stored preference after mount: the server cannot know it, and rendering the
   // default first avoids a hydration mismatch.
   useEffect(() => {
+    let stored: Record<string, boolean> | null = null;
     try {
       const raw = window.localStorage.getItem(STORE_KEY);
-      if (raw) setCollapsed(JSON.parse(raw) as Record<string, boolean>);
+      if (raw) stored = JSON.parse(raw) as Record<string, boolean>;
     } catch {
       /* private window, blocked storage — defaults are fine */
+    }
+    // A first load in this tab (an outside link) opens the closed section that holds the current page,
+    // so its link can be brought into view (issue 0148). Only on screen: the remembered state is not
+    // written, and every other section keeps it.
+    let firstLoad = false;
+    try { firstLoad = window.sessionStorage.getItem(SCROLL_KEY) === null; } catch { /* blocked storage */ }
+    const here = window.location.pathname;
+    const holds = firstLoad ? STATIC_SECTIONS.find((sec) => sec.links.some((l) => here === l.href || here.startsWith(l.href + '/'))) : undefined;
+    if (stored || holds) {
+      setCollapsed((prev) => ({ ...(stored ?? prev), ...(holds ? { [holds.id]: false } : {}) }));
     }
     setHydrated(true);
   }, []);
@@ -95,7 +112,24 @@ export function NavList({
     const el = scroller.current;
     if (!el) return;
     if (scrollTop.current === null) {
-      try { scrollTop.current = Number(window.sessionStorage.getItem(SCROLL_KEY)) || 0; } catch { scrollTop.current = 0; }
+      let stored: string | null = null;
+      try { stored = window.sessionStorage.getItem(SCROLL_KEY); } catch { /* blocked storage */ }
+      scrollTop.current = Number(stored) || 0;
+      // A first load in this tab (an outside link): nothing remembered, so bring the current page's
+      // link into view. Waits for the stored section state, as the link may be in a closed section.
+      if (stored === null) {
+        if (!hydrated) { scrollTop.current = null; return; }
+        const link = el.querySelector<HTMLElement>('[aria-current="page"], .subsub.on, .sub.on:not(.vehicle)');
+        if (link) {
+          const box = el.getBoundingClientRect();
+          const at = link.getBoundingClientRect();
+          const top = Math.max(0, Math.round(el.scrollTop + (at.top - box.top) - (box.height - at.height) / 2));
+          scrollTop.current = top;
+          el.scrollTop = top;
+          remember();
+          return;
+        }
+      }
     }
     if (Math.abs(el.scrollTop - scrollTop.current) > 1) el.scrollTop = scrollTop.current;
   }, [path, hydrated]);

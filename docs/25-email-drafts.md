@@ -3,6 +3,9 @@
 **Status:** phase 1 merged 2 Oct 2026. **Since 3 Oct 2026 drafts reach Gmail through mailguard, not
 direct Gmail OAuth** (§12, which supersedes §1, §2 and §4). The demo uses a fake mailguard.
 
+**Drafting in PLC OS is off** by Juan's decision of 12 Oct 2026 (JuanMail drafts instead); set
+`config.email.drafting: true` to bring it back.
+
 Juan, 2 Oct 2026, in summary: email boxes where the tool suggests an email (to target LPs, to
 introducers); WYSIWYG tuned for email with no weird formatting, plus plain text; images and files; move a
 draft into the user's own Gmail to review and send from there; "do this safely (don't want a client that
@@ -244,8 +247,10 @@ mailguard token only lets you draft, and error when connecting it if it lets you
   by `scripts/with-mailguard-token.sh` as `MAILGUARD_TOKEN` and belongs to the handle in
   `config.email.mailguard.keychainTokenFor` (`juan`); a pasted key wins over it. Forgetting here does not
   revoke the key at mailguard: revoke it there.
-- **Where mailguard is:** `config.email.mailguard.url`, or `MAILGUARD_URL` in the live server's environment
-  (the same script reads an optional Keychain item `mailguard-url`). https only, except `localhost`.
+- **Where mailguard is:** a setting. On the live server an Admin enters it in Settings → Connections → Mailguard
+  address (Juan, 12 Oct 2026: "should be a setting not an env var"). On the Mac, `scripts/with-mailguard-token.sh`
+  sets `MAILGUARD_URL` from the optional Keychain item `mailguard-url`, which wins over the setting;
+  `config.email.mailguard.url` is the last fallback. https only, except `localhost`.
 - **Config:** `config.email.provider = 'mailguard'` (or `'off'`). Previews never see the key or the URL.
 - **Threading.** A follow-up reads the earlier draft's Gmail thread through mailguard (`format=metadata`),
   takes the latest message that is not a draft, and sends its id as `replyTo`; mailguard sets the thread and
@@ -282,7 +287,8 @@ existed), and keeping it would keep a `gmail.compose` grant — which can send �
 
 ### 12.5 What Juan does
 
-1. `npm run secret:store -- mailguard-url` with mailguard's address (or set `config.email.mailguard.url`).
+1. On the live server, enter mailguard's address in Settings → Connections → Mailguard address. On the Mac,
+   `npm run secret:store -- mailguard-url` (or set `config.email.mailguard.url`).
 2. The key is already stored. Make sure its tool policy in mailguard grants `draft` and `read.metadata` only
    (the Drafts template plus `read.metadata`; `read.body` is not needed).
 3. Restart `npm run dev:real`. The log says whether the Keychain key is drafts-only; Preferences → Email shows
@@ -304,21 +310,52 @@ arrives in its v0.9 (DESIGN §5.8, §6.1).
   `calendar.respond`, whose own policy grants `calendar.*`, or for which mailguard says `can_notify_others`, is
   refused outright (`scope.ts`), drafting included.
 - **What is kept** (`lib/calendar-sync.ts`): each occurrence from about 18 months back to 90 days ahead, seen in
-  anyone's calendar, becomes one touchpoint (source `calendar`) per LP whose address is on it, and their current
-  firm: the date, who on the team was there, and what it is about. No title, description or outside guest's name,
+  anyone's calendar, that is an LP meeting becomes one touchpoint (source `calendar`) per LP on it: the date, who on
+  the team was there, and what it is about. No title, description or outside guest's name,
   as with Affinity's. A meeting Affinity already has for that LP that day stays Affinity's. Cancelled meetings
   go; meetings gone from every calendar go only after a read of every connected calendar. Reconciliation then
   reads them.
+- **Only LP meetings** (Juan, 10 Oct 2026). An LP is anyone or any firm with a pursuit, an exposure or a capital
+  pool, and a pursuit's contacts for it; never a portfolio company of ours or our team. An occurrence with no
+  guests besides its holder, with every guest on the team's domains, the fundraising domains or Protocol Labs'
+  (a GUESS list), or with nobody of ours on it, is never one, whatever its title says. Otherwise:
+  1. an outside guest whose address is an LP's, or a pursued firm's person's, makes it theirs (the person and the
+     LP firm);
+  2. else an outside guest at an email domain we hold for an LP firm (the firm's own email-domain or email claims,
+     or its current people's emails; never a personal mail service) makes it that firm's;
+  3. only when neither found anything, an LP's or firm's name in the title or description (firms of 4 or more
+     letters, people by two words or more, a GUESS) makes it theirs, marked "Matched by name … Lower confidence."
+     with a **Not this LP** button on the LP's timeline. Undoing removes it and keeps a `research.note` of kind
+     `calendar_unmatch` with only its reference, so no later read makes it again.
+  Any other outside guest (a portfolio company, a vendor, a recruiter) leaves nothing.
+  Since 13 Oct 2026 (Juan: "could use firm name, or person at firm"), step 3 also reads the name of someone currently
+  at an LP firm (an affiliation with no end date; never someone on the team or using the app), which makes the meeting
+  the firm's, marked "Matched by name: the calendar entry names someone at this firm …", undone the same way.
+- **Possible LPs** (13 Oct 2026; Juan: "look through calendars and figure out which may be LPs based on external
+  addrs, what the invite says, or who the external addrs are"; `lib/calendar-candidates.ts`). A meeting with an outside
+  guest that no LP matched is proposed on Pipeline → New, grouped by the firm we hold for the guest (their firm, or the
+  firm at their domain), the person when they have none, or else the domain, with its reasons: investor data on
+  record for the firm or a guest (investor type, AUM, check size; never Dakota's), or the invite's wording (fund, LP,
+  investment, allocation …, a GUESS list) or one of our vehicles named. With none of those, the weak reason "outside
+  firm, not on file" (13 Oct 2026: 2 of 59 unmatched meetings was too strict); strong reasons are listed first, and
+  Juan sets the rest aside with **Not an LP**. Left out: Protocol Labs, the team, portfolio
+  companies, app users, and a personal address we hold nobody for. Kept as `research.note` kind `calendar_candidate`:
+  the meetings as above, each guest's domain and whether we hold them, and the reasons by label; no title,
+  description, address or outside name. Nothing is added without a click: **Add as LP prospect** opens a pursuit in
+  New for the vehicle with the meetings as its calendar touchpoints (audited, keyed, undoable while nothing else is
+  recorded on it); a firm known only by its domain asks for its name and is held with the domain as an email-domain
+  claim; **Not an LP** is remembered (`calendar_not_lp`); **Research** asks for the profile workflow by public name, as
+  the pipeline's Research does, and runs nothing.
 - **When.** Daily, after Affinity's read; and "Read calendars now" in Preferences → Email, or `cloud-job.sh`'s
   `calendar` job.
-## 14. Travel and Events from calendar addresses (8 Oct 2026, issue 0021)
+## 14. Travel and Events from the team's calendars (8 Oct 2026, issue 0021)
 
 Juan asked for the team's travel and the events they attend on the Calendar page, read from their Google
-Calendars, and approved reading calendars read only ("1 - yes", 8 Oct 2026). This needs no Google sign-in, no
-mailguard and no Mac: each calendar's private iCal address is a read-only feed.
+Calendars, and approved reading calendars read only ("1 - yes", 8 Oct 2026). Since 10 Oct they are read through each
+person's mailguard token (§14.1); a calendar's private iCal address remains an optional, read-only extra source.
 
 - **Pasting.** Preferences → Email → Calendars: a person pastes a calendar's private address (Google Calendar:
-  Settings → the calendar → "Secret address in iCal format") and picks its lane, Travel or Events. The address
+  Settings → the calendar → "Secret address in iCal format"). Its entries are sorted as §14.1 says. The address
   is kept encrypted in `platform.person_secret` (purpose `calendar-ics`), like the mailguard key, and shown back
   only as its service and last four characters. It is never logged and never in an error.
 - **Fetching** (`lib/connectors/ics/`, the only code that fetches one): one GET, https only, to Google Calendar,
@@ -330,3 +367,37 @@ mailguard and no Mac: each calendar's private iCal address is a read-only feed.
   calendars is one mark with both. Cancelled events are left out. Simple repeats are expanded; a richer rule
   shows its first occurrence and says so. Until someone adds an address, the page says where to paste one.
 - **Demo and previews** never fetch one.
+
+### 14.1 Sorting the entries in each person's calendar (10 Oct 2026)
+
+Juan corrected the design the same day: people keep trips and events as entries in one calendar, usually their main
+one, so a calendar is not assigned to a lane. Every entry is sorted by what it is (`lib/calendar-classify.ts`).
+
+- **Reading** (`lib/calendar-feeds.ts`, `laneMarks`): every calendar each person's mailguard token reads (busy-time
+  only ones left out), with the same client and the same GET-only reads as §13, after a fresh check of the key, so
+  the allowlist and the scope guard are unchanged. Each person is read at most hourly; a failed read keeps the last
+  copy for a day and says so. Cancelled entries are left out. A pasted address (above) is an optional extra source,
+  such as TripIt, and its entries are sorted the same way; the lane picked when pasting is no longer read.
+- **The convention**, in this order:
+  1. a relabel clicked under the entry on the Calendar page (Travel, Event or Meeting), remembered for every
+     occurrence of it as a `research.note` of kind `calendar_label` holding only a hash of its iCal UID and the
+     label, never its title or place; the latest click wins;
+  2. `[travel]` or `[event]` in the entry's title;
+  3. the entry's Google colour, when its owner picked one colour for Travel and one for Events in Preferences
+     (kept per person, purpose `calendar-colours`);
+  4. **Event**: conference, summit or talk wording (a GUESS list with their kin: keynote, symposium, expo, meetup,
+     hackathon, panel, workshop, festival), or a Luma, Eventbrite or registration link in the place or the
+     description. The description is only passed with `calendar.read.details`.
+     **Travel**: an entry over two or more days with a place, that is not an Event; the place is the destination.
+     **Meeting**: everything else. Meetings are not marks here; they stay touchpoints on the LP (§13).
+  Parsing flights and hotels, Gmail's event types and guessing a city were considered and dropped.
+- **What shows**: as above, each Travel or Event entry as a mark with its title (the tag taken out), place and whose
+  calendar it came from; one mark per occurrence (iCal UID and start), so an entry in two people's calendars, or in
+  Google and a pasted address, is one mark with both names. Under each one the page says why it is there and offers
+  the relabel. An entry relabelled Meeting is listed apart under "Marked as meetings here", with Travel and Event to
+  show it again.
+- **When it cannot read**: a key without `calendar.read`, a mailguard older than v0.9 or a calendar not yet added in
+  mailguard is said in words on the Calendar page per person, as the Email card says it (`CALENDAR_NOT_READ`).
+  A person with no token is simply not read. Nobody is asked for a key.
+- **Depends on mailguard** passing each event's `location` and `colorId` through `calendar.events.list`; without them
+  Travel needs a tag, a colour or a relabel, and the colour override does nothing.

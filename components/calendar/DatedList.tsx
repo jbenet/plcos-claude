@@ -7,6 +7,8 @@ import { Glyph } from '@/components/ui/Glyph';
 import { LANE_LOOK, orderDatedRows, type DatedRow, type LaneLook } from '@/lib/lanes';
 import s from './DatedList.module.css';
 import { formatDate } from '@/lib/time';
+import { Relabel } from './Relabel';
+import { unpackRows, type PackedRows } from '@/lib/packed-rows';
 
 /**
  * Every dated thing, filtered as you type (issues 0020, 0072): a search over what, who, LP and
@@ -31,7 +33,9 @@ function what(r: DatedRow): string {
   return out === r.label || !out ? r.label : out.charAt(0).toUpperCase() + out.slice(1);
 }
 
-export function DatedList({ rows, vehicles }: { rows: DatedRow[]; vehicles: string[] }) {
+export function DatedList({ packed, vehicles }: { packed: PackedRows; vehicles: string[] }) {
+  // Every dated row, packed for the trip (lib/packed-rows.ts): a calendar of every meeting ran to megabytes.
+  const rows = useMemo(() => unpackRows<DatedRow>(packed), [packed]);
   const [q, setQ] = useState('');
   const [lanes, setLanes] = useState<Set<string>>(new Set());
   const [standing, setStanding] = useState<'all' | DatedRow['standing']>('all');
@@ -169,6 +173,7 @@ export function DatedList({ rows, vehicles }: { rows: DatedRow[]; vehicles: stri
                           {r.href ? <Link href={r.href}>{what(r)}</Link> : <span>{what(r)}</span>}
                         </span>
                         {r.detail && <div className="ddetail">{r.detail}</div>}
+                        {r.entry && <Relabel entry={r.entry} />}
                         {(r.lp || r.team?.length) && (
                           <div className={s.inlineMeta}>{[r.lp, r.team?.length ? `with ${r.team.join(', ')}` : null].filter(Boolean).join(' · ')}</div>
                         )}

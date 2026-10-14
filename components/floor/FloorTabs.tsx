@@ -27,6 +27,7 @@ import { PlantView } from './PlantView';
 import { RoomView } from './RoomView';
 import { n } from './scale';
 import s from './floor.module.css';
+import { unpackRows, type PackedRows } from '@/lib/packed-rows';
 
 /**
  * Fourteen drawings, three projections, one vocabulary.
@@ -127,7 +128,13 @@ const GROUPS: Array<{ title: string; note: string; ids: TabId[] }> = [
 
 type TabId = typeof TABS[number]['id'];
 
-export function FloorTabs({ state, board, lenses }: { state: FloorState; board: BoardState; lenses: Lenses }) {
+/** The page's items and territories arrive packed (lib/packed-rows): thousands of rows sharing a few dozen keys. */
+export type PackedFloor = Omit<FloorState, 'items'> & { items: PackedRows };
+export type PackedBoard = Omit<BoardState, 'territories'> & { territories: PackedRows };
+
+export function FloorTabs({ state: packedState, board: packedBoard, lenses }: { state: PackedFloor; board: PackedBoard; lenses: Lenses }) {
+  const state = useMemo<FloorState>(() => ({ ...packedState, items: unpackRows<FloorState['items'][number]>(packedState.items) }), [packedState]);
+  const board = useMemo<BoardState>(() => ({ ...packedBoard, territories: unpackRows<BoardState['territories'][number]>(packedBoard.territories) }), [packedBoard]);
   // The tab is in the address (N65, issue 0009): a link opens it, and back steps through them.
   // 'clock' is kept only so an old link lands on the strip, which carries the clock's pile.
   const router = useRouter();

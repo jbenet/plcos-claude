@@ -18,10 +18,13 @@ export async function runDailyJobs(db: Db, at: string, now = new Date(), queue =
   const actor = await db.one<{ id: string }>("select id from platform.app_user where handle='reconciliation'");
   if (!actor) throw new Error('Missing system actor.');
   // The calendar after Affinity, so a meeting Affinity already has stays Affinity's (lib/calendar-sync.ts).
-  for (const kind of ['affinity', 'linear', 'spv-stance', 'calendar'] as const) {
+  // The slice only lands Affinity's records; translate maps them onto LPs (last email, statuses), so a read that is
+  // never translated changes nothing anyone sees (13 Oct 2026: LP pages showed no Affinity email after 8 Oct).
+  const steps = [['affinity', 'slice'], ['affinity', 'translate'], ['linear'], ['spv-stance'], ['calendar']] as const;
+  for (const [kind, operation] of steps) {
     if (lockLost()) throw new Error('Daily lock lost.');
     let job = await queue(db, kind, actor.id, {
-      schedule: 'daily', ...(kind === 'affinity' ? { operation: 'slice', options: {} } : {}),
+      schedule: 'daily', ...(operation ? { operation, options: {} } : {}),
     });
     while (job.status === 'queued' || job.status === 'running') {
       await delay(1000); // GUESS: one-second completion polling keeps this small queue responsive.
@@ -35,8 +38,19 @@ export async function runDailyJobs(db: Db, at: string, now = new Date(), queue =
   if (process.env.BACKUP_COMMAND) await promisify(exec)(process.env.BACKUP_COMMAND);
 }
 
+/**
+ * When the daily jobs run, HH:MM UTC, or null for never. SCHEDULE_DAILY_AT wins ("off" turns it off). A Railway server
+ * runs at 03:00 without it: the variable was never set there, so from 9 to 13 Oct 2026 nothing read Affinity, Linear
+ * or the calendars on a schedule, and nobody noticed. A Mac or demo server stays off unless it is set.
+ */
+export function dailyAt(env: Record<string, string | undefined> = process.env): string | null {
+  const set = env.SCHEDULE_DAILY_AT?.trim();
+  if (set) return set.toLowerCase() === 'off' ? null : set;
+  return env.RAILWAY_ENVIRONMENT_ID?.trim() || env.RAILWAY_PROJECT_ID?.trim() ? '03:00' : null;
+}
+
 export function startDailyTimer(): void {
-  const at = process.env.SCHEDULE_DAILY_AT;
+  const at = dailyAt();
   if (!at || g.__dailyTimer) return;
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(at)) throw new Error('SCHEDULE_DAILY_AT must be HH:MM UTC.');
   const tick = async () => {

@@ -425,7 +425,7 @@ export function computeStats(facts: LpFact[], filters: Filters, vehicles: Array<
   const inView = chosen.length ? chosen : scopeSlugs;
   const merge = (list: LpFact[]) => {
     const by = new Map<string, LpFact[]>();
-    for (const f of list) by.set(f.entityId, [...(by.get(f.entityId) ?? []), f]);
+    for (const f of list) { const l = by.get(f.entityId); if (l) l.push(f); else by.set(f.entityId, [f]); }
     return [...by.values()].map(mergeUnit);
   };
   const scoped = facts.filter((f) => scopeSlugs.includes(f.pursuits[0]!.vehicle));
@@ -450,7 +450,7 @@ export function computeStats(facts: LpFact[], filters: Filters, vehicles: Array<
     }
     const pool = units.filter((u) => passes(u, filters, now, d.key));
     const counts = new Map<string, LpFact[]>();
-    for (const u of pool) { const v = d.of(u, now); counts.set(v, [...(counts.get(v) ?? []), u]); }
+    for (const u of pool) { const v = d.of(u, now); { const l = counts.get(v); if (l) l.push(u); else counts.set(v, [u]); } }
     const want = filters.sel[d.key] ?? [];
     let order: string[];
     if (d.order.length) order = [...d.order];

@@ -19,7 +19,9 @@ const SELECT = `
          x.probability, u.name as owner_name, x.evidence_ref, x.hardened_at,
          x.cash_received_at, x.opened_at, x.source, x.source_as_of, x.claim
     from pipeline.exposure x
-    join identity.entity e on e.entity_id = identity.canonical_entity_id(x.entity_id)
+    -- Only a merged record walks its chain (performance pass, 12 Oct 2026).
+    join identity.entity x_e on x_e.entity_id = x.entity_id
+    join identity.entity e on e.entity_id = case when x_e.merged_into is null then x.entity_id else identity.canonical_entity_id(x.entity_id) end
     join platform.vehicle v on v.id = x.vehicle_id
     join platform.app_user u on u.id = x.owner_id
    where x.closed_at is null`;

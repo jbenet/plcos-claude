@@ -23,7 +23,10 @@ export async function enrichmentStrategyProperties(check: Check) {
     // The kind named first, not the first in a fixed order; "angel/seed" is counted (N81's readers).
     const firstNamed = cap.sizeReading('By size: a multi-family office with $4.2B under advice')?.kind === 'wealth_manager'
       && cap.sizeReading('By size: an adviser to family foundations, $3B')?.kind === 'wealth_manager'
-      && cap.floorHolds('Floor: 60 angel/seed investments on record');
+      && cap.floorHolds('Floor: 60 angel/seed investments on record')
+      // Comma-grouped figures read whole (W1 search pass, 13 Oct: "$2,780,000,000" read as $2,780).
+      && cap.parseUsd('$2,780,000,000') === 2.78e9 && cap.parseUsd('$1,250 million') === 1.25e9 && cap.parseUsd('$1,5 bn') === 1.5e9
+      && cap.parseUsd('$4.2 billion') === 4.2e9;
     const bySize = flags('$1–5M', 'By size: a wealth manager with $4.2 billion under management, per its ADV');
     const offTable = flags('$5–25M', 'By size: a wealth manager with $4.2 billion under management, per its ADV');
     const floor = flags('$100K+ (floor)', 'Floor: 12 angel checks on record, sizes unknown');
@@ -41,7 +44,8 @@ export async function enrichmentStrategyProperties(check: Check) {
     check('A strategy’s version compares as major and minor: “1.10” is after 1.9', right, `1.10 before 1.3: ${versionBefore('1.10', '1.3')}; 1.9 before 1.10: ${versionBefore(1.9, '1.10')}`);
   }
 
-  // W5 1.12 (0141, "far too wordy"): long fields are counted, not refused, and a client gets short bullets.
+  // W5 1.12 (0141, "far too wordy"): long fields are counted and a client gets short bullets. W5 1.13 (Juan,
+  // 11 Oct 2026): a strategy written to 1.13 or later over a cap is refused; an earlier one never is.
   {
     const { wordyParts, strategyBrief, checkStrategy } = await import('../../lib/enrich/strategy');
     const long = 'An invented angle that runs on and on, clause after clause, restating the route and the ask and the history of every touch we ever had with them before the point.';
@@ -49,11 +53,20 @@ export async function enrichmentStrategyProperties(check: Check) {
       next: { what: 'Ask Invented Connector for an intro', who: 'Invented Owner', when: '2026-10-12' }, risks: ['Raising a fund of their own'], openQuestions: [] };
     const brief = strategyBrief({ ...tight, ask: { vehicle: 'spv-invented', shape: 'SPV', range: null } });
     const wordy = wordyParts({ ...tight, angle: long, risks: ['a', 'b', 'c', 'd'] });
-    const refused = checkStrategy({ key: 'k', fit: { x: { verdict: 'good', why: 'w' } }, scores: { capacity: { band: 'unknown', basis: 'b' }, affinity: { level: 'low', basis: 'b' }, propensity: { level: 'low', basis: 'b' }, timeToDecision: { band: 'unknown', basis: 'b' } },
-      angle: long, next: tight.next, ask: { vehicle: 'spv-invented', shape: 'SPV' }, list: '2027', route: null, risks: [], openQuestions: [] }, 'k').length;
-    check('A wordy strategy is counted, not refused, and reads as short bullets (W5 1.12)',
-      wordyParts(tight).length === 0 && wordy.join() === 'angle,risks' && refused === 0 && brief.length === 5 && brief[0] === 'Ask: SPV' && brief[1] === 'Route: Invented Connector (A)',
-      `tight: ${wordyParts(tight).join() || 'none'}; wordy: ${wordy.join()}; problems: ${refused}; brief: ${brief.length}`);
+    const at = (version: string, extra: object = {}) => checkStrategy({ key: 'k', made: { at: '2026-10-11', by: 'fixture', workflow: 'W5', version }, fit: { x: { verdict: 'good', why: 'w' } },
+      scores: { capacity: { band: 'unknown', basis: 'b' }, affinity: { level: 'low', basis: 'b' }, propensity: { level: 'low', basis: 'b' }, timeToDecision: { band: 'unknown', basis: 'b' } },
+      angle: long, next: tight.next, ask: { vehicle: 'spv-invented', shape: 'SPV' }, list: '2027', route: null, risks: [], openQuestions: [], ...extra }, 'k');
+    const refused = at('1.12').length;
+    const now = at('1.13');
+    const shortNow = at('1.13', { angle: tight.angle }).length;
+    const longStep = wordyParts({ next: { what: 'Send the DDQ pack, the deck, the memo and the primer, then offer a call with the science lead next week', who: 'x', when: 'y' } });
+    const longRisk = wordyParts({ risks: ['Their programme may already be full for the whole of 2026'] });
+    const longBasis = wordyParts({ scores: { capacity: { band: 'unknown', basis: long }, affinity: { level: 'low', basis: 'b' }, propensity: { level: 'low', basis: 'b' }, timeToDecision: { band: 'unknown', basis: 'b' } } });
+    check('A wordy strategy reads as short bullets; written to W5 1.13 or later it is refused, before it only counted',
+      wordyParts(tight).length === 0 && wordy.join() === 'angle,risks' && refused === 0 && now.length === 1 && now[0] === 'too long: angle over 25 words' && shortNow === 0
+      && longStep.join() === 'next' && longRisk.join() === 'risks' && longBasis.join() === 'scores'
+      && brief.length === 5 && brief[0] === 'Ask: SPV' && brief[1] === 'Route: Invented Connector (A)',
+      `tight: ${wordyParts(tight).join() || 'none'}; wordy: ${wordy.join()}; 1.12 problems: ${refused}; 1.13: ${now.join('; ')}; short 1.13: ${shortNow}; step ${longStep.join()}, risk ${longRisk.join()}, basis ${longBasis.join()}; brief: ${brief.length}`);
   }
 
   // "This year" rests on the pursuit's own contact (W5 1.10): a recent catch-up about something

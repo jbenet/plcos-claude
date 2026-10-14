@@ -2422,3 +2422,12 @@ body:has(.shortcuts-dialog[open]) .feedbackkey{display:inline}
 .own-tie h3{font-size:13px;margin:0 0 6px}
 .own-tie{border-bottom:1px solid var(--hair)}
 .bad-terms-row{margin:0 0 8px}
+
+/* An explainer behind an "i" (components/ui/Info.tsx, 11 Oct 2026). */
+.info{display:inline-block;position:relative;vertical-align:1px;margin-left:4px;font-weight:400;text-transform:none;letter-spacing:0}
+.info>button{all:unset;cursor:pointer;display:inline-grid;place-items:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--line-strong);font:10px/1 var(--mono);color:var(--muted);box-sizing:border-box}
+.info>button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.info.open>button{color:var(--ink);border-color:var(--ink)}
+.info>.infobody{position:absolute;z-index:30;left:-8px;top:21px;width:340px;max-width:calc(100vw - 48px);padding:9px 11px;background:var(--surface);border:1px solid var(--line-strong);border-radius:7px;box-shadow:0 6px 20px rgba(0,0,0,.12);font-size:12px;line-height:1.5;font-weight:400;font-family:var(--sans);color:var(--ink);white-space:normal;text-align:left}
+.info .ip{display:block;margin:0 0 6px}.info .ip:last-child{margin:0}
+@media (max-width:640px){.info.open{display:block;margin:6px 0 0}.info>.infobody{position:static;display:block;width:auto;max-width:none;margin-top:6px}}

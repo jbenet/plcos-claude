@@ -9,6 +9,7 @@ import { UnitIcon } from './UnitIcon';
 import { useIsCursor, useRowCursor, type CursorStore } from './row-cursor';
 import { MoveButton, UndoToast, useMove } from './MoveToSelected';
 import { cx, Flags, fmtShort, FilterLine, Icon, InPane, Ladder, n, ScoreMark, useLpView, usdM, type StatusInfo } from './lp-view';
+import { unpackRows, type PackedRows } from '@/lib/packed-rows';
 import s from './lp-tables.module.css';
 import u from './lp-units.module.css';
 
@@ -28,17 +29,21 @@ export type { PipelineRow, Status } from './pipeline-model';
 const PAGE = 100;
 
 interface Props {
-  rows: PipelineRow[];
+  /** Every row in scope, packed for the trip (lib/packed-rows.ts). */
+  packed: PackedRows;
   statuses: StatusInfo[];
   rungNames: string[];
   initialStatus: Status | 'all' | null;
   initialFilters?: Record<string, string>;
   showVehicle: boolean;
   asOf: string;
+  /** Shown under the table while New is the one status on screen: possible LPs from the calendar (components/strategy/PossibleLps.tsx). */
+  newSection?: React.ReactNode;
 }
 
-export function PipelineTable({ rows: given, statuses, rungNames, initialStatus, initialFilters, showVehicle, asOf }: Props) {
+export function PipelineTable({ packed, statuses, rungNames, initialStatus, initialFilters, showVehicle, asOf, newSection }: Props) {
   const router = useRouter();
+  const given = useMemo(() => unpackRows<PipelineRow>(packed), [packed]);
   // Move to Selected and Set status show at once, ahead of the server (useMove).
   const mv = useMove('pipeline', given);
   const rows = mv.rows;
@@ -232,6 +237,7 @@ export function PipelineTable({ rows: given, statuses, rungNames, initialStatus,
           </div>
         )}
       </div>
+      {one?.id === 'new' && newSection}
       <UndoToast state={mv} onUndo={() => void mv.undo()} />
     </section>
   );

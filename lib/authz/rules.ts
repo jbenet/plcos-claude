@@ -29,6 +29,12 @@ export const actionRules = {
   'app/dev/enrich/actions.ts#runCloudProfileAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#runCloudStrategyAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#runCloudSourcingAction': { action: 'admin', scope: 'global' },
+  // Developer → Astra (docs/30): queue, cancel and schedule the Mac runner's Astra runs.
+  'app/dev/astra/actions.ts#queueAstraAction': { action: 'admin', scope: 'global' },
+  'app/dev/astra/actions.ts#cancelAstraAction': { action: 'admin', scope: 'global' },
+  'app/dev/astra/actions.ts#astraSettingsAction': { action: 'admin', scope: 'global' },
+  'app/dev/astra/actions.ts#astraCommandAction': { action: 'admin', scope: 'global' },
+  'app/dev/astra/actions.ts#astraPlanAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#exportResearchSetAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#importFindingsAction': { action: 'admin', scope: 'global' },
   'app/dev/enrich/actions.ts#sourceBulkAction': { action: 'admin', scope: 'global' },
@@ -59,6 +65,17 @@ export const actionRules = {
   // Your own calendar addresses (issue 0021), for the Travel and Events lanes. Read only at the calendar.
   'app/settings/calendar-actions.ts#addCalendarFeedAction': { action: 'mutate', scope: 'self' },
   'app/settings/calendar-actions.ts#removeCalendarFeedAction': { action: 'mutate', scope: 'self' },
+  'app/settings/calendar-actions.ts#setCalendarColoursAction': { action: 'mutate', scope: 'self' },
+  // What a calendar entry is (Travel, Event or Meeting), clicked on the Calendar page: one label the whole team sees.
+  'app/settings/calendar-actions.ts#relabelCalendarEntryAction': { action: 'mutate', scope: 'global' },
+  // "Not this LP" on a calendar meeting matched to an LP (by name): removed, and never matched again.
+  'app/settings/calendar-actions.ts#unmatchCalendarMeetingAction': { action: 'mutate', scope: 'global' },
+  // Possible LPs from the calendar, on Pipeline → New (lib/calendar-candidates.ts): add one to New for a vehicle, undo it,
+  // set one aside as not an LP (one list the whole team sees), or ask for research on it by public name.
+  'app/targets/calendar-candidate-actions.ts#addCandidateAction': { action: 'mutate', scope: 'vehicle' },
+  'app/targets/calendar-candidate-actions.ts#undoCandidateAddAction': { action: 'mutate', scope: 'pursuit' },
+  'app/targets/calendar-candidate-actions.ts#dismissCandidateAction': { action: 'mutate', scope: 'global' },
+  'app/targets/calendar-candidate-actions.ts#researchCandidateAction': { action: 'mutate', scope: 'global' },
   // MCP tokens (docs/26): a person's own; the service revokes only the caller's.
   // Settings → Connections (docs/deploy/railway.md §3): Admin only; a refusal is audit-logged.
   'app/settings/connections/actions.ts#saveSettingAction': { action: 'admin', scope: 'global' },
