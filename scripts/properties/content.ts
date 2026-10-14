@@ -52,9 +52,11 @@ export async function contentVariations(check: Check) {
     });
     check(
       'Variation — public primer for the 506(b) SPV',
-      !out.check.allowed && out.ticketId === null && out.check.refusals.length === 2,
-      `refused with ${out.check.refusals.length} reasons and no ticket opened — audience and ` +
-      'permitted-use both fail, and both are reported',
+      // The primer is Neurotech's own, so it also carries the other-vehicle refusal (rule 11).
+      !out.check.allowed && out.ticketId === null && out.check.refusals.length === 3 &&
+        out.check.refusals.some((r) => r.includes('another vehicle')),
+      `refused with ${out.check.refusals.length} reasons and no ticket opened — audience, ` +
+      'permitted-use and vehicle all fail, and all are reported',
     );
     await d.close();
   }

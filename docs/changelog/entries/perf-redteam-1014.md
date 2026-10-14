@@ -104,6 +104,10 @@ A review of the newest merges found these, and each one now has a property:
 - **A vehicle's own material could be cleared and recorded for another vehicle,** by anyone with access to the other
   vehicle (rule 11). Proposing, the mail desk's proposal and recording a send now refuse it. Shared material is unchanged.
 - **An ask's owner was taken from the form as posted.** It must now be an active person on the team.
+- **A research push could delete a finding.** A W1 finding with an extra `retire` key went through the W5 retire path
+  and removed the server's copy. Only a W5 strategy file is retired now.
+- **A strategy push skipped the vehicle check that prospects get.** A Team member limited to one vehicle could write
+  another vehicle's strategies. It is now refused, as for prospects.
 - **The old review-a-tie action could decline or bring back a tie someone else stated.** A stated tie is now changed
   only by the person who stated it, and a malformed id is refused.
 
@@ -111,6 +115,7 @@ Left as they are:
 
 - An INTRO_ASK ticket's email is not checked against the connector's addresses: the ask stores none yet. That needs a
   migration.
+- The sync routes read a whole request body before checking its size. Only push tokens reach them.
 - An idempotency key is not tied to its payload or its token, so reusing a key with a different body returns the first
   answer. Only JuanMail calls, with one token per person. That also needs a migration.
 - If one daily step fails, the rest of that day's chain is skipped, and nothing retries until the next day. The

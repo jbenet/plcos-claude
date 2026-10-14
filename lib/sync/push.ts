@@ -11,7 +11,10 @@ import { mutationProfileAllowed } from '@/lib/mutation-policy';
 import { beginRun, finishRun } from '@/lib/workflows/ledger';
 import { describeImportError } from '@/lib/import-jobs/store';
 import { auditSync, type SyncCaller } from './auth';
-import { bundleHash, checkBundle, DECISIONS, isRetire, keyOf, PROSPECTS, REVIEW, writtenAt, type PushBundle, type Rejection } from './bundle';
+import { bundleHash, checkBundle, DECISIONS, isRetire, keyOf, PROSPECTS, REVIEW, STRATEGY, writtenAt, type PushBundle, type Rejection } from './bundle';
+
+/** Only a W5 strategy file is retired; a `retire` key anywhere else is not an instruction (red-team pass, 14 Oct 2026). */
+const retiring = (bundle: PushBundle, f: { path: string; content: unknown }) => bundle.workflow === 'W5' && STRATEGY.test(f.path) && isRetire(f.content);
 
 /**
  * POST /api/sync/push (docs/deploy/railway.md §7; Juan, 4 Oct 2026, decision F: research runs in the cloud
@@ -97,11 +100,20 @@ async function earlierVersions(enrich: string, key: string): Promise<Array<{ fac
 }
 
 /** What the server holds that the push would contradict. */
-async function serverProblems(bundle: PushBundle, enrich: string): Promise<Rejection[]> {
+async function serverProblems(bundle: PushBundle, enrich: string, db: Db, caller: SyncCaller): Promise<Rejection[]> {
   const out: Rejection[] = [];
+  const vehicles = new Map((await db.query<{ id: string; slug: string }>('select id::text, slug from platform.vehicle')).map((v) => [v.slug, v.id]));
   for (const f of bundle.files) {
     const target = join(enrich, f.path);
     if (DECISIONS.test(f.path)) continue;
+    if (isRetire(f.content) && !retiring(bundle, f)) { out.push({ path: f.path, problems: ['only a W5 strategy file can be retired'] }); continue; }
+    // A strategy for a vehicle is pushed only by someone who may change that vehicle, as prospects are (red-team pass, 14 Oct 2026).
+    const folder = STRATEGY.exec(f.path)?.[1];
+    const asked = (f.content as { ask?: { vehicle?: unknown } } | null)?.ask?.vehicle;
+    for (const slug of new Set([folder, typeof asked === 'string' ? asked : undefined].filter((x): x is string => Boolean(x)))) {
+      const id = vehicles.get(slug);
+      if (id && !can(caller.user, 'mutate', { vehicle: id })) out.push({ path: f.path, problems: [`vehicle "${slug}" is not one you can change; an Admin pushes it, or gives you that vehicle in Settings → People`] });
+    }
     if (REVIEW.test(f.path)) {
       const existing = await readFile(target, 'utf8').catch(() => null);
       if (existing !== null && existing !== text(f.path, f.content)) out.push({ path: f.path, problems: ['a review file of this name is on the server with other rows; name this round\'s file anew'] });
@@ -126,7 +138,7 @@ async function serverProblems(bundle: PushBundle, enrich: string): Promise<Rejec
       continue;
     }
     const existing = await readJson(target);
-    if (isRetire(f.content)) {
+    if (retiring(bundle, f)) {
       if (existing === undefined) out.push({ path: f.path, problems: ['the server has no file at this path to retire'] });
       continue;
     }
@@ -202,7 +214,7 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
     await mkdir(enrich, { recursive: true });
     const enrichReal = await realpath(enrich);
     const prospects = bundle.workflow === 'prospects';
-    const contradictions = prospects ? await prospectsProblems(bundle, db, caller) : await serverProblems(bundle, enrichReal);
+    const contradictions = prospects ? await prospectsProblems(bundle, db, caller) : await serverProblems(bundle, enrichReal, db, caller);
     if (contradictions.length) return answer(422, 'invalid', { error: 'Refused; nothing was written.', rejected: contradictions }, { ...shape, hash, reason: 'server', rejectedFiles: contradictions.length });
     // The prospects import takes one job at a time (lib/import-jobs/store.ts): wait for one running, before anything is written.
     if (prospects && await db.one(`select 1 from platform.import_job where kind = 'prospects' and status in ('queued', 'running')`)) {
@@ -264,7 +276,7 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
       else for (const f of bundle.files) {
         const target = join(enrichReal, f.path);
         const before = await readFile(target, 'utf8').catch(() => null);
-        if (isRetire(f.content)) {
+        if (retiring(bundle, f)) {
           // Removed, never lost: the file goes to this push's replaced/ first.
           if (before !== null) {
             await mkdir(dirname(join(enrichReal, inbox, 'replaced', f.path)), { recursive: true });
