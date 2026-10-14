@@ -40,14 +40,14 @@ RUN set -eu; \
     [ -z "$bad" ] || { echo "Refused: a data/real or plcos-data path is in the context." >&2; exit 1; }; \
     printf '%s\n' "$GIT_COMMIT" > .image-commit
 
-# ---- build: next build, then the tracing guard (npm run build = next build && build:traces; the ---
-# ---- explicit second run names the directory, so a changed default output cannot skip it) -------
+# ---- build: next build, then the tracing guard, once, on the named directory, so a changed default -
+# ---- output cannot skip it. Not `npm run build`, which runs the guard too: twice cost ~3 min a deploy -
 FROM base AS build
 COPY --from=source /app/package.json /app/package-lock.json ./
 RUN npm ci
 COPY --from=source /app ./
 ENV DATA_PROFILE=demo NODE_ENV=production NEXT_DIST_DIR=.next
-RUN npm run build \
+RUN npx next build \
  && node --import tsx scripts/check-build-traces.ts .next \
  && rm -rf .next/cache
 
