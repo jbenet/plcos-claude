@@ -26,11 +26,14 @@ Postgres 16.
   - A column of dates is sent as numbers. A column that is an earlier one with the same text around it on every row
     (an LP's key, `<entityId>:neurotech`) is sent as that column's name and the text around it. The visualizations'
     rows read back equal to the rows sent, on every vehicle.
+- **Packing a list** keys text without JSON: the calendar's 56,000 rows pack in about 310 ms instead of 490 ms, to the
+  same bytes.
 - **The calendar's week grid** was sent as plain rows (1.1 MB); it is packed like the list. It reads each row's dates
   once instead of once per lane and week on every click, and the numbers above the list are counted in one pass. Both
   render the same markup as before on 300 random calendars.
 - **The list rebuild after a status move:**
-  - Each LP's touchpoint summary is made in one pass instead of a dozen filters.
+  - Each LP's touchpoint summary is made in one pass instead of a dozen filters, comparing instants as numbers: 6,000
+    LPs take about 25 ms instead of 100–130 ms. The overview reads the same summaries.
   - "On file" finds the first meeting, reply and event without sorting every touchpoint.
   - Status conversion is worked out once per status, not once per LP across every move.
   - Formatted dates reuse the parts of an instant they have already seen.
@@ -95,6 +98,11 @@ A review of the newest merges found these, and each one now has a property:
   address as received is refused.
 - **A material withdrawn after its ticket was approved could still be recorded as sent.** Recording a send checks that
   the material is still approved.
+- **A vehicle's own material could be cleared and recorded for another vehicle,** by anyone with access to the other
+  vehicle (rule 11). Proposing, the mail desk's proposal and recording a send now refuse it. Shared material is unchanged.
+- **An ask's owner was taken from the form as posted.** It must now be an active person on the team.
+- **The old review-a-tie action could decline or bring back a tie someone else stated.** A stated tie is now changed
+  only by the person who stated it, and a malformed id is refused.
 
 Left as they are:
 

@@ -53,6 +53,9 @@ export async function checkWrap(args: {
  * send is cleared, they send it themselves and mark it sent, and the wrap is checked again then
  * (rule 11). Only an autonomous agent's send opens a ticket.
  */
+/** A vehicle's own material goes out only for that vehicle (rule 11; red-team pass, 14 Oct 2026). Shared material has none. */
+const OTHER_VEHICLE = 'This material belongs to another vehicle: it is sent only for its own.';
+
 export async function requestSend(
   actorId: string,
   args: { assetId: string; entityId: string; vehicleId: string; instrument: string },
@@ -81,6 +84,10 @@ export async function requestSend(
 
   if (asset.status !== 'approved') {
     check.refusals.push(`The asset is "${asset.status}", not approved. Only approved material is sendable.`);
+    check.allowed = false;
+  }
+  if (asset.vehicleId && asset.vehicleId !== args.vehicleId) {
+    check.refusals.push(OTHER_VEHICLE);
     check.allowed = false;
   }
   if (asset.flags.length > 0) {
@@ -186,6 +193,7 @@ export async function markSendSent(actorId: string, sendId: string, tx: Queryabl
     }, tx);
     // Withdrawn or retired since the ticket was approved: no longer sendable (red-team pass, 14 Oct 2026).
     if (asset!.status !== 'approved') throw new Error(`The asset is "${asset!.status}", not approved, since the approval. Nothing was sent.`);
+    if (asset!.vehicleId && asset!.vehicleId !== row.vehicle_id) throw new Error(`${OTHER_VEHICLE} Nothing was sent.`);
     if (!check.allowed || asset!.flags.length > 0) {
       throw new Error(
         'The wrap check no longer passes, or a claim underneath the asset changed since ' +
@@ -221,6 +229,7 @@ export async function proposeDeskSend(
   const vehicle = (await tx.one<{ exemption: string }>('select exemption from platform.vehicle where id = $1', [args.vehicleId]))!;
   const check = await checkWrap({ exemption: vehicle.exemption, instrument: args.instrument, audience: asset.audience, permittedUse: asset.permittedUse }, tx);
   if (asset.status !== 'approved') { check.refusals.push(`The asset is "${asset.status}", not approved. Only approved material is sendable.`); check.allowed = false; }
+  if (asset.vehicleId && asset.vehicleId !== args.vehicleId) { check.refusals.push(OTHER_VEHICLE); check.allowed = false; }
   if (asset.flags.length > 0) { check.refusals.push(`${asset.flags.length} open refresh flag${asset.flags.length === 1 ? '' : 's'}: a claim underneath this asset changed.`); check.allowed = false; }
   if (!check.allowed) return { sendId: null, check, title: asset.title, version: asset.version };
   const row = await tx.one<{ send_id: string }>(

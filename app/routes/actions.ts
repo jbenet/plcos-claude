@@ -4,7 +4,7 @@ import { requireAction } from '@/lib/authz/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { proposeAsk } from '@/modules/coordination';
-import { listVehicles } from '@/modules/platform';
+import { listUsers, listVehicles } from '@/modules/platform';
 import { getEntity } from '@/modules/identity';
 
 /**
@@ -22,11 +22,13 @@ export async function proposeFromRoute(formData: FormData): Promise<void> {
   const vehicleSlug = String(formData.get('vehicleSlug'));
   const ownerId = String(formData.get('ownerId') || '') || user.id;
 
-  const [target, connector, vehicles] = await Promise.all([
+  const [target, connector, vehicles, users] = await Promise.all([
     getEntity(targetId),
     connectorId ? getEntity(connectorId) : Promise.resolve(null),
-    listVehicles(),
+    listVehicles(), listUsers(),
   ]);
+  // The owner is someone on the team the form offered, never any id posted (red-team pass, 14 Oct 2026).
+  if (!users.some((u) => u.id === ownerId && u.role !== 'system')) throw new Error('Unknown owner.');
   const vehicle = vehicles.find((v) => v.slug === vehicleSlug);
   if (!target || !vehicle) throw new Error('Unknown target or vehicle.');
 
@@ -61,7 +63,14 @@ export async function reviewEdgeAction(formData: FormData): Promise<void> {
   const { reviewEdge } = await import('@/modules/network');
   const user = authorizedUser;
   const decision = String(formData.get('decision')) === 'confirm' ? 'confirm' : 'decline';
-  await reviewEdge(user.id, String(formData.get('edgeId')), decision, String(formData.get('note') ?? '').trim() || null);
+  const edgeId = String(formData.get('edgeId'));
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(edgeId)) throw new Error('Unknown tie.');
+  // A tie someone stated is theirs to remove (removeOwnTieAction), not anyone's to decline or bring back (red-team pass, 14 Oct 2026).
+  const { getDb } = await import('@/lib/db');
+  if (await (await getDb()).one(`select 1 from network.edge where edge_id = $1 and evidence @> '[{"derived":"stated"}]'::jsonb`, [edgeId])) {
+    throw new Error('A tie someone stated is changed only by them.');
+  }
+  await reviewEdge(user.id, edgeId, decision, String(formData.get('note') ?? '').trim() || null);
   revalidatePath('/routes');
 }
 
