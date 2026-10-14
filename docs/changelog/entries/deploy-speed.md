@@ -14,3 +14,8 @@ importing, and Railway's build and start took 7–11.5 min.
 - **A faster start.** The entrypoint changed the owner of every file on the volume (tens of thousands of research files)
   on each start, before the server could answer Railway's health check; it now changes only files 10001 does not own.
 - The Action checks for the new commit every 10 s (was 20 s).
+- **The build's trace check runs once, and fast.** Railway's logs for the 06:39 deploy (7.5 min in all) showed
+  `next build` took 22 s, but the check that no traced file comes from `data/real` took ~3 min and ran twice
+  (`npm run build` runs it, then the Dockerfile ran it again). It now runs once, and it reads each path and link once
+  instead of once per trace entry: ~10 min down to 19 s for the same 339k entries on a cloud test box, with the same
+  result. A deploy should go live in about 2 min after the push instead of 7–11.

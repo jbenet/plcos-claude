@@ -10,6 +10,13 @@ const forbidden = (path: string): boolean => {
   return parts.includes('plcos-data') || parts.some((part, i) => part === 'data' && parts[i + 1] === 'real');
 };
 
+// The output does not change during an audit, and its ~340k trace entries share a few thousand directories, so each
+// path is lstat'ed and each link read once (14 Oct 2026: uncached, one audit took ~3 min of a 7.5 min Railway deploy).
+const stats = new Map<string, ReturnType<typeof lstat>>();
+const links = new Map<string, Promise<string>>();
+const cachedLstat = (path: string) => { let p = stats.get(path); if (!p) stats.set(path, p = lstat(path)); return p; };
+const cachedReadlink = (path: string) => { let p = links.get(path); if (!p) links.set(path, p = readlink(path)); return p; };
+
 /** Resolve each symlink before walking further, including aliases with nonexistent tails. */
 async function safePath(path: string, base: string, hops = 0): Promise<string | null> {
   if (forbidden(path) || hops > 40) return null;
@@ -26,7 +33,7 @@ async function safePath(path: string, base: string, hops = 0): Promise<string | 
     current = join(current, parts[i]!);
     if (forbidden(current)) return null;
     let stat;
-    try { stat = await lstat(current); }
+    try { stat = await cachedLstat(current); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         const absent = resolve(current, ...parts.slice(i + 1));
@@ -38,7 +45,7 @@ async function safePath(path: string, base: string, hops = 0): Promise<string | 
       throw error;
     }
     if (stat.isSymbolicLink()) {
-      const target = await readlink(current);
+      const target = await cachedReadlink(current);
       if (forbidden(target)) return null;
       return safePath(`${target}${sep}${parts.slice(i + 1).join(sep)}`, dirname(current), hops + 1);
     }
@@ -47,6 +54,7 @@ async function safePath(path: string, base: string, hops = 0): Promise<string | 
 }
 
 export async function auditBuildTraces(outputDir = '.next'): Promise<BuildTraceAudit> {
+  stats.clear(); links.clear();
   const result: BuildTraceAudit = { traces: 0, entries: 0, outputFiles: 0, violations: 0, invalid: 0 };
   const visited = new Set<string>();
   async function visit(path: string): Promise<void> {
