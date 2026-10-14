@@ -3,7 +3,9 @@
 # A thread runs this with the GitHub MCP tool `actions_run_trigger` (workflow deploy.yml, ref master); nothing runs it
 # on a push. Railway builds the `deploy` branch (docs/deploy/railway.md), so this fast-forwards `deploy` to master.
 # A deploy restarts the server and kills running imports (memory deploy-after-merge, 7–8 Oct 2026), so it first waits
-# until /api/health has shown no "importing" field on every check for 5 straight minutes, polling every 30 s.
+# until /api/health has shown no "importing" field on every check for 1 straight minute, polling every 15 s. It was
+# 5 minutes, to ride over the moment between two queued jobs; since 14 Oct the count holds through that moment
+# (holdImports in lib/import-jobs/server.ts), so a short window is enough and each deploy is 4 minutes sooner.
 name: Deploy to Railway
 on:
   workflow_dispatch:
@@ -27,20 +29,20 @@ jobs:
         run: |
           clear=0
           # GUESS: 5 h covers the longest import queue; past it the run fails and can be run again.
-          for i in $(seq 600); do
+          for i in $(seq 1200); do
             body=$(curl -s -m 15 "$URL/api/health" || true)
             if printf '%s' "$body" | grep -q '"importing"'; then
-              [ "$clear" -gt 0 ] && echo "imports running again; restarting the 5-minute wait"
-              [ $((i % 10)) = 1 ] && echo "waiting: $(printf '%s' "$body" | grep -o '"importing":[0-9]*')"
+              [ "$clear" -gt 0 ] && echo "imports running again; restarting the 1-minute wait"
+              [ $((i % 20)) = 1 ] && echo "waiting: $(printf '%s' "$body" | grep -o '"importing":[0-9]*')"
               clear=0
             else
               clear=$((clear + 1))
             fi
-            # 11 clear checks 30 s apart span 5 minutes.
-            [ "$clear" -ge 11 ] && { echo "no imports for 5 minutes"; exit 0; }
-            sleep 30
+            # 5 clear checks 15 s apart span 1 minute.
+            [ "$clear" -ge 5 ] && { echo "no imports for 1 minute"; exit 0; }
+            sleep 15
           done
-          echo "imports never stayed clear for 5 minutes"; exit 1
+          echo "imports never stayed clear for 1 minute"; exit 1
       - name: Fast-forward deploy to master
         id: push
         run: |
@@ -55,10 +57,10 @@ jobs:
         run: |
           sha=${{ steps.push.outputs.sha }}
           # GUESS: a Railway build and start takes 4–8 min; 25 min covers a slow queue.
-          for i in $(seq 75); do
+          for i in $(seq 150); do
             served=$(curl -s -m 15 "$URL/api/health" | sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p')
             [ -n "$served" ] && [ "${sha#$served}" != "$sha" ] && break
-            served=""; sleep 20
+            served=""; sleep 10
           done
           [ -n "$served" ] || { echo "Railway is not serving ${sha:0:12} after 25 min; check the build in Railway"; exit 1; }
           code=$(curl -s -o /dev/null -m 60 -w '%{http_code}' "$URL/signin")
