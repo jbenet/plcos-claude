@@ -235,7 +235,10 @@ class LocalCopy {
     const pgEnv = { ...env, LC_ALL: env.PLCOS_PG_LOCALE || 'en_US.UTF-8', LANG: env.PLCOS_PG_LOCALE || 'en_US.UTF-8' };
     if (!existsSync(path.join(data, 'PG_VERSION'))) {
       this.detail = 'Making the local database';
-      await sh(path.join(bin, 'initdb'), ['-D', data, '-U', 'plcos', '-A', 'trust', '-E', 'UTF8'], { env: pgEnv });
+      // ICU collation, so names sort as on the server (macOS's own en_US.UTF-8 sorts by byte); plain if ICU is missing.
+      const base = ['-D', data, '-U', 'plcos', '-A', 'trust', '-E', 'UTF8'];
+      await sh(path.join(bin, 'initdb'), [...base, '--locale-provider=icu', '--icu-locale=en-US'], { env: pgEnv })
+        .catch(() => { rmSync(data, { recursive: true, force: true }); return sh(path.join(bin, 'initdb'), base, { env: pgEnv }); });
       // Loopback only, its socket in its own folder, and sized for one person on a laptop.
       writeFileSync(path.join(data, 'postgresql.auto.conf'), [
         `port = ${PG_PORT}`, "listen_addresses = '127.0.0.1'", `unix_socket_directories = '${data.replace(/'/g, "''")}'`,
