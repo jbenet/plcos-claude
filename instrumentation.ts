@@ -25,5 +25,5 @@ export async function register() {
   void import('./lib/settings/setup').then((m) => m.announceAtBoot()).catch(() => console.error('[setup] Could not check whether setup is open.'));
   // Reconciliation's rules changed (issue 0137): read every LP again once, in the background.
   void import('./lib/reconcile').then((m) => m.reconcileIfRulesChanged()).catch(() => console.error('[reconcile] Could not run at start.'));
-  if (process.env.SCHEDULE_DAILY_AT) void import('./lib/daily-timer').then((m) => m.startDailyTimer()).catch(() => console.error('[daily] Could not start timer.'));
+  void import('./lib/daily-timer').then((m) => m.startDailyTimer()).catch(() => console.error('[daily] Could not start timer.'));
 }
