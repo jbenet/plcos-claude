@@ -51,6 +51,29 @@ export async function outreachPartiesProperties(check: Check, db: Db) {
     && c?.raiseVehicles.length === 0 && !c.suggest.some((x: any) => x.action === 'add_lp') && c.suggest.some((x: any) => x.action === 'research')
     && r.json.data.counts.parties === 4 && r.json.data.counts.internal === 1 && before === after,
     `stranger: ${JSON.stringify({ issues: s?.issues, raise: s?.raiseVehicles, suggest: s?.suggest?.map((x: any) => x.action) })}; copied: ${c?.suggest?.map((x: any) => x.action)}; rows ${before}→${after}`);
+
+  // Red-team pass, 14 Oct 2026: a portfolio company's founder, and an unknown address at its domain, are never
+  // suggested as LPs; sends are ordered by instant, not by their text (a Date header carries the sender's offset).
+  const portco = await entity('Invented Parties Portco', 'org'), founder = await entity('Invented Parties Founder', 'person');
+  await db.query(`insert into network.portfolio (portfolio_id, vehicle_id, company_entity, company_name, source, input_hash)
+    values ('props-parties-portco', $1, $2, 'Invented Parties Portco', '{}'::jsonb, 'props-parties-portco') on conflict do nothing`, [fund.id, portco]);
+  await db.query(`insert into identity.affiliation (person_entity, org_entity, kind, role, is_primary, as_of, certainty)
+    values ($1, $2, 'staff', 'Founder', true, '2026-09-01', 'known')`, [founder, portco]);
+  await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values
+    ($1, 'email', 'founder@invented-portco.example', 'props:parties', current_date, 'medium'),
+    ($2, 'email_domain', 'invented-portco.example', 'props:parties', current_date, 'medium')`, [founder, portco]);
+  const pitch = `${fundName.name} — invented update`;
+  const late = await call(await token(juan, [...READ_TOOLS, OUTREACH_READ]), 'parties', {}, { method: 'POST', body: { parties: [
+    { address: 'founder@invented-portco.example', sends: [{ at, subject: pitch, to: true }] },
+    { address: 'cofounder@invented-portco.example', sends: [{ at, subject: pitch, to: true }] },
+    { address: 'zones@invented-parties.example', sends: [{ at: '2026-10-14T23:30:00-08:00', subject: 'Hi' }, { at: '2026-10-15T00:30:00+09:00', subject: 'Hi' }] },
+  ] } });
+  const pb = new Map<string, any>((late.json?.data?.parties ?? []).map((p: any) => [p.address, p]));
+  const f = pb.get('founder@invented-portco.example'), cf = pb.get('cofounder@invented-portco.example'), z = pb.get('zones@invented-parties.example');
+  check('Check parties: a portfolio company\'s people, known or only by its domain, are never suggested as LPs; sends are ordered by instant',
+    late.status === 200 && f?.onFile?.entityId === founder && !f.suggest.some((x: any) => x.action === 'add_lp') && !f.issues.includes('no_pursuit')
+    && cf && !cf.suggest.some((x: any) => x.action === 'add_lp') && z?.firstSent === '2026-10-14' && z.lastSent === '2026-10-15',
+    `founder: ${f?.suggest?.map((x: any) => x.action)}; cofounder: ${cf?.suggest?.map((x: any) => x.action)}; zones ${z?.firstSent}→${z?.lastSent}`);
 }
 
 /**

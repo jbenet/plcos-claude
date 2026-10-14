@@ -71,7 +71,20 @@ A review of the newest merges found these, and each one now has a property:
   pitch to the same person the same day, then the research undone. The new LP lost its address. Both undos now keep a
   claim that a later add or confirmed contact relies on.
 
+- **The emailed-parties check suggested a portfolio founder as an LP** for their own company's SPV, when the mail named
+  the company. A person whose every current firm is a portfolio company, or an unknown address at such a firm's domain,
+  is now never suggested, as on the calendar's candidates. Adding them by hand is still allowed.
+- **The emailed-parties check ordered sends by their text.** A Date header carries the sender's offset, so the last
+  send could be the wrong day, and a later mail looked covered by Affinity. Sends are now ordered by instant.
+- **The same check read Affinity's last email from the wrong person** when the address matched a duplicate. It now reads
+  both the matched person and the one Affinity's record links to, and takes the later email.
+
 Left as they are:
+
+- If one daily step fails, the rest of that day's chain is skipped, and nothing retries until the next day. The
+  property suite asserts this on purpose, and a retry would spend the Affinity call budget again.
+- A token for one vehicle can ask the emailed-parties check about any address, and learn whether PLC OS or Affinity
+  holds it and Affinity's last email date. Only JuanMail calls it today, with Juan's own token.
 
 - When two people propose the same address, the note names the first. Only JuanMail proposes today, for one sender.
 - When `comms_ingest` matches a message, it reconciles that person's LPs on every vehicle, not only the token's.

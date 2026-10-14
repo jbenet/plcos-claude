@@ -118,7 +118,7 @@ export const AFFINITY_PERSON_EMAILS = `
                           and (n.fetched_at, n.id) > (r.fetched_at, r.id))`;
 
 /** The firms holding each of these email domains: a firm's own email-domain or email claims or Affinity domains, or its current people's emails (claims or Affinity's). Only LP firms when `lps` is given. */
-async function firmsByDomain(domains: string[], lps: Set<string> | null, q: Queryable): Promise<Map<string, string[]>> {
+export async function firmsByDomain(domains: string[], lps: Set<string> | null, q: Queryable): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>();
   if (!domains.length) return out;
   const rows = await q.query<{ d: string; id: string }>(`select lower(regexp_replace(trim(c.value), '^.*@', '')) d, identity.canonical_entity_id(c.entity_id)::text id
