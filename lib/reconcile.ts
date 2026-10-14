@@ -76,13 +76,17 @@ const money = (n: number | null) => (n ? ` of $${n >= 1e6 ? `${+(n / 1e6).toFixe
  */
 export function recordsOnFile(touches: Touchpoint[], tracks: CloseTrack[], now = new Date()): Partial<Record<LadderRung, RungRecord>> {
   const out: Partial<Record<LadderRung, RungRecord>> = {};
-  const held = touches
-    .filter((t) => !t.viaOrganization && t.on && t.on.getTime() <= now.getTime())
-    .sort((a, b) => a.on!.getTime() - b.on!.getTime());
-  // A meeting with them, not our event with twenty others (N81): coming to an event is opting in.
-  const meeting = held.find((t) => (t.channel === 'meeting' || t.channel === 'call') && !isEvent(t));
-  const gathering = held.find((t) => isEvent(t));
-  const reply = held.find((t) => (t.channel === 'email' || t.channel === 'message') && t.direction === 'theirs');
+  // The earliest of each kind held, in one pass (the first on record wins a tie, as a stable sort
+  // would give); sorting every LP's touchpoints was most of this per row (performance pass, 14 Oct 2026).
+  let meeting: Touchpoint | undefined, gathering: Touchpoint | undefined, reply: Touchpoint | undefined;
+  const earlier = (t: Touchpoint, than: Touchpoint | undefined) => !than || t.on!.getTime() < than.on!.getTime();
+  for (const t of touches) {
+    if (t.viaOrganization || !t.on || t.on.getTime() > now.getTime()) continue;
+    // A meeting with them, not our event with twenty others (N81): coming to an event is opting in.
+    if ((t.channel === 'meeting' || t.channel === 'call') && !isEvent(t)) { if (earlier(t, meeting)) meeting = t; }
+    if (isEvent(t)) { if (earlier(t, gathering)) gathering = t; }
+    if ((t.channel === 'email' || t.channel === 'message') && t.direction === 'theirs' && earlier(t, reply)) reply = t;
+  }
 
   if (meeting) {
     out.meeting_held = {
@@ -425,7 +429,16 @@ async function propose(only?: string): Promise<ReconcileCounts> {
     // The status, forward on the records (Juan, 9 Oct 2026): undone by a person setting it again.
     const move = statusFromRecords(p, touched, new Date(), windows.get(p.vehicleId)?.opens ?? null, held.get(p.pursuitId) ?? null);
     if (move) {
-      await db.transaction((tx) => setStatuses(actor, [{ pursuitId: p.pursuitId, status: move.to, reason: move.reason }], tx));
+      // Only over the status it read: a person who set it (Passed, Committed, or an undo) while this pass ran keeps
+      // theirs, and the next pass reads it afresh (red-team pass, 14 Oct 2026).
+      const before = p;
+      const moved = await db.transaction(async (tx) => {
+        const now = await tx.one<{ status: string; set_at: Date | null }>(`select status::text, status_set_at set_at from strategy.pursuit where pursuit_id = $1 for update`, [before.pursuitId]);
+        if (!now || now.status !== before.status || (now.set_at ? new Date(now.set_at).getTime() : null) !== (before.statusSetAt?.getTime() ?? null)) return false;
+        await setStatuses(actor, [{ pursuitId: before.pursuitId, status: move.to, reason: move.reason }], tx);
+        return true;
+      });
+      if (!moved) { counts.inStep++; continue; }
       counts.moved = (counts.moved ?? 0) + 1;
       p = { ...p, status: move.to, statusSetAt: new Date() };
     }

@@ -154,11 +154,15 @@ export async function traceFor(entityId: string, touches?: Touchpoint[]): Promis
  * that vehicle, merged with the LP's Gmail messages, keeping a message as its own row only when it is about
  * that vehicle's raise — the same rule as a touchpoint (N59, N81).
  */
-export async function tracePairs(pairs: Array<{ entityId: string; vehicleId: string }>): Promise<Map<string, Merged>> {
+export async function tracePairs(
+  pairs: Array<{ entityId: string; vehicleId: string }>,
+  /** Each pair's touchpoints when the caller already holds them (each vehicle's touchesOn); never mutated. */
+  known?: Map<string, Touchpoint[]>,
+): Promise<Map<string, Merged>> {
   const out = new Map<string, Merged>();
   if (!pairs.length) return out;
   const entities = [...new Set(pairs.map((p) => p.entityId))];
-  const [touches, messages, links, windows] = await Promise.all([touchpointsByPair(pairs), commsFor(entities), linksFor(entities), raiseWindows()]);
+  const [touches, messages, links, windows] = await Promise.all([known ?? touchpointsByPair(pairs), commsFor(entities), linksFor(entities), raiseWindows()]);
   for (const p of pairs) {
     const key = `${p.entityId}:${p.vehicleId}`;
     const w = windows.get(p.vehicleId);

@@ -8,12 +8,12 @@ import { redactHealth } from '@/lib/redact-health';
 import { SPV_STAGE_LABEL, spvRooms, workingDaysUntil, type SpvStage } from '@/modules/close';
 import { INSUFFICIENT_FOR_506C } from '@/modules/compliance';
 import { checkWrap, listAssets, type Audience, type PermittedUse } from '@/modules/content';
-import { READS, READ_LABEL, isAutoReply, isEvent, raiseWindows, summarize, type Touchpoint } from '@/modules/meetings';
+import { READS, READ_LABEL, isAutoReply, isEvent, raiseWindows, summarize, touchpointsByPair, type Touchpoint } from '@/modules/meetings';
 import { tracePairs } from '@/lib/comms/read';
 import { SOURCE_LABEL, traceState, type Merged } from '@/lib/comms/trace';
 import { CLOSE_STATE_LABEL, closeStates, currentIndications, indicatedTotals, vehicleTotals, type CloseState } from '@/modules/pipeline';
 import { listVehicles, type AppUser, type Vehicle } from '@/modules/platform';
-import { RUNGS, RUNG_LABEL, STATUS_LABEL, lpContactsFor, type PursuitStatus } from '@/modules/strategy';
+import { RUNGS, RUNG_LABEL, STATUS_LABEL, lpContactsFor, touchesOn, type PursuitStatus } from '@/modules/strategy';
 
 /**
  * The mail desk's reads (docs/27-outreach-api.md §3): GET /api/outreach/vehicles and /queue, and the MCP
@@ -208,8 +208,14 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
 
   // What the bucket needs, for every row: one query each.
   // The comms trace, not the app's log (Juan, 5 Oct 2026): Affinity and the Gmail messages juanmail reported, merged.
+  // Each vehicle's touchpoints come from the list's own cache (touchesOn), as the pipeline reads them: every LP's
+  // were re-read on each poll, most of a 1.2 s queue read at 5,000 LPs (performance pass, 14 Oct 2026).
+  // A pair that cache has not built yet (an LP added since) is read on its own.
+  const touchesBy = new Map((await Promise.all(vehicles.map((v) => touchesOn(v.id)))).flatMap((m) => [...m]));
+  const unbuilt = pairs.filter((p) => !touchesBy.has(key(p)));
+  if (unbuilt.length) for (const [k, list] of await touchpointsByPair(unbuilt)) touchesBy.set(k, list);
   const [traces, closes, seats, indications, fundOpen] = await Promise.all([
-    tracePairs(pairs),
+    tracePairs(pairs, touchesBy),
     closeStates(pairs),
     db.query<{ entity_id: string; vehicle_id: string; stage: SpvStage; amount: string | null }>(`select identity.canonical_entity_id(entity_id)::text entity_id,
       vehicle_id::text, stage::text stage, amount::text from close.spv_seat where vehicle_id = any($1::uuid[])`, [vehicles.map((v) => v.id)]),

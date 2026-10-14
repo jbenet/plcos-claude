@@ -138,7 +138,8 @@ export async function decideAffinityBatch(formData: FormData): Promise<void> {
   const approve = String(formData.get('decision')) === 'approve' ? [...new Set(formData.getAll('itemId').map(String))] : [];
   const q = new URLSearchParams({ view: 'affinity' });
   try {
-    const r = await decideWriteBatch(user, batchId, approve);
+    // Only the items drawn on the page are decided; any proposed since wait for the next batch.
+    const r = await decideWriteBatch(user, batchId, approve, undefined, formData.getAll('shown').map(String));
     q.set('written', String(r.written));
     if (r.failed) q.set('failed', String(r.failed));
   } catch (err) {

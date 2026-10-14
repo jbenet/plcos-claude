@@ -22,6 +22,8 @@ import { StatusMark } from '@/components/ui/StatusMark';
 import { boardFor, listUsers, LEVER_LABEL, LEVER_MEANS, type Play } from '@/modules/plays';
 import s from './strategy.module.css';
 
+// GUESS: enough to read a week's moves by eye; the rest are on each LP's log.
+const WEEKLY_SHOWN = 100;
 export const dynamic = 'force-dynamic';
 const money = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 1, notation: 'compact' }).format(n);
 const count = (n: number) => n.toLocaleString('en-US');
@@ -90,6 +92,9 @@ async function VehicleStrategyPage({ params, searchParams }: {
   const [data, plays, users, query, moves, history] = await Promise.all([vehicleStrategy(vehicle.id), boardFor(vehicle.id), listUsers(), searchParams, listMoves(db, vehicle.id), moveHistory(db, vehicle.id)]);
   if (!data) notFound();
   const { total, rows, now, since, counts, weekly } = data;
+  // An import or a reconcile pass can move thousands of LPs in a week: the list names the latest, found by id
+  // (performance pass, 14 Oct 2026: 2,800 moves were 1.1 MB of the page and a scan of every row per move).
+  const rowOf = new Map(rows.map(r => [r.pursuit.pursuitId, r]));
   const path = `/${slug}/strategy`;
   const lpPath = (r: StrategyAction) => `/${slug}/pipeline/${r.pursuit.pursuitId}`;
   const active = rows.filter(r => !r.closed);
@@ -276,8 +281,10 @@ async function VehicleStrategyPage({ params, searchParams }: {
         </table>
         <div className={s.advice}><div className="lbl">What to do</div><p><Say sentences={pipelineSay} /></p></div>
         <div className="cbody"><details className={s.weekly}><summary>This week: {plural(data.added, 'LP')} added · {plural(weekly.length, 'status change')} · {money(data.hardened)} hardened</summary>
-          {weekly.length ? <ul>{weekly.map((t, i) => { const r = rows.find(r => r.pursuit.pursuitId === t.pursuitId); return <li key={i}><span className="mono">{date(t.at)}</span> {r ? <Link href={lpPath(r)}>{r.pursuit.entityName}</Link> : 'Pursuit'} · {STATUS_LABEL[t.from]} → {STATUS_LABEL[t.to]}</li>; })}</ul>
-            : <p className="muted">No status changes recorded since {date(since)}. Missing history is not evidence of no activity.</p>}
+          {weekly.length ? <>
+            {weekly.length > WEEKLY_SHOWN && <p className="muted">The latest {WEEKLY_SHOWN} of {count(weekly.length)}; each LP&rsquo;s log has the rest.</p>}
+            <ul>{weekly.slice(-WEEKLY_SHOWN).map((t, i) => { const r = rowOf.get(t.pursuitId); return <li key={i}><span className="mono">{date(t.at)}</span> {r ? <Link href={lpPath(r)}>{r.pursuit.entityName}</Link> : 'Pursuit'} · {STATUS_LABEL[t.from]} → {STATUS_LABEL[t.to]}</li>; })}</ul>
+          </> : <p className="muted">No status changes recorded since {date(since)}. Missing history is not evidence of no activity.</p>}
         </details></div>
         <p className="cover">Exits count distinct LPs recorded leaving a status; imports are not progress. History is incomplete, so these are not cohort conversion rates.</p>
       </section>

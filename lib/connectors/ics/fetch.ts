@@ -44,8 +44,24 @@ const TIMEOUT_MS = 8_000;
 
 const httpsFetch: IcsFetch = async (url) => {
   const res = await fetch(url, { method: 'GET', redirect: 'error', headers: { accept: 'text/calendar' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
-  return { status: res.status, text: () => res.text() };
+  return { status: res.status, text: () => readCapped(res) };
 };
+
+/** The body, read until MAX_BYTES and no further: a huge answer is refused, never held whole in memory. */
+async function readCapped(res: Response): Promise<string> {
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let text = '', bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > MAX_BYTES) { await reader.cancel().catch(() => undefined); throw new IcsError(`This calendar is larger than ${MAX_BYTES / 1e6} MB.`); }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
 
 export class IcsError extends Error {
   constructor(message: string) { super(message); this.name = 'IcsError'; }
@@ -61,7 +77,12 @@ export async function fetchIcs(raw: string, transport: IcsFetch = httpsFetch): P
   }
   if (res.status === 404 || res.status === 401 || res.status === 403) throw new IcsError(`${c.service} no longer serves this address: it was reset or removed. Paste the new one in Preferences.`);
   if (res.status >= 400) throw new IcsError(`${c.service} answered ${res.status}.`);
-  const text = await res.text();
+  // The body is read under the same timeout: a slow or dropped download is this calendar's error, never the page's.
+  let text: string;
+  try { text = await res.text(); } catch (e) {
+    if (e instanceof IcsError) throw e;
+    throw new IcsError(`${c.service} stopped answering while sending the calendar (${e instanceof Error ? e.name : 'error'}).`);
+  }
   if (text.length > MAX_BYTES) throw new IcsError(`This calendar is larger than ${MAX_BYTES / 1e6} MB.`);
   if (!/BEGIN:VCALENDAR/i.test(text.slice(0, 2000))) throw new IcsError(`${c.service} answered with something that is not a calendar.`);
   return text;

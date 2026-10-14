@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { can } from '@/lib/authz';
 import { getDb } from '@/lib/db';
 import { aboutRaise, type AboutVehicle } from '@/lib/connectors/affinity/about';
-import { AFFINITY_PERSON_EMAILS, NOT_A_PERSON, PL_DOMAINS, PUBLIC_MAIL } from '@/lib/calendar-sync';
+import { AFFINITY_PERSON_EMAILS, firmsByDomain, NOT_A_PERSON, PL_DOMAINS, PUBLIC_MAIL } from '@/lib/calendar-sync';
 import { notLpEntities } from '@/lib/calendar-candidates';
 import { teamAddresses } from '@/lib/comms/read';
 import type { AppUser } from '@/modules/platform';
@@ -105,7 +105,12 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
   const names = new Map<string, string>();
   const pursuitsOf = new Map<string, Array<{ vehicle: string; status: string; via: 'self' | 'firm' | 'contact' }>>();
   const lastEmail = new Map<string, string>();
+  const firmsOf = new Map<string, string[]>();
   if (entities.length) {
+    for (const r of await db.query<{ id: string; org: string }>(`select distinct identity.canonical_entity_id(a.person_entity)::text id, identity.canonical_entity_id(a.org_entity)::text org
+        from identity.affiliation a where a.ended_on is null and identity.canonical_entity_id(a.person_entity) = any($1::uuid[])`, [entities])) {
+      firmsOf.set(r.id, [...(firmsOf.get(r.id) ?? []), r.org]);
+    }
     for (const r of await db.query<{ id: string; name: string }>(`select entity_id::text id, display_name name from identity.entity where entity_id = any($1::uuid[])`, [entities])) names.set(r.id, r.name);
     for (const r of await db.query<{ id: string; vehicle_id: string; status: string; via: 'self' | 'firm' | 'contact' }>(`
         select identity.canonical_entity_id(p.entity_id)::text id, p.vehicle_id::text, p.status::text status, 'self' via from strategy.active_pursuit p
@@ -123,11 +128,16 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
         where source = 'affinity' and channel = 'email' and identity.canonical_entity_id(entity_id) = any($1::uuid[]) group by 1`, [entities])) lastEmail.set(r.id, r.d);
   }
   const notLp = await notLpEntities(db);
+  // A portfolio company's people are never LPs, as on the calendar's candidates (red-team pass, 14 Oct 2026: a mail to
+  // a founder about their own company's SPV suggested adding them to it). Unknown addresses go by their domain's firms.
+  const orgsAt = await firmsByDomain([...new Set(addresses.map((x) => x.slice(x.lastIndexOf('@') + 1)).filter((d) => !PUBLIC_MAIL.has(d)))], null, db);
+  const onlyNotLp = (ids: string[]) => ids.length > 0 && ids.every((id) => notLp.has(id));
   const copy = await db.one<{ at: Date }>(`select max(finished_at) at from sources.sync_run where source = 'affinity' and kind in ('slice', 'history') and status in ('ok', 'held')`);
   const copyAsOf = copy?.at ? new Date(copy.at).toISOString() : null;
 
   const parties = [...merged.values()].map((p) => {
-    const sends = [...p.sends].sort((x, y) => x.at.localeCompare(y.at));
+    // By instant: a Date header carries the sender's own offset, so the text order is not the time order.
+    const sends = [...p.sends].sort((x, y) => Date.parse(x.at) - Date.parse(y.at));
     const lastSent = day(sends.at(-1)!.at);
     if (isOurs(p.address)) return { address: p.address, internal: true, issues: ['internal'] as PartyIssue[], suggest: [] as PartySuggestion[] };
     const raise = new Set<string>();
@@ -138,14 +148,17 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
     }
     const entityId = byClaim.get(p.address) ?? byAffinity.get(p.address) ?? null;
     const pursuits = entityId ? (pursuitsOf.get(entityId) ?? []).sort((x, y) => x.vehicle.localeCompare(y.vehicle) || x.via.localeCompare(y.via)) : [];
-    const last = entityId ? lastEmail.get(entityId) ?? null : null;
+    // Affinity's emails sit on the person its record links to, which can be another (unmerged) person than the claim's.
+    const linked = byAffinity.get(p.address);
+    const last = [entityId, linked].map((id) => (id ? lastEmail.get(id) : undefined)).filter((d): d is string => Boolean(d)).sort().at(-1) ?? null;
     const person = affinityPeople.has(p.address) || byAffinity.has(p.address);
     const covered = person ? Boolean(last && last >= lastSent) : null;
     const raiseVehicles = [...raise].sort();
     const issues: PartyIssue[] = [];
     const suggest: PartySuggestion[] = [];
     if (!entityId) issues.push('not_on_file');
-    const lpOk = !entityId || !notLp.has(entityId);
+    const lpOk = entityId ? !notLp.has(entityId) && !onlyNotLp(firmsOf.get(entityId) ?? [])
+      : !onlyNotLp(orgsAt.get(p.address.slice(p.address.lastIndexOf('@') + 1)) ?? []);
     const missing = raiseVehicles.filter((v) => raising.has(v) && !pursuits.some((x) => x.vehicle === v));
     if (lpOk && missing.length) {
       issues.push('no_pursuit');
