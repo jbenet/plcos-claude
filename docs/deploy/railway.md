@@ -123,7 +123,7 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
 | `ANTHROPIC_API_KEY` | optional | yes | Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins. |
 | `ANTHROPIC_MODEL` | optional |  | Leave unset (the default works). |
 | `FEEDBACK_EXPORT_TOKEN` | optional | yes | Leave unset: enter it in Settings → Connections, encrypted with PLCOS_SECRET. An env value still wins. |
-| `SCHEDULE_DAILY_AT` | later |  | `03:00` (UTC), the day after a manual Affinity sync works from Railway. |
+| `SCHEDULE_DAILY_AT` | optional |  | Unset runs the daily jobs at `03:00` UTC on Railway (since 14 Oct 2026); `off` turns them off, `HH:MM` moves them. |
 | `PAGE_WARM` | optional |  | Leave unset (the default works). |
 | `BACKUP_COMMAND` | required-real |  | Leave unset: no S3 for now. Railway backs up its volumes, and the Mac keeps encrypted pulls (§8). |
 | `BACKUP_BUCKET` | required-real |  | Leave unset (no S3 for now, §8). |

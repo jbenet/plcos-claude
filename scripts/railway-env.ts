@@ -37,7 +37,7 @@ const RAILWAY: Record<string, string> = {
   PGSSLMODE: 'Leave unset on the private network (code change 1).',
   ANTHROPIC_API_KEY: 'Leave unset: enter it in the app (/setup, then Settings → Connections), encrypted with PLCOS_SECRET. An env value still wins.',
   FEEDBACK_EXPORT_TOKEN: 'Leave unset: enter it in Settings → Connections, encrypted with PLCOS_SECRET. An env value still wins.',
-  SCHEDULE_DAILY_AT: '`03:00` (UTC), the day after a manual Affinity sync works from Railway.',
+  SCHEDULE_DAILY_AT: 'Optional: unset runs the daily jobs at `03:00` UTC on Railway; `off` turns them off.',
   BACKUP_COMMAND: 'Leave unset: no S3 for now. Railway backs up its volumes, and the Mac keeps encrypted pulls (§8).',
   BACKUP_BUCKET: 'Leave unset (no S3 for now, §8).',
   BACKUP_GPG_PUBLIC_KEY: 'Leave unset (no S3 for now, §8).',
