@@ -79,3 +79,26 @@ own migrations, rows synced down from the server:
 
 Everything that acts: server actions, imports, Astra runs, connectors, mail, approvals. The local copy never runs
 a job or a connector (the preview rules), and never holds a key.
+
+## 5. Decisions made overnight, 14 Oct 2026
+
+- **Node core, not Rust.** The core is the part with logic (pairing, cookies, routing, sync); in Node it is tested in
+  the cloud against a real server build, and the Mac already has Node for the checkout and Astra. The Tauri shell
+  stays thin and gets no commands.
+- **The window holds no cookies.** The core keeps one jar by logical name and renames per upstream (the live server
+  prefixes `__Host-capitalos_real_…`, the local copy `capitalos_real_47101_…`), so a vehicle chosen on either is the
+  same choice. A launch key (cookie, `SameSite=Strict`) keeps other browsers and sites off the port.
+- **No change to the server's write path.** Change counters and `xmin` horizons instead of triggers or a change
+  table. The cost is a filtered scan of a table whose counters moved, only while the app is open.
+- **Reads after a write go to the server for about five seconds** and until a sync that started after the write has
+  finished (`WRITE_SETTLE_MS`). Postgres flushes its counters about a second after a transaction.
+- **Remote-only paths**: `/api/*`, sign-in, `/desktop/*` and the Developer pages (they show server state such as
+  jobs and Astra runs).
+- **The first read of a table replaces it whole**, in one transaction, so rows the build's migrations made locally
+  never collide with the server's on a unique key.
+
+Measured in the cloud container (demo build on Postgres 16, both ends on one machine): pairing to first page about
+5 s; a fresh copy of 142 tables in 2.2 s; 300,000 new audit rows in 11 s, then one new row in 0.3 s; deletions found
+and applied in 0.06 s; the server deploying a new build switched the copy over in about 10 s, reads going to the
+server meanwhile. A write landed on the server in 0.3 s; reads came back to the copy 11–13 s later with the
+earlier 11 s settle, now 5 s.

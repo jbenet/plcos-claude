@@ -387,6 +387,13 @@ class LocalCopy {
 
   async startNext() {
     const dir = this.build.dir;
+    // A server left behind by a core that was killed outright still holds the port, with an old build and secret.
+    const pidFile = path.join(this.dir, 'local-server.pid');
+    try {
+      const old = Number(readFileSync(pidFile, 'utf8'));
+      const what = old > 1 ? await sh('ps', ['-p', String(old), '-o', 'command=']).catch(() => '') : '';
+      if (/next/.test(what)) { process.kill(old, 'SIGTERM'); await new Promise((r) => setTimeout(r, 1500)); }
+    } catch { /* none */ }
     const log = createWriteStream(path.join(this.dir, 'local-server.log'), { flags: 'a' });
     this.detail = 'Starting the local server';
     const child = spawn(process.execPath, [path.join(dir, 'node_modules/next/dist/bin/next'), 'start', '-H', '127.0.0.1', '-p', String(NEXT_PORT)], {
@@ -398,6 +405,7 @@ class LocalCopy {
       if (this.next === child) { this.next = null; if (this.phase === 'ready') { this.phase = 'syncing'; this.detail = 'Restarting the local server'; } this.poke(); }
     });
     this.next = child;
+    writeFileSync(pidFile, String(child.pid));
     for (let i = 0; i < 120 && !(await this.nextHealthy()); i++) await new Promise((r) => setTimeout(r, 500));
   }
 
