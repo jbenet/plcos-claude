@@ -98,6 +98,11 @@ A review of the newest merges found these, and each one now has a property:
   address as received is refused.
 - **A material withdrawn after its ticket was approved could still be recorded as sent.** Recording a send checks that
   the material is still approved.
+- **A vehicle's own material could be cleared and recorded for another vehicle,** by anyone with access to the other
+  vehicle (rule 11). Proposing, the mail desk's proposal and recording a send now refuse it. Shared material is unchanged.
+- **An ask's owner was taken from the form as posted.** It must now be an active person on the team.
+- **The old review-a-tie action could decline or bring back a tie someone else stated.** A stated tie is now changed
+  only by the person who stated it, and a malformed id is refused.
 
 Left as they are:
 

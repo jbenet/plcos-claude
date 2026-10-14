@@ -213,4 +213,11 @@ export async function commsProperties(check: Check, db: Db) {
     !!mat && mat.link === null && linked?.link === docsend && refusedLinks.every((r) => r !== 'STORED') && cleared?.link === null,
     `material ${mat ? 'found' : 'MISSING'}; before ${mat?.link}; after ${linked?.link}; refused ${refusedLinks.map((r) => r.slice(0, 30)).join(' | ')}; cleared ${cleared?.link}`);
   for (const c of [writer, reader]) await c.close();
+  // Red-team pass, 14 Oct 2026: a vehicle's own material is cleared only for that vehicle (rule 11).
+  const owned = await db.one<{ asset_id: string; vehicle_id: string }>(`select asset_id::text, vehicle_id::text from content.asset where vehicle_id is not null order by title limit 1`);
+  const elsewhere = owned ? await db.one<{ id: string; kind: string }>(`select id::text, kind::text from platform.vehicle where id <> $1 and kind in ('fund', 'spv') order by sort_order limit 1`, [owned.vehicle_id]) : null;
+  const crossed = owned && elsewhere ? await requestSend(juan.id, { assetId: owned.asset_id, entityId: target, vehicleId: elsewhere.id, instrument: elsewhere.kind === 'spv' ? 'spv' : 'lp_commitment' }) : null;
+  check('A vehicle\'s own material is never cleared for another vehicle',
+    crossed !== null && !crossed.check.allowed && crossed.check.refusals.some((r) => r.includes('another vehicle')),
+    crossed ? crossed.check.refusals.join(' | ') : 'no material with a vehicle in the seed');
 }
