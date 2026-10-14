@@ -2,7 +2,8 @@ import { withRoute } from '@/lib/authz/route';
 /**
  * The mail desk's outreach API (docs/27-outreach-api.md), a thin REST wrapper over MCP tools (lib/outreach/http.ts):
  *   GET  /api/outreach/vehicles, /queue, /trace, /audit, /connectors, /routes-to, /routes-through
- *   POST /api/outreach/update, /tickets, /contacts, /link, /comms, and /sent (deprecated: the old name of /link)
+ *   POST /api/outreach/update, /tickets, /contacts, /link, /comms, /lps, and /sent (deprecated: the old name of /link)
+ *   DELETE /api/outreach/lps?pursuitId=…  (undo an LP /lps added, within a day)
  * A bearer token with the tool's scope (outreach:read, outreach:write; the route reads need their tool's name); each
  * op runs as the token's owner through the authorization layer and the UI's own services (lib/outreach/).
  */
@@ -18,6 +19,11 @@ export const GET = withRoute('app/api/outreach/[op]/route.ts#GET', async functio
 export const POST = withRoute('app/api/outreach/[op]/route.ts#POST', async function(request: Request, context: Context) {
   const { serveOutreach } = await import('@/lib/outreach');
   return serveOutreach(request, (await context.params).op, 'POST');
+});
+
+export const DELETE = withRoute('app/api/outreach/[op]/route.ts#DELETE', async function(request: Request, context: Context) {
+  const { serveOutreach } = await import('@/lib/outreach');
+  return serveOutreach(request, (await context.params).op, 'DELETE');
 });
 
 export const OPTIONS = withRoute('app/api/outreach/[op]/route.ts#OPTIONS', async function(request: Request) {

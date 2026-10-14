@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { getDb, type Db, type Queryable } from '@/lib/db';
 import { reconcilePursuit } from '@/lib/reconcile';
 import { logTouchpoint, type Channel, type Direction, type Read } from '@/modules/meetings';
 import { indicationRange, recordIndication } from '@/modules/pipeline';
@@ -61,18 +61,24 @@ function taken(s: UpdateSuggestion, input: UpdateInput): boolean {
   }
 }
 
-export async function addUpdate(actorId: string, input: UpdateInput): Promise<UpdateResult> {
+/**
+ * `opts.q`: the caller's transaction (the mail desk adding an LP and its indicated amount in one, docs/27 §5). The
+ * update is then written inside it, and reconciliation, which reads committed records, is left to the caller.
+ */
+export async function addUpdate(actorId: string, input: UpdateInput, opts: { q?: Queryable } = {}): Promise<UpdateResult> {
   const body = input.body.trim();
   if (!body) throw new StatusRefused('An update needs words: what happened, or what changed.');
   if (!input.idempotencyKey.trim()) throw new StatusRefused('This form has no key; reload the page and save again.');
   // Checked before the transaction, so a bad amount refuses the whole update with a clear reason.
   if (input.indicated) indicationRange(input.indicated.low, input.indicated.high);
-  const before = await getPursuit(input.pursuitId);
+  const before = await getPursuit(input.pursuitId, opts.q);
   if (!before) throw new Error(`No pursuit ${input.pursuitId}`);
   const suggestions = readUpdate(body, { status: before.status, today: new Date().toISOString().slice(0, 10) });
 
-  const db = await getDb();
-  const done = await db.transaction(async (tx) => {
+  const outer = opts.q;
+  const inTransaction = <T>(fn: (tx: Queryable) => Promise<T>): Promise<T> =>
+    outer ? ('transaction' in outer ? (outer as Db).transaction(fn) : fn(outer)) : getDb().then((db) => db.transaction(fn));
+  const done = await inTransaction(async (tx) => {
     const { updateId, created } = await insertUpdate(tx, {
       pursuitId: input.pursuitId, body, createdBy: actorId, idempotencyKey: input.idempotencyKey,
       suggested: { reader: `${READER.name}-${READER.version}`, suggestions },
@@ -134,7 +140,7 @@ export async function addUpdate(actorId: string, input: UpdateInput): Promise<Up
 
   // A touchpoint that happened is a record the ladder may be behind: Reconciliation reads it.
   let proposed = false, recorded = false;
-  if (done.created && done.applied.touchpointId && !done.applied.touch?.ahead) {
+  if (!outer && done.created && done.applied.touchpointId && !done.applied.touch?.ahead) {
     const r = await reconcilePursuit(input.pursuitId);
     proposed = r.proposed > 0;
     recorded = r.recorded > 0;
