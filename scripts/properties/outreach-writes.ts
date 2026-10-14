@@ -168,4 +168,27 @@ export async function outreachWriteProperties(check: Check, db: Db) {
   check('Outreach writes: /contacts takes a pursuitId in place of the entityId and records the address on that LP; both, neither or an unknown pursuit is refused',
     byPursuit.status === 200 && byPursuit.json.data.entityId === personE && bothIds.status === 400 && neither.status === 400 && unknownPursuit.status === 404,
     `pursuit ${byPursuit.status}${byPursuit.json?.error ? ` (${byPursuit.json.error})` : ''} → ${byPursuit.json?.data?.entityId === personE ? 'that LP' : 'ANOTHER'}; both ${bothIds.status}; neither ${neither.status}; unknown ${unknownPursuit.status}`);
+
+  // Red-team pass, 14 Oct 2026: a person's link names no ticket, so it leaves an agent's open ticket for the agent's own
+  // email; and an agent cannot skip a ticket by linking our own mail as received.
+  const lpT = await pursuit(await entity('Invented Outreach Ticket Keeper Org'), fund.id, 'selected');
+  const t3 = (await agent('tickets', sendBody(lpT, { scope: { recipients: ['keeper@invented-writer.example'], purpose: 'reply' } }))).json?.data?.ticketId as string | undefined;
+  if (t3) await decideTicket(juan.id, t3, 'approve', 'props');
+  const personLink = await post('link', msg({ pursuitId: lpT, to: ['keeper@invented-writer.example'] }));
+  const keptOpen = await db.one<{ open: boolean }>('select sent_at is null open from email.outreach_send where ticket_id = $1', [t3]);
+  const agentLink = await agent('link', msg({ pursuitId: lpT, ticketId: t3, to: ['keeper@invented-writer.example'] }));
+  const disguised = juan.email ? await agent('link', msg({ pursuitId: lpT, direction: 'received', from: juan.email, to: ['keeper@invented-writer.example'] })) : null;
+  // A do-not-contact recorded after the approval ends the ticket: the agent's send is no longer covered.
+  const lpR = await pursuit(await entity('Invented Outreach Restricted Org'), fund.id, 'selected');
+  const t4 = (await agent('tickets', sendBody(lpR, { scope: { recipients: ['restricted@invented-writer.example'], purpose: 'reply' } }))).json?.data?.ticketId as string | undefined;
+  if (t4) await decideTicket(juan.id, t4, 'approve', 'props');
+  const { expireOutreachTicketsFor } = await import('../../modules/governance');
+  const ended = await expireOutreachTicketsFor(db, (await db.one<{ e: string }>('select entity_id::text e from strategy.pursuit where pursuit_id = $1', [lpR]))!.e);
+  const afterDnc = await agent('link', msg({ pursuitId: lpR, ticketId: t4, to: ['restricted@invented-writer.example'] }));
+  check('Outreach writes: a do-not-contact recorded after an approval ends that LP\'s open SEND ticket, and the agent\'s send is refused',
+    Boolean(t4) && ended === 1 && afterDnc.status === 409, `ticket ${t4 ? 'opened' : 'NONE'}; ended ${ended}; agent link after ${afterDnc.status}`);
+  check('Outreach writes: a person\'s link leaves an agent\'s approved ticket for the agent\'s own send; an agent\'s link of our own mail as received is refused',
+    Boolean(t3) && personLink.status === 200 && personLink.json?.data?.ticketUsed !== true && keptOpen?.open === true && agentLink.status === 200
+    && (disguised === null || disguised.status === 409),
+    `ticket ${t3 ? 'opened' : 'NONE'}; person ${personLink.status} used ${personLink.json?.data?.ticketUsed}; open after ${keptOpen?.open}; agent ${agentLink.status}${agentLink.json?.error ? ` (${agentLink.json.error})` : ''}; disguised ${disguised?.status ?? 'no team address'}`);
 }

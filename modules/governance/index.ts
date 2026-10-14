@@ -4,5 +4,5 @@ export { AUTONOMOUS, PERSON, PERSON_EXEMPT, ticketNeeded, type Acting } from './
 export {
   findOpenTicket, getTicket, insertTicket, listDecidedTickets, listOpenTickets, ticketCounts,
 } from './repo';
-export { TicketRequired, decideTicket, openTicket, requireApprovedTicket } from './service';
+export { TicketRequired, decideTicket, expireOutreachTicketsFor, openTicket, requireApprovedTicket } from './service';
 export type { OpenTicketCommand } from './service';

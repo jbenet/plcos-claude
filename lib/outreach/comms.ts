@@ -259,6 +259,10 @@ export async function link(ctx: Ctx, raw: Record<string, unknown>) {
   const { key } = keyOf(a.messageId, a.gmailMessageId);
   const ours = a.direction === 'sent';
   if (!ours && a.ticketId) throw new OutreachRefused(400, 'A received message uses no ticket.');
+  // Red-team pass, 14 Oct 2026: an agent's own mail called "received" needed no ticket. From our team, it is a send.
+  if (!ours && ctx.env.autonomous && (await teamAddresses(db)).has(a.from)) {
+    throw new OutreachRefused(409, 'That message is from our own team: link it as sent, under its ticket. Nothing was linked.');
+  }
   const recipients = [...new Set([...a.to, ...a.cc])].sort();
   const acting = ctx.env.autonomous ? AUTONOMOUS : PERSON;
   return db.transaction(async (tx) => {
@@ -280,7 +284,9 @@ export async function link(ctx: Ctx, raw: Record<string, unknown>) {
     for (const p of ps) {
       let ticket: Ticketed | null = null;
       // A message about several LPs uses no ticket (a person's link only, above); one LP's message, as before.
-      if (ours && !multi) {
+      // A person's link uses a ticket only when they name one: picking one for them would spend an agent's approval,
+      // or refuse their own earlier mail as sent before it (red-team pass, 14 Oct 2026).
+      if (ours && !multi && (a.ticketId || acting.autonomous)) {
         ticket = await ticketFor(tx, a.ticketId ?? null, p.pursuit_id, p.entity_id, p.vehicle_id, recipients);
         // A person needs no ticket; an autonomous send fails closed without an approved one (rule 3, 5 Oct 2026).
         if (!ticket && acting.autonomous) {
