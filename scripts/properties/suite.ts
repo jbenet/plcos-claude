@@ -79,6 +79,7 @@ export async function runProperties(check: Check) {
   await step('spv-stance.spvStanceProperties', async () => (await import('./spv-stance')).spvStanceProperties(check, db));
   await step('strategic.strategicProperties', async () => (await import('./strategic')).strategicProperties(check, db));
   await step('lp-stats.lpStatsProperties', async () => (await import('./lp-stats')).lpStatsProperties(check, db));
+  await step('conversion.conversionProperties', async () => (await import('./conversion')).conversionProperties(check));
   await step('lp-unit-paths.lpUnitPathDatabaseProperties', async () => (await import('./lp-unit-paths')).lpUnitPathDatabaseProperties(check, db));
   await step('linear.linearProperties', async () => (await import('./linear')).linearProperties(check, db));
   await step('email.emailProperties', async () => (await import('./email')).emailProperties(check, db));

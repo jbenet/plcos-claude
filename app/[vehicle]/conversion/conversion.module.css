@@ -1,0 +1,61 @@
+/* Outreach conversion (docs/33). Builds on .card, .kpis and table.list; tokens only, so dark mode follows. */
+
+.muted { color: var(--muted); font-size: 11.5px; }
+.kpis:global(.kpis) { margin-bottom: 16px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+
+/* The funnel: a row per step, its bar sharing one scale. */
+.funnel { display: grid; gap: 2px; }
+.frow { display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr) minmax(90px, 150px) 90px; gap: 12px; align-items: center; min-height: 32px; font-size: 13px; }
+.fname { font-weight: 500; }
+.fbarCell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fbar { display: inline-block; height: 14px; min-width: 2px; border-radius: 0 4px 4px 0; background: var(--green); flex: none; max-width: 70%; }
+.fbar.late { background: var(--clay); }
+
+/* Cohorts: shaded share cells; the number is always printed. */
+.cohorts td.share { background: color-mix(in srgb, var(--green) calc(var(--r) * 38%), transparent); font-variant-numeric: tabular-nums; }
+.young { font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--amber); margin-left: 6px; }
+
+/* Segment panels and waiting lists. */
+.grid { columns: 3 300px; column-gap: 14px; }
+.panel {
+  break-inside: avoid; display: inline-block; width: 100%; margin: 0 0 14px; vertical-align: top;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+}
+.phead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+.seg, .bin > summary { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(60px, 1fr) 64px; gap: 8px; align-items: center; min-height: 28px; font-size: 12.5px; }
+.bin > summary { cursor: pointer; list-style: none; }
+.bin > summary::-webkit-details-marker { display: none; }
+.bin ul { margin: 2px 0 8px; padding-left: 16px; font-size: 12.5px; line-height: 1.6; }
+.slabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track { position: relative; height: 14px; border-radius: 3px; background: var(--hair); display: block; }
+.track .fbar { position: absolute; left: 0; top: 0; height: 100%; max-width: 100%; }
+.ci { position: absolute; top: 5px; height: 4px; border-radius: 2px; background: var(--green-line); }
+.dot { position: absolute; top: 2px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px var(--surface); }
+.notrack { display: block; }
+.srate { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.more { font-size: 11.5px; color: var(--muted); padding-top: 4px; }
+
+/* Small multiples. */
+.smalls { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.small { margin: 0; min-width: 0; }
+.small figcaption { font-size: 12.5px; margin-bottom: 4px; }
+.small svg { width: 100%; height: auto; display: block; overflow: visible; }
+.axis { stroke: var(--line); stroke-width: 1; }
+.target { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; }
+.tick { font-family: var(--mono); font-size: 9.5px; fill: var(--muted); }
+.hit { fill: transparent; }
+.hit:hover { fill: var(--row-hover); }
+.barMark { fill: currentColor; }
+.lineMark { fill: none; stroke: currentColor; stroke-width: 2; }
+.green { color: var(--green); }
+.purple { color: var(--purple); }
+.amber { color: var(--amber); }
+.ink { color: var(--ink); }
+
+.vehicles td b { font-weight: 500; }
+.vehicles th:global(.right), .cohorts th:global(.right) { text-align: right; }
+
+@media (max-width: 640px) {
+  .frow { grid-template-columns: 90px minmax(0, 1fr) 70px; }
+  .frow > :nth-child(4), .wide { display: none; }
+}
