@@ -31,10 +31,16 @@ type Result = { isError?: boolean; content: Array<{ type: string; text: string }
  * (5 Oct 2026: the old blanket rule forced one connector's targets into top_connectors).
  */
 const FORBIDDEN = /approv|accept|decid|reject|status|stage|ladder|rung|money|wire|alloc|harden|close|import|sync|translat|affinity|linear|dakota|polaris|gmail|mailguard|docsend|run_|_run|workflow|move|merge|delete|discard|revoke/i;
+/**
+ * The one exception to "affinity" in a name (Juan, 14 Oct 2026: PLC OS adds missing people and notes to Affinity,
+ * approved by batch): these propose and read only. Deciding and writing (decideWriteBatch, affinityWriter) are in
+ * FORBIDDEN_CALLS below, so no tool reaches them.
+ */
+const AFFINITY_PROPOSALS = ['outreach_propose_affinity_writes', 'outreach_affinity_writes'];
 /** Named for a send or a ticket: allowed only to a tool whose policy says a person approves first (docs/26 §3). */
 const SEND_OR_TICKET = /send|ticket/i;
 /** Service calls that send, decide or move money; none may be reachable from lib/mcp or lib/outreach. */
-const FORBIDDEN_CALLS = ['moveDraft', 'discardDraft', 'decideTicket', 'decide(', 'decideMany', 'setPursuitStatus', 'requestLadderAdvance', 'recordWire',
+const FORBIDDEN_CALLS = ['decideWriteBatch', 'affinityWriter', 'affinity-writes-decide', 'connectors/affinity/write', 'moveDraft', 'discardDraft', 'decideTicket', 'decide(', 'decideMany', 'setPursuitStatus', 'requestLadderAdvance', 'recordWire',
   'requestHarden', 'harden(', 'recordCash', 'reviseSoft', 'recordSignature', 'recordClosing', 'recordAdvance', 'recordClimb', 'closeTrackAction', 'runWorkflow',
   'importFindings', 'syncLinear', 'translate', 'checkedClient', 'mailguardClient', 'connectMailguard', 'connectKey', 'decideSuggestion', 'adjudicate',
   'proposeSend', 'makeAsk', 'applyApprovedTicket', 'recordSend('];
@@ -65,7 +71,7 @@ export async function mcpProperties(check: Check, db: Db) {
   const json = (r: Result) => JSON.parse(text(r)) as { about: string; data: any; truncated: unknown };
 
   // ── The registry ──────────────────────────────────────────────────────────────────────
-  const badNames = TOOLS.filter((t) => FORBIDDEN.test(t.name) || !RISKS.includes(t.policy.risk)
+  const badNames = TOOLS.filter((t) => (FORBIDDEN.test(t.name) && !AFFINITY_PROPOSALS.includes(t.name)) || !RISKS.includes(t.policy.risk)
     || (SEND_OR_TICKET.test(t.name) && !(t.policy.approval && t.policy.ticket !== 'none'))
     // A send-adjacent tool records; one that links our own sends fails closed for an agent (5 Oct 2026: 'agent-only').
     || (t.policy.risk === 'send-adjacent' && (t.policy.ticket === 'opens' || (/send|link/.test(t.name) && !['requires-approved', 'agent-only'].includes(t.policy.ticket))))

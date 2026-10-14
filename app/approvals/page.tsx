@@ -7,6 +7,8 @@ import { DecideForm } from '@/components/approvals/DecideForm';
 import { AdjudicateForm } from '@/components/approvals/AdjudicateForm';
 import { ReconcileBatch } from '@/components/approvals/ReconcileBatch';
 import { AgentBatch } from '@/components/approvals/AgentBatch';
+import { AffinityBatch } from '@/components/approvals/AffinityBatch';
+import { openWriteBatch } from '@/lib/affinity-writes';
 import { getDb } from '@/lib/db';
 import { RecheckRungs } from '@/components/approvals/RecheckRungs';
 import { rungsToRecheck } from '@/lib/reconcile';
@@ -31,7 +33,7 @@ async function guardFor(ticket: ApprovalTicket): Promise<GuardReport | null> {
 async function Approvals({
   searchParams,
 }: {
-  searchParams: Promise<{ t?: string; view?: string; approved?: string; rejected?: string; failed?: string }>;
+  searchParams: Promise<{ t?: string; view?: string; approved?: string; rejected?: string; failed?: string; written?: string; error?: string }>;
 }) {
   const sp = await searchParams;
   const { t } = sp;
@@ -45,8 +47,11 @@ async function Approvals({
   const agentTickets = all.filter(isAgent);
   const open = all.filter((x) => !isProposal(x));
   const agentView = sp.view === 'agent';
-  const batch = !agentView && (sp.view === 'reconcile' || (!t && open.length === 0 && proposals.length > 0));
-  const selected = batch || agentView ? null : all.find((x) => x.id === t) ?? open[0] ?? null;
+  const affinityView = sp.view === 'affinity';
+  const writes = await openWriteBatch();
+  const pendingWrites = writes?.items.filter((i) => i.plan !== 'skip').length ?? 0;
+  const batch = !agentView && !affinityView && (sp.view === 'reconcile' || (!t && open.length === 0 && proposals.length > 0));
+  const selected = batch || agentView || affinityView ? null : all.find((x) => x.id === t) ?? open[0] ?? null;
   const receipt = sp.approved || sp.rejected || sp.failed
     ? { approved: sp.approved ? Number(sp.approved) : undefined, rejected: sp.rejected ? Number(sp.rejected) : undefined, failed: sp.failed ? Number(sp.failed) : undefined }
     : null;
@@ -111,6 +116,18 @@ async function Approvals({
             </Link>
           )}
 
+          {pendingWrites > 0 && (
+            <Link href="/approvals?view=affinity" className={`tix${affinityView ? ' on' : ''}`} data-affinity-batch-link>
+              <div className="tixtop">
+                <span className="kind">AFFINITY</span>
+                <span className="age">{pendingWrites} {pendingWrites === 1 ? 'person' : 'people'}</span>
+              </div>
+              <b>Bring emailed people into Affinity</b>
+              <p>People and notes of mail Affinity&rsquo;s sync missed · proposed by JuanMail</p>
+              <span className="flag f-ok">Batch</span>
+            </Link>
+          )}
+
           {proposals.length > 0 && (
             <Link href="/approvals?view=reconcile" className={`tix${batch ? ' on' : ''}`}>
               <div className="tixtop">
@@ -147,7 +164,10 @@ async function Approvals({
         </>
       }
     >
-      {agentView ? (
+      {affinityView ? (
+        <AffinityBatch batch={writes} receipt={sp.written || sp.failed || sp.error
+          ? { written: sp.written ? Number(sp.written) : undefined, failed: sp.failed ? Number(sp.failed) : undefined, error: sp.error } : null} />
+      ) : agentView ? (
         <AgentBatch tickets={agentTickets} receipt={receipt} />
       ) : batch ? (
         <>

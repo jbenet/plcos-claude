@@ -495,7 +495,7 @@ and answers, per address, read-only and without calling Affinity:
   `POST /api/outreach/lps`. `research` is for an unknown address with no raise mail.
 - `affinity.*` is PLC OS's daily copy as of `affinityCopyAsOf`. `covered` is true when Affinity's last email with them is
   on or after the last send, by day. `affinity_add_person` and `affinity_add_note` are for the Affinity writes Juan
-  approves by batch (14 Oct 2026); that write path is not built yet.
+  approves by batch (14 Oct 2026): propose them with `POST /api/outreach/affinity` (§5b).
 
 ## 5. Write
 
@@ -771,6 +771,36 @@ JuanMail's reconcile page finds people Juan emailed who are not here and whose m
 - `DELETE /api/outreach/research?entityId=` (`outreach_undo_add_research`) takes it back within 24 hours, by the same
   person's token. It removes the request and the address, and retires the person if that call created them and nothing
   has referred to them since.
+
+## 5b. Affinity writes, approved by batch (14 Oct 2026)
+
+Some mail Juan sends never reaches Affinity: its own Gmail sync misses it, mostly for personal addresses. Juan decided
+PLC OS may add the missing people and a note of the mail, approved per batch ("C, also notes"). Affinity's API cannot
+receive an email, so the note stands in for it.
+
+`POST /api/outreach/affinity` (MCP `outreach_propose_affinity_writes`, outreach:write) takes
+`{ items: [{ address, name?, firm?, messages: [{ at, subject?, gmailThreadId? }] }] }` (1–200 items, 1–100 messages each)
+and answers `{ batchId, items: [{ address, itemId, plan, reason }] }`. Each item is planned against PLC OS's copy of
+Affinity:
+
+- `skip`: internal; or Affinity already has an email with them on or after the last send; or PLC OS already wrote one
+  since then.
+- `note`: a person in Affinity has the address. A note goes on them.
+- `person+note`: nobody has it. The person is created (name split into first and last; the address's local part when
+  no name is given), then the note.
+
+Items gather in the one open batch. Proposing an address again merges its messages into the same item. Nothing is
+sent to Affinity at this point.
+
+`GET /api/outreach/affinity?batchId=` (`outreach_affinity_writes`) shows the open batch and the last five decided, with
+each of your items' `state`: proposed, approved, skipped, rejected, written or failed. Once written it also gives
+`createdPersonId` and `affinityNoteId`, and a failed item gives its `error`.
+
+An admin decides the batch in Approvals → Affinity writes. The checked items are written and the rest rejected. A batch
+may take at most `config.affinity.writeBatchMaxCalls` requests (100; a person plus a note is two). The decision is
+saved first, then each item is written and saved as it lands, so a failure leaves an exact record. The note reads:
+"<sender> emailed <name> (<address>); Affinity's mail sync did not capture these:" followed by a dated subject line per
+message. Only `lib/connectors/affinity/write.ts` writes, and only POST /persons and POST /notes (Affinity's v1 API).
 
 ## 6. Audit, and the later web client
 

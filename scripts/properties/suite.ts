@@ -100,6 +100,7 @@ export async function runProperties(check: Check) {
   await step('outreach-mcp.outreachMcpProperties', async () => (await import('./outreach-mcp')).outreachMcpProperties(check, db));
   await step('outreach-parties.outreachPartiesProperties', async () => (await import('./outreach-parties')).outreachPartiesProperties(check, db));
   await step('outreach-parties.outreachResearchProperties', async () => (await import('./outreach-parties')).outreachResearchProperties(check, db));
+  await step('affinity-writes.affinityWriteProperties', async () => (await import('./affinity-writes')).affinityWriteProperties(check, db));
   // The comms trace and who needs a ticket (5 Oct 2026, docs/27 §5–§7).
   await step('comms.commsProperties', async () => (await import('./comms')).commsProperties(check, db));
   // Mail actions (9 Oct 2026, docs/29): signals, suggestions, contact details, Gmail replies on file.

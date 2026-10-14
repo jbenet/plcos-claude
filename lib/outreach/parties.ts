@@ -24,7 +24,7 @@ import type { AppUser } from '@/modules/platform';
  *     against the last mail sent: covered when Affinity has one on or after it. The copy is as of copyAsOf;
  *   - issues and suggest: what the reconcile page can do. add_lp {vehicle} goes to outreach_add_lp (lib/outreach/lps.ts);
  *     research: an unknown person with no raise mail, for a person to look at; affinity_add_person / affinity_add_note:
- *     for the Affinity writes Juan approves by batch (not built yet). Never add_lp for a portfolio company of ours or a
+ *     for the Affinity writes Juan approves by batch (outreach_propose_affinity_writes, lib/affinity-writes.ts). Never add_lp for a portfolio company of ours or a
  *     teammate, a vehicle not being raised, or the grants rail.
  */
 

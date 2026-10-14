@@ -41,7 +41,10 @@ a copy of it with `npm run preview`, and a sub-agent's worktree, which has no ro
   or 503 means stop and come back later (W1 1.48). Juan's own address is never used in a request.
 - **Affinity is read-only.** The key can write and cannot be scoped, so read-only is
   enforced in the client: GET only, allowlisted paths, a property test that a write throws.
-  Writing back is a later decision, and would go through approval tickets.
+  One write path exists (Juan, 14 Oct 2026, "C, also notes"): `lib/connectors/affinity/write.ts` creates a
+  person Juan emailed who is missing from Affinity, and a note listing the dates and subjects of that mail, only
+  for items an admin approved as a batch in Approvals (`lib/affinity-writes.ts`, docs/27 §5b). Its guard sends
+  only POST /persons and POST /notes; the read client stays GET-only. Nothing else in Affinity is written.
 - **Dakota Marketplace is read-only, and its data never leaves our system (27 Sep 2026, docs/20-dakota.md).**
   Juan: "they are very touchy about their data, so make sure dakota data does not leave our system and
   get accidentally placed anywhere else. should just go into our db." So Dakota records live only in

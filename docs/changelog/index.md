@@ -330,4 +330,5 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Admin the Astra runner from the page: Check, Update, Restart](entries/astra-admin.md)
 - [Astra keeps busy all night from a plan](entries/astra-plan.md)
 - [Faster LP lists, meetings, calendar and Today](entries/perf-lists.md)
+- [Reconcile sent mail: check parties, research on no vehicle, Affinity writes by batch](entries/mail-reconcile.md)
 - [Deploys go live sooner](entries/deploy-speed.md)
