@@ -22,12 +22,16 @@
  *   `meet:<id>`) is split at its last `=`, `:` or `/`: the heads shared as above, the tails as they are, or `0`
  *   where a tail is the same as an earlier text column's (`r`): a calendar row's link ends in its id's meeting.
  * - A shared column with 36 distinct values or fewer sends its indexes as one base-36 character per row.
+ * - A column of Dates (and nulls) is sent as epoch milliseconds, shared as above when that is shorter; each row reads
+ *   back its own Date. A text column equal on every row to an earlier one with the same text before and after it
+ *   (`<entityId>:neurotech`) is sent as that column's name and the two affixes.
  */
 export interface PackedRows {
   n: number;
   /** Column → its values in row order, or `[distinct values, index per row]`. */
   c: Record<string, { v: unknown[] } | { d: unknown[]; i: Index } | { l: PackedRows; k: number[] }
-    | { a: string } | { h: { d: unknown[]; i: Index }; t: Array<string | 0>; r?: string }>;
+    | { a: string; p?: string; s?: string } | { h: { d: unknown[]; i: Index }; t: Array<string | 0>; r?: string }
+    | { e: { d: unknown[]; i: Index } | { v: unknown[] } }>;
 }
 
 /** An index per row; with 36 distinct values or fewer, one base-36 character per row (a lane, a standing). */
@@ -91,6 +95,20 @@ function split(values: unknown[], rawLength: number, earlier: Array<[string, str
   return length < rawLength * 0.95 ? { h: { d, i }, t, ...(r ? { r } : {}) } : null;
 }
 
+/** The earlier text column every value is, with the same text before and after it on every row; else null. */
+function affix(values: string[], earlier: Array<[string, unknown[]]>) {
+  for (const [k, other] of earlier) {
+    const first = other[0];
+    if (typeof first !== 'string' || !first) continue;
+    const at = values[0]!.indexOf(first);
+    if (at < 0) continue;
+    const p = values[0]!.slice(0, at), s = values[0]!.slice(at + first.length);
+    if (!p && !s) continue;
+    if (other.every((o, r) => typeof o === 'string' && values[r] === p + o + s)) return { a: k, ...(p ? { p } : {}), ...(s ? { s } : {}) };
+  }
+  return null;
+}
+
 export function packRows<T extends object>(rows: readonly T[]): PackedRows {
   const columns = new Set<string>();
   for (const row of rows) for (const k of Object.keys(row)) columns.add(k);
@@ -106,11 +124,19 @@ export function packRows<T extends object>(rows: readonly T[]): PackedRows {
       c[k] = { l: packRows(lists.flat()), k: lists.map((list) => list.length) };
       continue;
     }
+    if (values.some((v) => v instanceof Date) && values.every((v) => v === null || (v instanceof Date && Number.isFinite(v.getTime())))) {
+      const ms = values.map((v) => (v === null ? null : (v as Date).getTime()));
+      const { d, i, rawLength, dictLength } = share(ms);
+      c[k] = { e: dictLength < rawLength ? { d, i } : { v: ms } };
+      continue;
+    }
     if (!values.every((v) => v === undefined || plain(v))) { c[k] = { v: values }; continue; }
     // Text, numbers, booleans and nulls only: equal values are identical, so a copy reads back equal.
     const same = values.every((v) => v === undefined || v === null || typeof v !== 'object')
       ? plainColumns.find(([, other]) => other.every((v, r) => Object.is(v, values[r]))) : undefined;
     if (same) { c[k] = { a: same[0] }; continue; }
+    const affixed = values.length && values.every((v) => typeof v === 'string') ? affix(values as string[], plainColumns) : null;
+    if (affixed) { c[k] = affixed; continue; }
     if (values.every((v) => v === undefined || v === null || typeof v !== 'object')) plainColumns.push([k, values]);
     const { d, i, rawLength, dictLength } = share(values);
     const col = dictLength < rawLength ? { d, i } : split(values, rawLength, textTails) ?? { v: values };
@@ -127,13 +153,16 @@ export function unpackRows<T>(packed: PackedRows): T[] {
       const items = unpackRows<unknown>(col.l);
       let at = 0;
       col.k.forEach((count, r) => { rows[r]![k] = items.slice(at, at + count); at += count; });
+    } else if ('e' in col) {
+      const e = col.e;
+      for (let r = 0; r < packed.n; r++) { const ms = 'v' in e ? e.v[r] : e.d[at(e.i, r)]; rows[r]![k] = ms === null ? null : new Date(ms as number); }
     } else if ('v' in col) col.v.forEach((v, r) => { if (v !== undefined) rows[r]![k] = v; });
     else if ('h' in col && !col.r) col.t.forEach((tail, r) => { rows[r]![k] = (col.h.d[at(col.h.i, r)] as string) + tail; });
     else if ('d' in col) for (let r = 0; r < packed.n; r++) { const v = col.d[at(col.i, r)]; if (v !== undefined) rows[r]![k] = v; }
   }
   // A copied column reads its source's values; sources are always earlier, plain, and never copies.
   for (const [k, col] of Object.entries(packed.c)) {
-    if ('a' in col) rows.forEach((row) => { const v = row[col.a]; if (v !== undefined) row[k] = v; });
+    if ('a' in col) rows.forEach((row) => { const v = row[col.a]; if (v !== undefined) row[k] = col.p || col.s ? `${col.p ?? ''}${v as string}${col.s ?? ''}` : v; });
     // A tail sent as 0 is the same row's tail of the column `r` names, which is never itself a reference.
     if ('h' in col && col.r) {
       const from = col.r;
