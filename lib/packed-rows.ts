@@ -58,15 +58,17 @@ const keyOf = (value: unknown) => `${Array.isArray(value) ? 'a' : typeof value}$
 
 /** Each distinct value once and an index per row, and whether that is shorter than the values as they are. */
 function share(values: unknown[]) {
-  const d: unknown[] = [], seen = new Map<string, number>(), i: number[] = [];
+  const d: unknown[] = [], seen = new Map<string, number>(), texts = new Map<string, number>(), i: number[] = [];
   let rawLength = 0, dictLength = 0, indexLength = 0;
   for (const v of values) {
-    const key = v === undefined ? 'u' : keyOf(v);
-    rawLength += key.length;
-    let index = seen.get(key);
-    if (index === undefined) { index = d.length; seen.set(key, index); d.push(v); dictLength += key.length; }
+    // Text, the common case, is keyed without JSON (a calendar packs 56,000 rows); its length is counted as keyOf's.
+    const text = typeof v === 'string', map = text ? texts : seen, key = text ? v : v === undefined ? 'u' : keyOf(v);
+    const length = text ? v.length + 8 : key.length;
+    rawLength += length;
+    let index = map.get(key);
+    if (index === undefined) { index = d.length; map.set(key, index); d.push(v); dictLength += length; }
     i.push(index);
-    indexLength += String(index).length + 1;
+    indexLength += (index < 10 ? 1 : index < 100 ? 2 : index < 1000 ? 3 : index < 10000 ? 4 : String(index).length) + 1;
   }
   const small = d.length <= SMALL;
   dictLength += small ? i.length : indexLength;
