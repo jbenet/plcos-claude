@@ -223,6 +223,8 @@ async function TargetWorkspace({ params, searchParams }: {
         const early = (p.status === 'new' || p.status === 'sourcing' || p.status === 'selected' || p.status === 'connecting') && touchSummary.meetingDates.length > 0;
         const why = p.statusSource === 'us'
           ? `${p.statusSetByName ?? 'Someone'} set it here${p.statusSetAt ? ` on ${shortDate(p.statusSetAt)}` : ''}${p.statusReason ? `: “${p.statusReason.replace(/_/g, ' ').replace(/[.!?…]+$/, '')}”` : ', with no reason given'}.`
+          : p.source === 'mail_desk'
+            ? `The mail desk added this LP on its own from mail${p.statusSetAt ? ` on ${shortDate(p.statusSetAt)}` : ''}; nobody has set a status here yet.`
           : p.stageSaid
             ? `Affinity reads “${p.stageSaid}”, which maps to ${STATUS_LABEL[p.status]}. Someone set it in Affinity; when and why, Affinity doesn’t say.`
             : 'Nobody has set one: this is where every LP starts.';

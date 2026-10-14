@@ -1,5 +1,5 @@
 import { can, type Principal } from '@/lib/authz';
-import { getDb } from '@/lib/db';
+import { getDb, type Queryable } from '@/lib/db';
 
 /**
  * Email addresses on record for people and organisations (docs/27 §4): the one reader behind the queue's
@@ -108,4 +108,28 @@ export async function detailsFor(entityIds: string[]): Promise<Map<string, Detai
     out.set(r.entity_id, d);
   }
   return out;
+}
+
+/**
+ * The reverse of addressesFor: the current people whose address on record is this one (case aside), by the same rule —
+ * a current, non-licensed email claim, or an address Affinity holds for the person. Canonical, not retired. The mail
+ * desk's add-an-LP matches on this first (docs/27 §5), so a person already here is never added twice.
+ */
+export async function peopleWithAddress(email: string, q?: Queryable): Promise<Array<{ id: string; name: string }>> {
+  const db = q ?? (await getDb());
+  const address = email.trim().toLowerCase();
+  return db.query<{ id: string; name: string }>(`
+    with found as (
+      select identity.canonical_entity_id(c.entity_id) id from research.claim c left join research.source_doc d on d.doc_id = c.source
+       where c.superseded_by is null and c.field ~ '(^|\\.)email$' and lower(btrim(c.value)) = $1
+         and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'
+      union
+      select identity.canonical_entity_id(s.entity_id) from sources.raw_record r
+        join identity.source_record s on s.source = 'affinity' and s.source_id = 'person:' || r.source_id
+       where r.source = 'affinity' and r.kind = 'person'
+         and (lower(btrim(r.payload->>'primaryEmailAddress')) = $1
+           or exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(r.payload->'emailAddresses') = 'array' then r.payload->'emailAddresses' else '[]'::jsonb end) x
+                       where lower(btrim(x)) = $1)))
+    select distinct e.entity_id::text id, e.display_name name from found f join identity.entity e on e.entity_id = f.id
+     where e.retired_at is null and e.merged_into is null and e.entity_type = 'person' order by name, id`, [address]);
 }
