@@ -19,8 +19,23 @@ import { getDb, type Queryable } from '@/lib/db';
 export interface TableInfo { t: string; pk: string[] | null; counter: string; rows: number }
 
 const ident = (s: string) => `"${s.replaceAll('"', '""')}"`;
-/** Tables the app never copies: its own schema bookkeeping, which the build's migrations write locally. */
-const SKIP = new Set(['platform.migration']);
+/**
+ * Tables the app never copies: its own schema bookkeeping, which the build's migrations write locally, and
+ * people's own secrets (their mailguard keys, calendar addresses), which not even an Admin may read
+ * (lib/settings/person-secrets.ts).
+ */
+const SKIP = new Set(['platform.migration', 'platform.person_secret']);
+/**
+ * Columns sent as a stand-in rather than as stored. A secret setting's ciphertext stays here (the copy runs no
+ * connector and has none of this server's keys, so it shows the setting as set but unreadable); a token's hash
+ * becomes one of its own id, so the copy can never check a real token against it.
+ */
+const STAND_IN: Record<string, string> = {
+  'platform.setting': `case when t.secret then jsonb_build_object('value', 'withheld') else '{}'::jsonb end`,
+  'platform.mcp_token': `jsonb_build_object('token_hash', encode(sha256(convert_to('withheld:' || t.token_id::text, 'UTF8')), 'hex'))`,
+};
+/** A row as the copy gets it. */
+const rowJson = (table: string) => (STAND_IN[table] ? `(to_jsonb(t) || ${STAND_IN[table]})` : 'to_jsonb(t)');
 
 export async function syncState(q?: Queryable): Promise<{ horizon: string; tables: TableInfo[] }> {
   const db = q ?? await getDb();
@@ -95,7 +110,7 @@ export async function syncRows(table: string, since: string | null, after: strin
     // A table with no primary key is read whole, in one page: the app replaces it.
     const pageLimit = s.pk.length ? `limit ${lim + 1}` : '';
     const rows = await tx.query<{ j: string; k: string[] | null }>(
-      `select to_jsonb(t)::text as j, ${s.pk.length ? `array[${s.pk.map((c) => `t.${ident(c.name)}::text`).join(', ')}]` : 'null'} as k
+      `select ${rowJson(table)}::text as j, ${s.pk.length ? `array[${s.pk.map((c) => `t.${ident(c.name)}::text`).join(', ')}]` : 'null'} as k
          from ${from} t ${where.length ? `where ${where.join(' and ')}` : ''} ${order} ${pageLimit}`, params);
     const more = s.pk.length > 0 && rows.length > lim;
     const page = more ? rows.slice(0, lim) : rows;

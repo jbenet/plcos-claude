@@ -4,9 +4,13 @@ export const dynamic = 'force-dynamic';
 
 /**
  * The desktop app's sync down (docs/31 §3, lib/desktop/sync.ts): `op=state`, `op=rows` and `op=keys`. Admins only,
- * as the whole-database snapshot is: the copy holds every table. Read-only.
+ * as the whole-database snapshot is, refused where it is refused, and audited (lib/desktop/guard.ts). The copy holds
+ * every table but people's own secrets, whose ciphertext and token hashes stay here (lib/desktop/sync.ts). Read-only.
  */
-export const GET = withRoute('app/api/desktop/sync/route.ts#GET', async (request) => {
+export const GET = withRoute('app/api/desktop/sync/route.ts#GET', async (request, _context, user) => {
+  const { auditDesktop, desktopRefusal } = await import('@/lib/desktop/guard');
+  const refused = await desktopRefusal(user, 'sync');
+  if (refused) return refused;
   const { syncKeys, syncRows, syncState } = await import('@/lib/desktop/sync');
   const p = new URL(request.url).searchParams;
   const headers = { 'cache-control': 'no-store', 'content-type': 'application/json' };
@@ -19,6 +23,7 @@ export const GET = withRoute('app/api/desktop/sync/route.ts#GET', async (request
   if (op === 'state') {
     const { builtFrom } = await import('@/lib/authz/route');
     const s = await syncState();
+    await auditDesktop(user, 'sync', { outcome: 'ok', tables: s.tables.length });
     return new Response(JSON.stringify({ ok: true, commit: builtFrom() ?? process.env.GIT_COMMIT?.slice(0, 12) ?? null, ...s }), { headers });
   }
   if (op === 'rows') {

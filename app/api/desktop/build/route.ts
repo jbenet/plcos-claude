@@ -8,7 +8,12 @@ export const dynamic = 'force-dynamic';
  * identical build, or the server actions it forwards would not match. Admins only: the build carries its server
  * actions' encryption key. One at a time.
  */
-export const GET = withRoute('app/api/desktop/build/route.ts#GET', async () => {
+export const GET = withRoute('app/api/desktop/build/route.ts#GET', async (_request, _context, user) => {
+  const { auditDesktop, desktopRefusal } = await import('@/lib/desktop/guard');
+  const refused = await desktopRefusal(user, 'build');
+  if (refused) return refused;
   const { buildResponse } = await import('@/lib/desktop/build');
-  return buildResponse();
+  const res = await buildResponse();
+  await auditDesktop(user, 'build', { outcome: res.ok ? 'ok' : 'refused', status: res.status, commit: res.headers.get('x-build-commit') });
+  return res;
 });

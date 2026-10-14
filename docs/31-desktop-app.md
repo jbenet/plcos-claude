@@ -80,6 +80,14 @@ own migrations, rows synced down from the server:
   NDJSON, and the new horizon. Deletions are found by comparing row counts, then primary keys.
 - Nothing is added to the server's write path: no triggers, no change table. The cost is a filtered scan of the
   tables that changed, only while the app is open.
+- People's own secrets never leave the server: `platform.person_secret` is not copied, a secret setting's
+  ciphertext arrives as `withheld`, and a token's hash as a hash of its own id. Settings and Preferences pages
+  always load from the server.
+- Sync and build are refused wherever the whole-database snapshot is refused (a copy, a non-live real server) and
+  are audited: `desktop.build` on every download, `desktop.sync` once an hour per person.
+- The build download is an allowlist (`BUILD_INCLUDES` in `lib/desktop/build.ts`), not a blocklist.
+- Pairing: one address holds at most three unanswered pairings, and a full table drops its oldest unanswered one.
+  The Allow page shows the device name as the app's claim ("says it is on …").
 
 ## 4. What stays on the server
 

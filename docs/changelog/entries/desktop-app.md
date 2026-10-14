@@ -17,3 +17,8 @@ should be the ground truth … any local writes need to land on the server … t
 
 Notes: `docs/31-desktop-app.md`. Server: `/api/desktop/pair`, `/api/desktop/info`, `/api/desktop/sync`,
 `/api/desktop/build`, all read-only except the pairing.
+
+**Hardening, same day** (a red-team pass): people's own secrets stay on the server (mailguard keys and calendar
+addresses are not copied; secret settings and token hashes arrive as stand-ins), Settings and Preferences always load
+from the server, sync and build downloads are refused where snapshots are and are audited, the build download is an
+allowlist, and pairing caps unanswered requests per address.
