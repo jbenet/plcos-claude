@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "No window gets Tauri commands: the pages are PLC OS's own, served through the local core (docs/31).",
+  "windows": [],
+  "permissions": []
+}

@@ -17,7 +17,8 @@ export { USER_COOKIE };
 export function localAuth(): AuthProvider {
   return {
     kind: 'local',
-    switchable: true,
+    // The desktop app's copy is you, as the live server knows you (docs/31): nobody to switch to.
+    switchable: !config.data.desktopCopy,
 
     async currentUser(q?: Queryable): Promise<AppUser> {
       const jar = await cookies();

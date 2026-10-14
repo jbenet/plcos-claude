@@ -70,7 +70,7 @@ export function withRoute(name: RouteId, handler: (request: Request, context: an
 }
 let imageCommit: string | null | undefined;
 /** The commit a deployed image was built from (.image-commit, written by the Dockerfile), or null elsewhere. */
-function builtFrom(): string | null {
+export function builtFrom(): string | null {
   if (imageCommit !== undefined) return imageCommit;
   try {
     const text = readFileSync(`${process.cwd()}/.image-commit`, 'utf8').trim();

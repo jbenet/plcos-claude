@@ -94,6 +94,11 @@ export const config = {
     /** When this server's copy of the real data was taken; null unless it is a preview. */
     copyTakenAt: copyTakenAt(),
     /**
+     * The desktop app's local copy (docs/31 §3): a preview whose rows the app keeps syncing down from the live
+     * server, and which never takes a write (the app sends every write to the live server). Only with a copy.
+     */
+    desktopCopy: Boolean(copyTakenAt()) && process.env.PLCOS_DESKTOP_COPY === '1',
+    /**
      * Cookies belong to a host, not a port, so every server on this machine — live, preview and
      * demo, and Juan's iPad reaching any of them by IP — would share who you are and which
      * vehicle you had open. The name carries the port. Local storage is per port already.
