@@ -34,6 +34,7 @@ export function AffinityBatch({ batch, receipt }: {
       {batch && items.length > 0 && (
         <AuthorizedControl action="admin" scope={{}}><form action={decideAffinityBatch} className="card" data-affinity-batch>
           <input type="hidden" name="batchId" value={batch.batchId} />
+          {items.map((i) => <input key={i.itemId} type="hidden" name="shown" value={i.itemId} />)}
           <div className="chead">
             <h2>Affinity writes</h2>
             <span className="lbl">{calls} Affinity requests · at most {config.affinity.writeBatchMaxCalls} a batch · opened {ago(batch.openedAt)}</span>

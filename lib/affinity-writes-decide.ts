@@ -25,19 +25,34 @@ export function noteContent(sender: string, it: Pick<WriteItem, 'name' | 'addres
     + `${lines.join('\n')}\nRecorded by PLC OS from ${sender}'s sent mail.`;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Decide the open batch: the checked items are written, the rest rejected; skips stay skipped. Refused when the batch
  * is no longer open, is not this one, or the checked items would take more than the cap.
+ *
+ * `shown`: the items the person saw when deciding. Any other item (proposed after the page was drawn) is neither
+ * written nor rejected: it moves to a new open batch, to be shown next time (red-team pass, 14 Oct 2026).
  */
-export async function decideWriteBatch(user: AppUser, batchId: string, approve: string[], writer?: AffinityWriter) {
+export async function decideWriteBatch(user: AppUser, batchId: string, approve: string[], writer?: AffinityWriter, shown?: string[]) {
   requireMutationProfile();
   if (user.access !== 'admin') throw new WriteBatchRefused('Only an admin decides Affinity writes.');
+  if (!UUID.test(batchId)) throw new WriteBatchRefused('That is not a batch of Affinity writes.');
   const db = await getDb();
   const chosen = new Set(approve);
   const items = await db.transaction(async (tx) => {
     const b = await tx.one<{ status: string }>(`select status from sources.affinity_write_batch where batch_id = $1 for update`, [batchId]);
     if (!b || b.status !== 'open') throw new WriteBatchRefused('That batch was decided already.');
-    const all = await tx.query<WriteItem>(`${ROW} where batch_id = $1`, [batchId]);
+    let all = await tx.query<WriteItem>(`${ROW} where batch_id = $1`, [batchId]);
+    const seen = shown ? new Set(shown) : null;
+    const unseen = seen ? all.filter((i) => !seen.has(i.itemId)) : [];
+    if (unseen.length) {
+      // Decided first: one batch may be open at a time.
+      await tx.query(`update sources.affinity_write_batch set status = 'decided', decided_by = $2, decided_at = now() where batch_id = $1`, [batchId, user.id]);
+      const next = (await tx.one<{ id: string }>(`insert into sources.affinity_write_batch (status) values ('open') returning batch_id::text id`))!.id;
+      await tx.query(`update sources.affinity_write_item set batch_id = $2 where item_id = any($1::uuid[])`, [unseen.map((i) => i.itemId), next]);
+      all = all.filter((i) => seen!.has(i.itemId));
+    }
     const go = all.filter((i) => i.plan !== 'skip' && chosen.has(i.itemId));
     const calls = go.reduce((n, i) => n + callsFor(i.plan), 0);
     if (calls > config.affinity.writeBatchMaxCalls) {
@@ -60,7 +75,11 @@ export async function decideWriteBatch(user: AppUser, batchId: string, approve: 
   for (const it of items) {
     let personId = it.affinityPersonId, created: number | null = null;
     try {
-      if (it.plan === 'person+note' || !personId) {
+      // A person already created for this address (an earlier batch, or an item before this one) is noted, never made twice.
+      const made = it.plan === 'person+note' || !personId ? (await db.one<{ id: number }>(`select created_person_id::float8 id from sources.affinity_write_item
+        where address = $1 and created_person_id is not null order by written_at desc nulls last limit 1`, [it.address]))?.id ?? null : null;
+      if (made) personId = made;
+      else if (it.plan === 'person+note' || !personId) {
         created = await w.createPerson({ ...nameParts(it.name, it.address), emails: [it.address] });
         personId = created;
         await db.query(`update sources.affinity_write_item set created_person_id = $2 where item_id = $1`, [it.itemId, created]);

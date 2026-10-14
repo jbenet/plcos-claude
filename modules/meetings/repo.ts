@@ -303,28 +303,44 @@ export async function colleagueTouchpointsFor(entityId: string, vehicleId: strin
  * firm's name (N55).
  */
 export function summarize(all: Touchpoint[], now = new Date()): TouchpointSummary {
-  const touches = all.filter((t) => !t.viaOrganization);
-  const firm = all.filter((t) => t.viaOrganization);
-  const held = touches.filter((t) => t.on && t.on.getTime() <= now.getTime());
-  const contact = held.filter((t) => t.channel !== 'research');
-  // An event of ours is not a meeting with them (N81): it is a touch, not a meeting on record.
-  const meetings = held.filter((t) => (t.channel === 'meeting' || t.channel === 'call') && !isEvent(t)).map((t) => t.on!);
-  // One meeting recorded twice — a note and a calendar entry for the same day — is one meeting.
-  const days = [...new Set(meetings.map((d) => d.toISOString().slice(0, 10)))].sort().map((d) => new Date(`${d}T00:00:00Z`));
-  const last = contact.reduce<Touchpoint | null>((a, t) => (!a || when(t) > when(a) ? t : a), null);
-  // An automatic reply is no word from them (N81): nobody wrote it, and nothing is owed. Nor is
-  // coming to our event: twenty people in a room is not their answer to us.
-  const fromThem = contact.filter((t) => (t.direction === 'theirs' || t.direction === 'both') && !isAutoReply(t) && !isEvent(t));
-  const lastFromThem = fromThem.reduce<Date | null>((a, t) => (!a || t.on! > a ? t.on! : a), null);
-  const ours = contact.filter((t) => t.direction === 'ours' && (!lastFromThem || t.on! > lastFromThem));
-  const awaitingSince = ours.reduce<Date | null>((a, t) => (!a || t.on! < a ? t.on! : a), null);
-  const upcoming = touches
-    .filter((t) => !t.on && t.scheduledFor && t.scheduledFor.getTime() > now.getTime() && !isEvent(t))
-    .reduce<Date | null>((a, t) => (!a || t.scheduledFor! < a ? t.scheduledFor! : a), null);
-  const withRead = held.filter((t) => t.read).sort((a, b) => when(b) - when(a))[0];
-  const research = held.filter((t) => t.channel === 'research').reduce<Date | null>((a, t) => (!a || t.on! > a ? t.on! : a), null);
+  // One pass over the touchpoints, then one over their contacts; it was a dozen filters per LP, most
+  // of a pipeline rebuild's summary time at 150k touchpoints (performance pass, 14 Oct 2026).
+  const at = now.getTime();
+  const contact: Touchpoint[] = [];
+  const days = new Set<string>();
+  let total = 0, last: Touchpoint | null = null, lastFromThem: Date | null = null, upcoming: Date | null = null;
+  let withRead: Touchpoint | null = null, research: Date | null = null;
+  let firmTotal = 0, firmLast: Date | null = null, firmNext: Date | null = null;
+  for (const t of all) {
+    if (t.viaOrganization) {
+      firmTotal += 1;
+      if (t.on && t.on.getTime() <= at) { if (!firmLast || t.on > firmLast) firmLast = t.on; }
+      else if (!t.on && t.scheduledFor && t.scheduledFor.getTime() > at && (!firmNext || t.scheduledFor < firmNext)) firmNext = t.scheduledFor;
+      continue;
+    }
+    total += 1;
+    if (!t.on || t.on.getTime() > at) {
+      // An event of ours is not a meeting with them (N81): it is a touch, not a meeting on record.
+      if (!t.on && t.scheduledFor && t.scheduledFor.getTime() > at && !isEvent(t) && (!upcoming || t.scheduledFor < upcoming)) upcoming = t.scheduledFor;
+      continue;
+    }
+    // Held: dated today or before.
+    if (t.read && (!withRead || when(t) > when(withRead))) withRead = t;
+    if (t.channel === 'research') { if (!research || t.on > research) research = t.on; continue; }
+    contact.push(t);
+    // One meeting recorded twice — a note and a calendar entry for the same day — is one meeting.
+    if ((t.channel === 'meeting' || t.channel === 'call') && !isEvent(t)) days.add(t.on.toISOString().slice(0, 10));
+    if (!last || when(t) > when(last)) last = t;
+    // An automatic reply is no word from them (N81): nobody wrote it, and nothing is owed. Nor is
+    // coming to our event: twenty people in a room is not their answer to us.
+    if ((t.direction === 'theirs' || t.direction === 'both') && !isAutoReply(t) && !isEvent(t) && (!lastFromThem || t.on > lastFromThem)) lastFromThem = t.on;
+  }
+  let awaitingSince: Date | null = null;
+  for (const t of contact) {
+    if (t.direction === 'ours' && (!lastFromThem || t.on! > lastFromThem) && (!awaitingSince || t.on! < awaitingSince)) awaitingSince = t.on!;
+  }
   return {
-    meetingDates: days,
+    meetingDates: [...days].sort().map((d) => new Date(`${d}T00:00:00Z`)),
     lastTouch: last?.on ?? null,
     lastTouchChannel: last?.channel ?? null,
     lastFromThem,
@@ -332,13 +348,8 @@ export function summarize(all: Touchpoint[], now = new Date()): TouchpointSummar
     nextMeeting: upcoming,
     read: withRead ? { read: withRead.read!, on: withRead.on, byName: withRead.readByName } : null,
     lastResearched: research,
-    total: touches.length,
-    withFirm: {
-      total: firm.length,
-      lastTouch: firm.filter((t) => t.on && t.on.getTime() <= now.getTime()).reduce<Date | null>((a, t) => (!a || t.on! > a ? t.on! : a), null),
-      nextMeeting: firm.filter((t) => !t.on && t.scheduledFor && t.scheduledFor.getTime() > now.getTime())
-        .reduce<Date | null>((a, t) => (!a || t.scheduledFor! < a ? t.scheduledFor! : a), null),
-    },
+    total,
+    withFirm: { total: firmTotal, lastTouch: firmLast, nextMeeting: firmNext },
   };
 }
 

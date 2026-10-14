@@ -76,13 +76,17 @@ const money = (n: number | null) => (n ? ` of $${n >= 1e6 ? `${+(n / 1e6).toFixe
  */
 export function recordsOnFile(touches: Touchpoint[], tracks: CloseTrack[], now = new Date()): Partial<Record<LadderRung, RungRecord>> {
   const out: Partial<Record<LadderRung, RungRecord>> = {};
-  const held = touches
-    .filter((t) => !t.viaOrganization && t.on && t.on.getTime() <= now.getTime())
-    .sort((a, b) => a.on!.getTime() - b.on!.getTime());
-  // A meeting with them, not our event with twenty others (N81): coming to an event is opting in.
-  const meeting = held.find((t) => (t.channel === 'meeting' || t.channel === 'call') && !isEvent(t));
-  const gathering = held.find((t) => isEvent(t));
-  const reply = held.find((t) => (t.channel === 'email' || t.channel === 'message') && t.direction === 'theirs');
+  // The earliest of each kind held, in one pass (the first on record wins a tie, as a stable sort
+  // would give); sorting every LP's touchpoints was most of this per row (performance pass, 14 Oct 2026).
+  let meeting: Touchpoint | undefined, gathering: Touchpoint | undefined, reply: Touchpoint | undefined;
+  const earlier = (t: Touchpoint, than: Touchpoint | undefined) => !than || t.on!.getTime() < than.on!.getTime();
+  for (const t of touches) {
+    if (t.viaOrganization || !t.on || t.on.getTime() > now.getTime()) continue;
+    // A meeting with them, not our event with twenty others (N81): coming to an event is opting in.
+    if ((t.channel === 'meeting' || t.channel === 'call') && !isEvent(t)) { if (earlier(t, meeting)) meeting = t; }
+    if (isEvent(t)) { if (earlier(t, gathering)) gathering = t; }
+    if ((t.channel === 'email' || t.channel === 'message') && t.direction === 'theirs' && earlier(t, reply)) reply = t;
+  }
 
   if (meeting) {
     out.meeting_held = {

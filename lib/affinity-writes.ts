@@ -55,7 +55,7 @@ export interface WriteItem {
 export const callsFor = (plan: Plan) => (plan === 'person+note' ? 2 : plan === 'note' ? 1 : 0);
 export const day = (iso: string) => iso.slice(0, 10);
 
-/** The person in our copy of Affinity with each address (the newest record that lists it). */
+/** The person in Affinity with each address: our copy's newest record that lists it, else one we created. */
 async function affinityPersonIds(addresses: string[]): Promise<Map<string, number>> {
   const db = await getDb();
   const out = new Map<string, number>();
@@ -65,13 +65,21 @@ async function affinityPersonIds(addresses: string[]): Promise<Map<string, numbe
       cross join lateral (select r.payload->>'primaryEmailAddress' v
                           union select jsonb_array_elements_text(case when jsonb_typeof(r.payload->'emailAddresses') = 'array' then r.payload->'emailAddresses' else '[]'::jsonb end)) e
      where r.source = 'affinity' and r.kind = 'person' and lower(trim(e.v)) = any($1::text[]) and r.source_id ~ '^\\d+$'
+       -- Each person's newest record only: an address an older version listed may since have moved, or the person gone.
+       and not exists (select 1 from sources.raw_record n where n.source = 'affinity' and n.kind = 'person' and n.source_id = r.source_id
+                          and (n.fetched_at, n.id) > (r.fetched_at, r.id))
      order by lower(trim(e.v)), r.fetched_at desc, r.id desc`, [addresses])) out.set(r.email, Number(r.id));
+  // A person we created ourselves, which our copy may not have synced yet: never a second one for the address.
+  for (const r of await db.query<{ address: string; id: number }>(`select distinct on (address) address, created_person_id::float8 id
+      from sources.affinity_write_item where address = any($1::text[]) and created_person_id is not null
+     order by address, written_at desc nulls last, proposed_at desc`, [addresses])) if (!out.has(r.address)) out.set(r.address, r.id);
   return out;
 }
 
+const messageKey = (m: Message) => `${new Date(m.at).toISOString()}|${m.subject ?? ''}`;
 const mergeMessages = (a: Message[], b: Message[]) => {
   const seen = new Map<string, Message>();
-  for (const m of [...a, ...b]) seen.set(`${m.at}|${m.subject ?? ''}`, m);
+  for (const m of [...a, ...b]) seen.set(messageKey(m), m);
   return [...seen.values()].sort((x, y) => x.at.localeCompare(y.at));
 };
 
@@ -88,12 +96,23 @@ const shape = (r: WriteItem): WriteItem => ({ ...r, proposedAt: new Date(r.propo
 
 // ── POST /api/outreach/affinity · outreach_propose_affinity_writes ──────────────────────
 
-export async function proposeAffinityWrites(env: { owner: AppUser; principal: AppUser; tokenId: string }, raw: Record<string, unknown>) {
+type ProposeEnv = { owner: AppUser; principal: AppUser; tokenId: string };
+type Proposed = { address: string; name?: string; firm?: string; messages: Message[] };
+
+export async function proposeAffinityWrites(env: ProposeEnv, raw: Record<string, unknown>) {
   requireMutationProfile();
-  const a = raw as z.infer<typeof proposeInput>;
+  // A batch decided while this call planned is closed to it: plan again against the new open batch.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const done = await proposeOnce(env, raw as z.infer<typeof proposeInput>);
+    if (done) return done;
+  }
+  throw new Error('The open batch of Affinity writes kept being decided while proposing; try again.');
+}
+
+async function proposeOnce(env: ProposeEnv, a: z.infer<typeof proposeInput>) {
   const db = await getDb();
   // The same address twice in one call is one item.
-  const merged = new Map<string, { address: string; name?: string; firm?: string; messages: Message[] }>();
+  const merged = new Map<string, Proposed>();
   for (const it of a.items) {
     const m = merged.get(it.address);
     if (m) { m.messages = mergeMessages(m.messages, it.messages); m.name ??= it.name; m.firm ??= it.firm; }
@@ -109,30 +128,51 @@ export async function proposeAffinityWrites(env: { owner: AppUser; principal: Ap
   const check = (await checkParties(env.principal, { parties: [...merged.values()].map((it) => ({ address: it.address, sends: it.messages.map((m) => ({ at: m.at })) })) })).data;
   const known = new Map(check.parties.map((p) => [p.address, p]));
   const ids = await affinityPersonIds([...merged.keys()]);
-  // Already written for this address since its last send: nothing more to do.
-  const written = new Map((await db.query<{ address: string; at: Date }>(`select address, max(written_at) at from sources.affinity_write_item
-    where state = 'written' and address = any($1::text[]) group by address`, [[...merged.keys()]])).map((r) => [r.address, new Date(r.at).toISOString()]));
+  // The mail already written to Affinity for each address: a message noted once is not noted again. By message, not
+  // by day: mail sent later on the day of a write still needs its note (red-team pass, 14 Oct 2026).
+  const written = new Map<string, { at: string; keys: Set<string> }>();
+  for (const r of await db.query<{ address: string; at: Date; messages: Message[] }>(`select address, written_at at, messages from sources.affinity_write_item
+      where state = 'written' and address = any($1::text[])`, [[...merged.keys()]])) {
+    const w = written.get(r.address) ?? { at: new Date(r.at).toISOString(), keys: new Set<string>() };
+    if (new Date(r.at).toISOString() > w.at) w.at = new Date(r.at).toISOString();
+    for (const m of r.messages) w.keys.add(messageKey(m));
+    written.set(r.address, w);
+  }
 
-  const out: Array<{ address: string; itemId: string; plan: Plan; reason: string }> = [];
+  const planned: Array<{ it: Proposed; plan: Plan; reason: string; personId: number | null }> = [];
   for (const it of merged.values()) {
     const p = known.get(it.address);
     const aff = p && !p.internal ? p.affinity ?? null : null;
-    const last = day(it.messages.at(-1)!.at);
+    const done = written.get(it.address);
+    // Only the mail not yet noted goes in this item's note.
+    if (done) { const fresh = it.messages.filter((m) => !done.keys.has(messageKey(m))); if (fresh.length) it.messages = fresh; }
     const personId = ids.get(it.address) ?? null;
     let plan: Plan, reason: string;
     if (p?.internal) { plan = 'skip'; reason = 'Internal: the team or one of our domains.'; }
-    else if (written.get(it.address) && day(written.get(it.address)!) >= last) { plan = 'skip'; reason = `Already written to Affinity on ${day(written.get(it.address)!)}.`; }
+    else if (done && it.messages.every((m) => done.keys.has(messageKey(m)))) { plan = 'skip'; reason = `Already written to Affinity on ${day(done.at)}.`; }
     else if (aff?.covered) { plan = 'skip'; reason = `Affinity already has an email with them on ${aff.lastEmail}, on or after the last send.`; }
     else if (personId) { plan = 'note'; reason = `In Affinity${aff?.name ? ` as ${aff.name}` : ''}; its last email with them is ${aff?.lastEmail ?? 'none'}.`; }
     else { plan = 'person+note'; reason = 'No person in Affinity has this address.'; }
-    const row = await db.one<{ id: string }>(`insert into sources.affinity_write_item (batch_id, address, name, firm, messages, plan, reason, affinity_person_id, proposed_by, token_id)
-        values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10)
-        on conflict (batch_id, address) do update set name = coalesce(sources.affinity_write_item.name, excluded.name), firm = coalesce(sources.affinity_write_item.firm, excluded.firm),
-          messages = excluded.messages, plan = excluded.plan, reason = excluded.reason, affinity_person_id = excluded.affinity_person_id
-        returning item_id::text id`,
-    [batchId, it.address, it.name ?? null, it.firm ?? null, JSON.stringify(it.messages), plan, reason, personId, env.owner.id, env.tokenId]);
-    out.push({ address: it.address, itemId: row!.id, plan, reason });
+    planned.push({ it, plan, reason, personId });
   }
+  // Inserted with the batch held open (red-team pass, 14 Oct 2026): a decision waits for these items, and an item
+  // never lands in a batch already decided, where nothing would show or write it.
+  const out = await db.transaction(async (tx) => {
+    const b = await tx.one<{ status: string }>(`select status from sources.affinity_write_batch where batch_id = $1 for share`, [batchId]);
+    if (b?.status !== 'open') return null;
+    const rows: Array<{ address: string; itemId: string; plan: Plan; reason: string }> = [];
+    for (const { it, plan, reason, personId } of planned) {
+      const row = await tx.one<{ id: string }>(`insert into sources.affinity_write_item (batch_id, address, name, firm, messages, plan, reason, affinity_person_id, proposed_by, token_id)
+          values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10)
+          on conflict (batch_id, address) do update set name = coalesce(sources.affinity_write_item.name, excluded.name), firm = coalesce(sources.affinity_write_item.firm, excluded.firm),
+            messages = excluded.messages, plan = excluded.plan, reason = excluded.reason, affinity_person_id = excluded.affinity_person_id
+          returning item_id::text id`,
+      [batchId, it.address, it.name ?? null, it.firm ?? null, JSON.stringify(it.messages), plan, reason, personId, env.owner.id, env.tokenId]);
+      rows.push({ address: it.address, itemId: row!.id, plan, reason });
+    }
+    return rows;
+  });
+  if (!out) return null;
   await appendAudit({ actorId: env.owner.id, action: 'affinity.write_proposed', subjectType: 'affinity_write_batch', subjectId: batchId, detail: {
     tokenId: env.tokenId, items: out.length, plans: Object.fromEntries((['person+note', 'note', 'skip'] as Plan[]).map((k) => [k, out.filter((o) => o.plan === k).length])),
   } });

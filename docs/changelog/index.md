@@ -332,3 +332,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Faster LP lists, meetings, calendar and Today](entries/perf-lists.md)
 - [Reconcile sent mail: check parties, research on no vehicle, Affinity writes by batch](entries/mail-reconcile.md)
 - [Deploys go live sooner](entries/deploy-speed.md)
+- [Smaller calendar, faster pipeline after an edit, safer Affinity writes](entries/perf-redteam-1014.md)

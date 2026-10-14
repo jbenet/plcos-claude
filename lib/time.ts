@@ -30,11 +30,28 @@ function numericFormat(timeZone: string | undefined): Intl.DateTimeFormat {
   return f;
 }
 
+/**
+ * The numeric parts of one instant in one zone, kept: formatToParts was most of a list rebuild's date
+ * work, and a list's dates repeat (most are midnights). Bounded; cleared whole when full.
+ */
+const parts = new Map<string, Record<string, string>>();
+const PARTS_KEPT = 20_000; // GUESS: a few years of minutes-precision dates across the lists.
+function numericParts(date: Date, timeZone: string | undefined): Record<string, string> {
+  const key = `${timeZone ?? ''}|${date.getTime()}`;
+  let p = parts.get(key);
+  if (!p) {
+    p = {};
+    for (const x of numericFormat(timeZone).formatToParts(date)) p[x.type] = x.value;
+    if (parts.size >= PARTS_KEPT) parts.clear();
+    parts.set(key, p);
+  }
+  return p;
+}
+
 export function formatDate(value: Date | number | string, o: DateParts): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  const p: Record<string, string> = {};
-  for (const x of numericFormat(o.timeZone).formatToParts(date)) p[x.type] = x.value;
+  const p = numericParts(date, o.timeZone);
   const y = Number(p.year), m = Number(p.month), d = Number(p.day);
   const two = (v: number) => String(v).padStart(2, '0');
   const day = [
