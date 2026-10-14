@@ -194,6 +194,12 @@ the rest are entered in the app (/setup, then Settings → Connections). Seal th
    address, not 192.0.2.1. If it does not, set the hop count in Settings → Connections.
 6. **Deploys from then on:** Juan fast-forwards `deploy` after `scripts/ship.sh` passes. Rollback is one
    click: Deployments → an earlier one → Redeploy.
+7. **Deploys by any thread (14 Oct 2026).** Juan: merges must not deploy on their own, but every Claude thread may
+   deploy without asking him. A thread runs the **Deploy to Railway** GitHub Action
+   (`.github/workflows/deploy.yml`) with the GitHub MCP tool `actions_run_trigger` (`run_workflow`, workflow
+   `deploy.yml`, ref `master`); `.claude/settings.json` allows that tool. The Action waits until `/api/health` has
+   shown no `importing` for 5 minutes, fast-forwards `deploy` to master, then checks that Railway serves the commit
+   and `/signin` answers 200. A thread never pushes `deploy` itself.
 
 ## 5. Moving the database (one evening, rehearsed first)
 
