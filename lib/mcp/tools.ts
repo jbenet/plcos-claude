@@ -12,6 +12,7 @@ import { OUTREACH_READ, OUTREACH_WRITE } from '@/lib/outreach/scopes';
 import { addLp, addLpInput, undoAddLp, undoAddLpInput, UNDO_HOURS } from '@/lib/outreach/lps';
 import { auditRecent } from './audit';
 import { checkParties, partiesInput } from '@/lib/outreach/parties';
+import { affinityWritesStatus, proposeAffinityWrites, proposeInput as affinityWriteInput, statusInput as affinityWriteStatusInput } from '@/lib/affinity-writes';
 import { addResearch, researchInput, undoAddResearch, undoResearchInput } from '@/lib/outreach/research';
 import { insights, insightsInput, playbook, recordSignals, signalsFor, signalsInput, signalsReadInput } from '@/lib/outreach/signals';
 
@@ -235,6 +236,19 @@ export const TOOLS: readonly Tool[] = [
     description: `Take back a research request outreach_add_research made: by your own token's owner, within ${UNDO_HOURS} hours. Removes the request and the address it recorded, and retires the person if that call created them and nothing has referred to them since.`,
     input: undoResearchInput,
     run: (env, a) => undoAddResearch({ env }, a),
+  }),
+  // Affinity writes, approved by batch (docs/27 §5b; Juan, 14 Oct 2026). Proposing writes nothing to Affinity.
+  tool({
+    name: 'outreach_propose_affinity_writes', title: 'Outreach: propose Affinity writes', policy: { risk: 'propose', scopes: [OUTREACH_WRITE], ticket: 'none', approval: true },
+    description: 'Propose adding people you emailed to Affinity, with a note of the mail (date, subject; never a body) that Affinity\'s own sync missed. Each item is planned against PLC OS\'s copy of Affinity: skip (internal, already covered, or already written), a note on the person there, or the person and then the note. Items gather in the one open batch; proposing an address again merges its mail. Nothing reaches Affinity until an admin approves the batch in PLC OS (Approvals → Affinity writes).',
+    input: affinityWriteInput,
+    run: (env, a) => proposeAffinityWrites(env, a),
+  }),
+  tool({
+    name: 'outreach_affinity_writes', title: 'Outreach: Affinity writes and where they stand', policy: OUT_READ,
+    description: 'The open batch of proposed Affinity writes and the last five decided, or one batch by batchId: each of your items with its plan, state (proposed, approved, skipped, rejected, written, failed), the Affinity person and note ids once written, and the error when one failed.',
+    input: affinityWriteStatusInput,
+    run: (env, a) => affinityWritesStatus(env, a),
   }),
   // The comms trace (Juan, 5 Oct 2026: "let email be the state"). docs/27 §5–§6.
   tool({

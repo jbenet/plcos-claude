@@ -50,7 +50,8 @@ Each agent definition names its own read set. Do not read every linked detail fi
   artifacts, screenshots, issues, searches or sub-agent prompts. The narrowly permitted
   public-name research exception is in [Real data](docs/agent-rules/real-data.md).
 - No training on this project's data, for anyone.
-- Affinity, Polaris and Linear are read-only. Only the live server writes the real database.
+- Affinity, Polaris and Linear are read-only, except one Affinity path: a missing person and a note of the mail,
+  for a batch an admin approved (14 Oct 2026, [Real data](docs/agent-rules/real-data.md)). Only the live server writes the real database.
 - Demo reset/seed/screenshot commands must refuse real data. Applied migrations are immutable.
 - Never print or store the Affinity or Linear key; only `lib/connectors/affinity/` talks to
   Affinity and only `lib/connectors/linear/` talks to Linear.
@@ -131,7 +132,8 @@ Half of what went wrong in the alternate designs was building the wrong layer fi
 - **No connectors before L13.** No Drive, no DocSend. Everything else runs on
   seed data and fixtures until the product shape is proven. **Exceptions:** Affinity,
   read-only, from N38 (decided 22 Sep 2026, `docs/15`), and Linear, read-only (decided
-  27 Sep 2026, `docs/24-linear.md`). Writes to either are still prohibited; Linear writes
+  27 Sep 2026, `docs/24-linear.md`). Writes to either are still prohibited, except Affinity people and notes
+  approved by batch (14 Oct 2026, docs/27 §5b); Linear writes
   wait for Juan's approval of the gated plan in docs/24. Gmail, **drafts only**, per user
   (decided 2 Oct 2026, `docs/25-email-drafts.md`): drafts go into each person's own Gmail to
   send themselves. Since 3 Oct 2026 only through mailguard (docs/25 §12): only

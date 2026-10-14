@@ -116,8 +116,13 @@ export const config = {
      */
     tier: null as AffinityTier,
     syncMode: 'deferred' as AffinitySyncMode,
-    /** Read-only, enforced by the client (docs/15). Writing back is a later decision. */
+    /**
+     * Read-only, enforced by the client (docs/15), with one exception (Juan, 14 Oct 2026): lib/connectors/affinity/write.ts
+     * creates a missing person and a note of the mail, only for a batch a person approved in Approvals.
+     */
     readOnly: true,
+    /** The most Affinity requests one approved batch of writes may make (a person and a note are two). Under 300 a day in all. */
+    writeBatchMaxCalls: 100, // GUESS
     /** Our own ceiling per rolling minute. Affinity allows 900 per user; we need nowhere near it. */
     maxPerMinute: 300, // GUESS
     /**

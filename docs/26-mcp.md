@@ -111,6 +111,8 @@ form's writer (railway.md §7a). It sends nothing, decides no ticket and moves n
 | `comms_trace` | read | outreach:read | — | One LP's merged timeline from the comms trace: Affinity, Gmail via juanmail, PLC OS and Affinity notes, linked Linear issues, each with its source, one row per event (docs/27 §6a) |
 | `outreach_check_parties` | read | outreach:read | — | For each address emailed: internal or not, on file in PLC OS, its pursuits, which raises the mail was about, whether PLC OS's copy of Affinity has the person and the mail, with suggested fixes; no Affinity call (docs/27 §4e) |
 | `outreach_add_research` / `outreach_undo_add_research` | write-guarded | outreach:write | — | Put a person you emailed into the research set on no vehicle, matched first; undo within a day (docs/27 §5a) |
+| `outreach_propose_affinity_writes` | propose | outreach:write | — | Propose adding emailed people missing from Affinity, and a note of the mail, to the open batch; nothing reaches Affinity until an admin approves (docs/27 §5b) |
+| `outreach_affinity_writes` | read | outreach:read | — | The open and recent batches of Affinity writes, with each of your items' state and Affinity ids (docs/27 §5b) |
 | `create_email_draft` | propose | — | — | A first message or an intro ask, saved in the app for its owner; not moved to Gmail, not sent |
 | `file_feedback` | propose | — | — | An issue, journaled like the feedback box, optionally about a logged call (`callId`); only the live app files |
 | `outreach_request_ticket` | propose | outreach:write | opens | For an autonomous call only: a SEND (one email, named recipients) or INTRO_ASK ticket for a person to approve; never approves it. A person's call opens nothing and gets the checks |
