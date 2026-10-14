@@ -24,6 +24,7 @@ export async function register() {
   // A deployed server that is not set up yet prints its one-time /setup code (docs/deploy/railway.md §3).
   void import('./lib/settings/setup').then((m) => m.announceAtBoot()).catch(() => console.error('[setup] Could not check whether setup is open.'));
   // Reconciliation's rules changed (issue 0137): read every LP again once, in the background.
-  void import('./lib/reconcile').then((m) => m.reconcileIfRulesChanged()).catch(() => console.error('[reconcile] Could not run at start.'));
+  // The desktop app's copy (docs/31) takes reconciliation's results from the live server, never makes its own.
+  if (process.env.PLCOS_DESKTOP_COPY !== '1') void import('./lib/reconcile').then((m) => m.reconcileIfRulesChanged()).catch(() => console.error('[reconcile] Could not run at start.'));
   void import('./lib/daily-timer').then((m) => m.startDailyTimer()).catch(() => console.error('[daily] Could not start timer.'));
 }

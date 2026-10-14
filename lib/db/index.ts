@@ -172,8 +172,9 @@ async function boot(dir?: string): Promise<Db> {
   // getDb(), and without this line that call would await the promise it is running inside.
   g.__capitalOsDb = Promise.resolve(db);
 
-  if (config.db.rehearsal) {
-    // A copied database is already initialized. Rehearsal must not read live init files.
+  if (config.db.rehearsal || config.data.desktopCopy) {
+    // A copied database is already initialized. Rehearsal must not read live init files, and the desktop app's
+    // copy (docs/31) takes its team and vehicles from the live server, never from a template here.
   } else if (config.data.profile === 'real') {
     const { loadInit } = await import('../real/init');
     await loadInit(db);

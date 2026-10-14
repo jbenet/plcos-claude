@@ -1,0 +1,14 @@
+{
+  "name": "plcos-desktop",
+  "private": true,
+  "scripts": {
+    "icon": "tauri icon icon-source.png -o src-tauri/icons",
+    "core": "PLCOS_DESKTOP_VERBOSE=1 PLCOS_DESKTOP_STDIN_EXIT=0 node core/core.mjs",
+    "dev": "tauri dev",
+    "build": "tauri build --bundles app",
+    "install-app": "npm run build && rm -rf \"$HOME/Applications/PLC OS.app\" && mkdir -p \"$HOME/Applications\" && cp -R \"src-tauri/target/release/bundle/macos/PLC OS.app\" \"$HOME/Applications/\" && open \"$HOME/Applications/PLC OS.app\""
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.9.6"
+  }
+}

@@ -33,7 +33,9 @@ export async function Page({
   const sources = sync.sources.map((s) => `${s.label}: ${s.status}`).join('\n');
   // A preview (docs/COLLAB.md) serves a copy that never syncs, so the bar dates the copy instead of
   // reporting the syncs inside it as if they were this server's.
-  const copied = config.data.copyTakenAt ? new Date(config.data.copyTakenAt) : null;
+  // The desktop app's copy keeps syncing from the live server and sends every change there (docs/31), so it reads
+  // as the live data, not as a frozen copy.
+  const copied = config.data.copyTakenAt && !config.data.desktopCopy ? new Date(config.data.copyTakenAt) : null;
 
   return (
     <PageFrame

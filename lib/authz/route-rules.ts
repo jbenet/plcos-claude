@@ -52,6 +52,12 @@ export const routeRules = {
   'app/auth/google/callback/route.ts#GET': 'public',
   'app/auth/signout/route.ts#POST': 'public',
   'app/setup/submit/route.ts#POST': 'public',
+  // The desktop app's pairing (docs/31 §2): the app is not signed in yet; a signed-in person decides on /desktop/pair.
+  'app/api/desktop/pair/route.ts#POST': 'public',
+  'app/api/desktop/info/route.ts#GET': 'read',
+  // Its local copy (docs/31 §3): the whole database and the build's action key, so Admins only, as a snapshot is.
+  'app/api/desktop/sync/route.ts#GET': 'admin',
+  'app/api/desktop/build/route.ts#GET': 'admin',
   'app/dev/shot/[...path]/route.ts#GET': 'admin',
   'app/issues/shot/[...path]/route.ts#GET': 'admin',
 } as const satisfies Record<string, Action | 'mcp' | 'outreach' | 'sync:snapshot' | 'sync:push' | 'sync:admin' | 'public'>;

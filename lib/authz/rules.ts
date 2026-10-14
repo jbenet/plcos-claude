@@ -119,6 +119,8 @@ export const actionRules = {
   'app/soft-hard/actions.ts#requestHarden': { action: 'mutate', scope: 'exposure' },
   'app/soft-hard/actions.ts#recordWire': { action: 'admin', scope: 'exposure' },
   'app/standup/pin.ts#pinToday': { action: 'mutate', scope: 'global' },
+  // The desktop app acts as the person who allows it (docs/31 §2): their own session, nobody else's.
+  'app/desktop/pair/actions.ts#decidePairingAction': { action: 'read', scope: 'self' },
   'app/targets/actions.ts#requestLadderAdvance': { action: 'mutate', scope: 'pursuit' },
   'app/targets/actions.ts#setPursuitStatus': { action: 'mutate', scope: 'pursuit' },
   'app/targets/actions.ts#retractRungAction': { action: 'mutate', scope: 'pursuit' },
