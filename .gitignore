@@ -24,3 +24,4 @@ issues/inbox/
 
 # A stray lock file a session tool writes in the working directory
 memory:.lock
+.image-commit

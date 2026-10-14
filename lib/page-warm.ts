@@ -119,7 +119,10 @@ export async function warm(port: string, paths: string[], cookie: string | null 
   for (const path of paths) {
     try {
       // The pass (when there is one) goes to this server's own loopback address and nowhere else.
-      const res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(PAGE_TIMEOUT_MS), redirect: 'manual', ...(cookie ? { headers: { cookie } } : {}) });
+      // The desktop app's copy answers only requests carrying its launch secret (proxy.ts, docs/31).
+      const desktop = process.env.PLCOS_DESKTOP_SECRET;
+      const headers: Record<string, string> = { ...(cookie ? { cookie } : {}), ...(desktop ? { 'x-plcos-desktop': desktop } : {}) };
+      const res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(PAGE_TIMEOUT_MS), redirect: 'manual', headers });
       await res.arrayBuffer(); // the render finishes only when the stream is read
       if (res.ok) ok++; else if (needsSignIn(res.status, res.headers.get('location'))) signin++; else failed++;
     } catch { failed++; }

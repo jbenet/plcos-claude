@@ -175,6 +175,14 @@ async function serverJson(pathname, { method = 'GET', body } = {}) {
   return { status: res.status, json, location: res.headers.get('location') };
 }
 
+/** A GET to the live server as the person, for the local copy (its build and its rows). */
+function remoteFetch(pathname) {
+  const headers = { origin: SERVER.origin, 'user-agent': `PLC-OS-desktop/${VERSION}` };
+  const cookie = cookieHeader('remote');
+  if (cookie) headers.cookie = cookie;
+  return fetch(new URL(pathname, SERVER), { headers, redirect: 'manual', signal: AbortSignal.timeout(30 * 60_000) });
+}
+
 async function refreshInfo() {
   if (!state.session) return null;
   const r = await serverJson('/api/desktop/info');
@@ -357,7 +365,7 @@ const page = (title, body) => `<!doctype html><html><head><meta charset="utf-8">
 :root{--bg:#f6f5f1;--card:#fff;--ink:#1d1d1b;--mute:#6b6a64;--line:#e4e2da;--accent:#1f4f8a}
 @media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#1f1f1c;--ink:#ecebe6;--mute:#9b9a93;--line:#33322e;--accent:#8db7f0}}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"IBM Plex Sans",system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px 32px;max-width:440px;width:calc(100% - 32px);box-sizing:border-box}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px 32px;max-width:560px;width:calc(100% - 32px);box-sizing:border-box}
 h1{font-size:20px;margin:0 0 8px}p{margin:8px 0;color:var(--mute)}b{color:var(--ink)}
 .code{font:600 30px/1.2 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:4px;color:var(--ink);margin:16px 0}
 a.btn,button{display:inline-block;background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 16px;font:inherit;text-decoration:none;cursor:pointer}
@@ -381,6 +389,26 @@ function pairPage() {
 
 function offlinePage(why) {
   return page('Offline · PLC OS', `<h1>Can't reach PLC OS</h1><p>The server at <b>${esc(SERVER.host)}</b> did not answer (${esc(why)}).</p><p><a class="btn" href="javascript:location.reload()">Try again</a></p>`);
+}
+
+function aboutPage() {
+  const s = statusJson();
+  const l = s.local;
+  const row = (k, v) => `<tr><td style="color:var(--mute);padding:3px 16px 3px 0;vertical-align:top">${esc(k)}</td><td>${v}</td></tr>`;
+  const when = (iso) => (iso ? esc(new Date(iso).toLocaleString()) : '—');
+  return page('PLC OS · this Mac', `<h1>PLC OS on this Mac</h1>
+    <table style="border-collapse:collapse;margin:12px 0">
+      ${row('Signed in as', s.user ? `<b>${esc(s.user.name)}</b> (${esc(s.user.access)})` : 'nobody')}
+      ${row('Live server', `${esc(SERVER.host)} · build ${esc(s.remoteCommit ?? '?')}`)}
+      ${row('Local copy', l ? `<b>${esc(l.phase)}</b> · ${esc(l.detail)}` : 'off')}
+      ${l ? row('Local build', esc(l.build ?? '—')) : ''}
+      ${l?.lastSync ? row('Last sync', `${when(l.lastSync.at)} · ${l.lastSync.tables} table(s), ${l.lastSync.rows} row(s) in ${l.lastSync.ms} ms`) : ''}
+      ${row('Requests', `${s.stats.local} from this Mac · ${s.stats.remote} from the server · ${s.stats.static} cached files · ${s.stats.writes} changes sent`)}
+    </table>
+    <p>Reads come from this Mac when its copy is current; every change goes to the live server, as you.</p>
+    <p><button onclick="fetch('/__desktop/sync',{method:'POST'}).then(()=>setTimeout(()=>location.reload(),1500))">Sync now</button>
+       <a class="link" href="/today" style="margin-left:12px">Back to PLC OS</a></p>
+    <script>setTimeout(()=>location.reload(),5000)</script>`);
 }
 
 function statusJson() {
@@ -417,6 +445,7 @@ const server = http.createServer(async (req, res) => {
     const write = !(req.method === 'GET' || req.method === 'HEAD');
     if (write && req.headers.origin && req.headers.origin !== ORIGIN && req.headers.origin !== `http://localhost:${PORT}`) { res.writeHead(403).end('cross-origin'); return; }
 
+    if (url.pathname === '/__desktop/about') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(aboutPage()); return; }
     if (url.pathname === '/__desktop/status') { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(statusJson())); return; }
     if (url.pathname === '/__desktop/pair') {
       if (req.method === 'POST') { await readBody(req); try { await startPairing(); } catch (e) { state.pairing = { state: 'failed', error: String(e?.message ?? e) }; } res.writeHead(303, { location: '/__desktop/pair' }).end(); return; }
@@ -467,7 +496,7 @@ async function boot() {
     try {
       if (!existsSync(path.join(HERE, 'local.mjs'))) throw new Error('no local.mjs');
       const { startLocal } = await import(path.join(HERE, 'local.mjs'));
-      state.local = await startLocal({ state, log, serverJson, refreshInfo, DATA_DIR, SERVER, agents });
+      state.local = await startLocal({ state, log, refreshInfo, remoteFetch, DATA_DIR });
     } catch (e) { log('the local copy did not start:', String(e?.stack ?? e)); }
   }
   // Learn when the live server deploys a new build (the local copy follows it).

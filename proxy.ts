@@ -74,6 +74,12 @@ export function proxy(req: NextRequest) {
   // A rewrite can reenter the proxy. Only our signed, request-bound context can bypass
   // canonical redirects; arbitrary client markers and modified contexts are discarded.
   const routed = routingContext(req.headers);
+  // The desktop app's copy (docs/31 §3) answers only its own core, which sends this launch's secret: not a page in
+  // a browser, nor a name rebound onto the loopback port.
+  const desktop = process.env['PLCOS_DESKTOP_SECRET'];
+  if (process.env['PLCOS_DESKTOP_COPY'] === '1' && pathname !== '/api/health' && (!desktop || req.headers.get('x-plcos-desktop') !== desktop) && !routed) {
+    return new NextResponse('This copy answers only the PLC OS app.', { status: 403 });
+  }
   if (routed && routed.path === pathname + req.nextUrl.search && routed.method === req.method) {
     return NextResponse.next({ request: { headers: new Headers(req.headers) } });
   }

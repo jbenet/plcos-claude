@@ -7,13 +7,15 @@ import { config } from '@/config/deployment';
 /**
  * GET /api/desktop/build (docs/31): stream `tar -cz` of the running app, minus what the Mac installs or must never
  * get. The excludes are anchored at the top: node_modules (the Mac installs its own, for its own platform), Next's
- * cache, the data root, .git and env files.
+ * cache, the data root, .git, env files, the desktop apps' sources and source maps.
  */
 const g = globalThis as typeof globalThis & { __desktopBuildBusy?: boolean };
 
 export function buildExcludes(dataRoot: string = config.data.root): string[] {
   const top = dataRoot.split('/')[0] || 'data';
-  return ['./node_modules', './.next/cache', `./${top}`, './.git', './.env', './.env.*', './issues/inbox', './.next-real', './.next-real-prod'];
+  return ['./node_modules', './.next/cache', './.next/trace', `./${top}`, './.git', './.env', './.env.*', './issues/inbox', './.next-real', './.next-real-prod',
+    // Not needed to run: the desktop apps' own sources (and any Rust build output beside them) and source maps.
+    './desktop', './tsconfig.tsbuildinfo', '*.map'];
 }
 
 export async function buildResponse(cwd: string = process.cwd()): Promise<Response> {

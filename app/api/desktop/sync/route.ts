@@ -19,7 +19,7 @@ export const GET = withRoute('app/api/desktop/sync/route.ts#GET', async (request
   if (op === 'state') {
     const { builtFrom } = await import('@/lib/authz/route');
     const s = await syncState();
-    return new Response(JSON.stringify({ ok: true, commit: builtFrom(), ...s }), { headers });
+    return new Response(JSON.stringify({ ok: true, commit: builtFrom() ?? process.env.GIT_COMMIT?.slice(0, 12) ?? null, ...s }), { headers });
   }
   if (op === 'rows') {
     const r = await syncRows(p.get('t') ?? '', p.get('since'), cursor(), Number(p.get('limit') ?? 2000));
