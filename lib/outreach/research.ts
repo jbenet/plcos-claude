@@ -4,7 +4,7 @@ import { requireMutationProfile } from '@/lib/mutation-policy';
 import { resolveEntity } from '@/modules/identity/create';
 import { appendAudit } from '@/modules/platform';
 import { peopleWithAddress } from './addresses';
-import { changed, refCounts, UNDO_HOURS } from './lps';
+import { changed, claimReliedOnSince, refCounts, UNDO_HOURS } from './lps';
 import { OutreachRefused } from './reads';
 import { deskActor, once, type DeskContext } from './writes';
 
@@ -136,7 +136,7 @@ export async function undoAddResearch(ctx: DeskContext, raw: Record<string, unkn
     // The person is retired only when this call created them and nothing has referred to them since.
     const retire = req.createdEntity && changed(req.refs, await refCounts(tx, 'identity', 'entity', entityId)).length === 0;
     await tx.query('delete from research.note where note_id = $1', [req.noteId]);
-    if (req.claimId) await tx.query('delete from research.claim where claim_id = $1', [req.claimId]);
+    if (req.claimId && !(await claimReliedOnSince(tx, entityId, addedAt))) await tx.query('delete from research.claim where claim_id = $1', [req.claimId]);
     if (req.sourceRecord && retire) {
       await tx.query(`delete from research.note where entity_id = $1 and kind = 'identity_creation' and data->>'source' = 'mail_desk' and data->>'sourceId' = $2`, [entityId, req.sourceRecord]);
       await tx.query(`delete from identity.source_record where source = 'mail_desk' and source_id = $1`, [req.sourceRecord]);

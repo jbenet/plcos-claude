@@ -12,6 +12,7 @@ Postgres 16.
 | /neurotech/calendar | — | 5.6 MB |
 | /neurotech/pipeline | 2.75 MB | 2.36 MB |
 | Every vehicle's list, rebuilt after a status move | ~1.9 s | ~1.4 s |
+| JuanMail's queue read (a page of 50, cached list) | ~1.2 s | ~0.46 s, same answer |
 
 - **Packed lists send less** (`lib/packed-rows.ts`):
   - A column equal to an earlier one is sent as that column's name, for example an organisation's `entityId` and
@@ -25,6 +26,11 @@ Postgres 16.
   - Status conversion is worked out once per status, not once per LP across every move.
   - Formatted dates reuse the parts of an instant they have already seen.
   - The status-move history walks a merge chain only for a merged pursuit: 133 ms → 51 ms at 4,000 moves.
+- **The outreach queue** reads each vehicle's touchpoints from the list's own cache (`touchesOn`). It used to read every
+  LP's touchpoints again on each poll. On the fixture, the old and new answers were byte-for-byte the same across four
+  pages of every vehicle.
+- **The strategy page's "This week"** lists the latest 100 status changes, and says how many there were. A reconcile
+  pass can move thousands of LPs in a week; 2,800 moves were 1.1 MB of the page.
 
 ## Red-team fixes: Affinity writes by batch (PR #138)
 
@@ -44,9 +50,26 @@ A review of the newest merges found these, and each one now has a property:
   new batch.
 - A malformed batch id is refused with a message, instead of a server error.
 
+## Red-team fixes: calendar feeds, status moves from mail, undo
+
+- **One calendar entry could stop the server.** A repeat with a huge interval (`RRULE:FREQ=YEARLY;INTERVAL=300000`)
+  ran past the last date JavaScript can hold. After that every comparison was false and the loop never ended. It now
+  stops there, and after 200,000 steps in any case.
+- **A calendar that stopped mid-download failed the whole Calendar page.** Reading the body is now that calendar's
+  error, so the page falls back to the last good copy. The body is also read only up to 5 MB.
+- **Reconciliation could overwrite a person's status.** It read every status at the start of a pass and set the new
+  ones much later. A person who marked an LP Passed or Committed, or undid a move, in between lost that change. Each
+  move now re-reads the status under a lock and gives way if it changed.
+- **Undoing a research request removed an address a later add relied on.** For example: a research request, then a
+  pitch to the same person the same day, then the research undone. The new LP lost its address. Both undos now keep a
+  claim that a later add or confirmed contact relies on.
+
 Left as they are:
 
 - When two people propose the same address, the note names the first. Only JuanMail proposes today, for one sender.
+- When `comms_ingest` matches a message, it reconciles that person's LPs on every vehicle, not only the token's.
+  Reconciliation reads only records on file and would make the same moves on its next full pass.
+- If the server restarts mid-call, that call's idempotency key answers "still being handled" from then on.
 - An item a restart interrupts mid-write stays "approved". The person it created is still recorded, so a retry adds
   the note and does not create the person again.
 

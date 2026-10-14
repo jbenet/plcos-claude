@@ -85,4 +85,18 @@ export async function outreachResearchProperties(check: Check, db: Db) {
   check('Research on no vehicle: undo removes the request and retires the person it created; a second undo is refused',
     undo.status === 200 && left?.notes === 0 && left.retired === true && twice.status === 409,
     `undo ${undo.status} ${JSON.stringify(undo.json?.data ?? undo.json)?.slice(0, 120)}; notes left ${left?.notes}, retired ${left?.retired}; again ${twice.status}`);
+
+  // Red-team pass, 14 Oct 2026: research requested, then the same person pitched (the add reuses the address claim),
+  // then the research undone: the LP keeps the address it was reached at.
+  const { fund } = await fixtures(db);
+  const both = { address: 'reuse@invented-research.example', name: 'Invented Reuse Research', source: 'props-reconcile', idempotencyKey: 'props-research-reuse' };
+  const rr = await call(rw, 'research', {}, { method: 'POST', body: both });
+  const rid = rr.json?.data?.entityId as string;
+  const lp = await call(rw, 'lps', {}, { method: 'POST', body: { vehicle: fund.slug, person: { name: both.name, email: both.address }, idempotencyKey: 'props-research-reuse-lp',
+    evidence: { gmailMessageIds: ['19e2inventedreuse'], messageIds: ['<props-research-reuse@mail.invented.example>'], words: 'INVENTED_EVIDENCE: pitched after the research request.' } } });
+  const undoReuse = await call(rw, 'research', { entityId: rid }, { method: 'DELETE' });
+  const kept = await db.one(`select 1 from research.claim where entity_id = $1 and value = $2 and superseded_by is null`, [rid, both.address]);
+  check('Research on no vehicle: undoing a request keeps the address an LP added since relies on',
+    rr.status === 200 && lp.status === 200 && lp.json?.data?.entityId === rid && undoReuse.status === 200 && Boolean(kept),
+    `research ${rr.status}; lp ${lp.status} ${JSON.stringify(lp.json?.data ?? lp.json)?.slice(0, 120)}; undo ${undoReuse.status}; claim kept ${Boolean(kept)}`);
 }
