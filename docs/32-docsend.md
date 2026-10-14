@@ -52,22 +52,31 @@ viewed, percent complete) when the source says. A visit is evidence of attention
 
 ```
 docsend.visit
-  visit_key       text primary key    -- source + source id; idempotent re-delivery (types.ts seam 4)
+  visit_id        text primary key    -- source + source id; idempotent re-delivery (types.ts seam 4)
   source          text                -- 'affinity_note' | 'webhook' | 'csv' | 'api'
-  visitor_email   text                -- lowercased; null when the link was not email-gated
-  document_name   text
-  link_url        text                -- https://docsend.com/view/… when the source gives it
-  space_name      text                -- the data room, when the visit was to a Space
-  viewed_at       timestamptz
+  started_at      timestamptz
   duration_sec    integer null
   pages_viewed    integer null
-  completion_pct  numeric null
+  page_count      integer null        -- pages in the document, so share viewed = pages_viewed / page_count
+  page_seconds    jsonb null          -- {"1": 42, "2": 7, …} when the source gives time per page
+  viewer_email    text null           -- lowercased; null when the link was not email-gated
+  entity_id       uuid null           -- canonical LP entity, matched by email the way comms are (§5)
+  link_id         text null           -- DocSend link id (the docsend.com/view/<id> part)
+  link_url        text null
+  document_id     text null
+  document_title  text null
+  space_id        text null           -- the data room, when the visit was to a Space
+  space_name      text null
+  vehicle_id      uuid null           -- from docsend.vehicle_map (§5); null when unmapped
   raw             jsonb               -- the payload as it arrived, for replay
   received_at     timestamptz
 ```
 
+`docsend.vehicle_map(kind 'link'|'document'|'space', key, vehicle_id, set_by, set_at)` holds the mapping.
+`docsend.sync_state(source, last_synced_at, last_error)` gives each source's as-of time.
+
 The same visit can arrive by Affinity and by Zapier. Rows are deduplicated per
-(visitor_email, document_name, viewed_at rounded to the minute), keeping the richer source, so counts never
+(viewer_email, document title, started_at rounded to the minute), keeping the richer source, so counts never
 double.
 
 ## 4. Routes
@@ -98,14 +107,14 @@ it stays in our database and `data/real/`, never in git, screenshots or prompts 
 
 ## 5. Mapping visits to LPs and vehicles
 
-**Visitor → LP.** `visitor_email` against the email identities we already resolve (Affinity person emails,
-mail and calendar addresses). One match → that person and their pursuits. No match → the visit is kept and
+**Visitor → LP.** `viewer_email` resolved to a canonical `entity_id` the same way comms are (`lib/comms`,
+`identity.canonical_entity_id`). One match → that LP and their pursuits. No match → the visit is kept and
 listed as "unknown visitor" with the email, so a person can attach it; it is never guessed onto an LP by
 name. Our own team's views (internal emails) are kept but excluded from every count.
 
 **Visit → vehicle**, first rule that applies:
 1. `link_url` equals a material's pasted link → that material's vehicle.
-2. `space_name` or `document_name` matches a mapping row an Admin set on the Materials page
+2. `space_id`, `document_id` or their names match a `docsend.vehicle_map` row an Admin set on the Materials page
    ("Neurotech Fund I data room" → PLC Neurotech I). Unmapped names show there with their visit counts, so
    mapping one is a single pick.
 3. Otherwise the visit has no vehicle and counts only in "unmapped". Never spread across vehicles
@@ -113,17 +122,14 @@ name. Our own team's views (internal emails) are kept but excluded from every co
 
 ## 6. Precomputed outputs (what the conversion page reads)
 
-A background job (the existing daily timer plus a run after each ingest) rebuilds, never on page open:
+The module exposes one read, `visitsFor(vehicleId)` in `modules/docsend`, for the conversion page's
+buildCache: every visit mapped to that vehicle with the §3 fields, plus `asOf` (the oldest
+`last_synced_at` across the sources that are on). Unmatched visits come back with `entity_id = null`.
+Fields a source cannot fill (duration and pages from Affinity notes) are null, never zero.
 
-```
-docsend.vehicle_lp_views     -- one row per (vehicle, LP person)
-  vehicle_id, person_id, first_view_at, last_view_at, visits, documents, total_sec (null if unknown),
-  sources text[], partial boolean
-docsend.vehicle_views_daily  -- one row per (vehicle, day): visits, distinct visitors, distinct LPs
-```
-
-These are what "Outreach conversion per vehicle" charts against, and what an LP's timeline shows. The
-shape is the proposal to that thread; it changes only by agreement with it.
+A background job (the existing daily timer plus a run after each ingest) refreshes the mapping and
+entity matches on stored rows, never on page open, so `visitsFor` is a plain indexed read. Agreed with
+the "Outreach conversion per vehicle" thread (14 Oct 2026); the shape changes only by agreement with it.
 
 ## 7. Config
 
