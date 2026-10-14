@@ -138,6 +138,13 @@ export async function visualizationPursuits(vehicleId: string | null): Promise<V
 }
 
 /** Preserve the global corpus disclosure without loading every pursuit's full record. */
+/** Open pursuits per vehicle (no closed_at), counted in the database rather than by loading every pursuit (performance pass, 14 Oct 2026). */
+export async function openPursuitCounts(): Promise<Map<string, number>> {
+  const db = await getDb();
+  const rows = await db.query<{ v: string; n: number }>(`select vehicle_id::text v, count(*)::int n from (${PURSUIT_SELECT}) p where p.closed_at is null group by 1`);
+  return new Map(rows.map((r) => [r.v, r.n]));
+}
+
 export async function pursuitCount(): Promise<number> {
   const db = await getDb();
   const row = await db.one<{ n: number }>(`select count(*)::int as n from (${PURSUIT_SELECT}) p`);
