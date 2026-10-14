@@ -16,6 +16,7 @@ import type { PursuitStatus } from '@/modules/strategy';
 import { participantIndex, affinityIdentityEvidence, type PersonIdentity, type Participant } from './participants';
 import { resolveEntity } from '@/modules/identity/create';
 import { RAISE_SET_IN_APP } from '@/modules/platform';
+import { expireOutreachTicketsFor } from '@/modules/governance';
 
 /**
  * Translation (N47, docs/16 §4): the landed copy, read through the mapping, into the tool's
@@ -332,6 +333,8 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
                 [entity, `Marked “${m.doNotContact}”: yes, on the Affinity list “${t.list.name}”. Do not approach, by any route.`, doc],
               );
               counts.restrictions++;
+              // An approval given before this would still let an agent send (rule 8).
+              await expireOutreachTicketsFor(tx, entity);
             }
           }
         }

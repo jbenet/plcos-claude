@@ -83,7 +83,25 @@ A review of the newest merges found these, and each one now has a property:
 - **The same check read Affinity's last email from the wrong person** when the address matched a duplicate. It now reads
   both the matched person and the one Affinity's record links to, and takes the later email.
 
+
+## Red-team fixes: send tickets
+
+- **A do-not-contact recorded after an approval did not stop the agent.** When the daily Affinity translation records
+  one, that LP's open SEND and INTRO_ASK tickets now end at once.
+- **A person's link could spend an agent's ticket.** Linking their own sent mail picked any approved ticket for those
+  recipients. It then refused the person's earlier mail as "sent before the approval", or used up the agent's
+  approval. A person's link now uses a ticket only when they name one.
+- **An agent could skip the ticket by linking our own mail as received.** An autonomous link of a message from a team
+  address as received is refused.
+- **A material withdrawn after its ticket was approved could still be recorded as sent.** Recording a send checks that
+  the material is still approved.
+
 Left as they are:
+
+- An INTRO_ASK ticket's email is not checked against the connector's addresses: the ask stores none yet. That needs a
+  migration.
+- An idempotency key is not tied to its payload or its token, so reusing a key with a different body returns the first
+  answer. Only JuanMail calls, with one token per person. That also needs a migration.
 
 - If one daily step fails, the rest of that day's chain is skipped, and nothing retries until the next day. The
   property suite asserts this on purpose, and a retry would spend the Affinity call budget again.

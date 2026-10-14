@@ -184,6 +184,8 @@ export async function markSendSent(actorId: string, sendId: string, tx: Queryabl
       exemption: vehicle!.exemption, instrument: row.instrument,
       audience: asset!.audience, permittedUse: asset!.permittedUse,
     }, tx);
+    // Withdrawn or retired since the ticket was approved: no longer sendable (red-team pass, 14 Oct 2026).
+    if (asset!.status !== 'approved') throw new Error(`The asset is "${asset!.status}", not approved, since the approval. Nothing was sent.`);
     if (!check.allowed || asset!.flags.length > 0) {
       throw new Error(
         'The wrap check no longer passes, or a claim underneath the asset changed since ' +

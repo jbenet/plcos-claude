@@ -144,3 +144,19 @@ export async function decideTicket(
 }
 
 export { appendAudit };
+
+/**
+ * A do-not-contact restriction recorded on someone ends their open SEND and INTRO_ASK tickets at once: an approval given
+ * before it would otherwise still let an agent send until it expired (rule 8; red-team pass, 14 Oct 2026). Unused
+ * tickets only; the number ended.
+ */
+export async function expireOutreachTicketsFor(q: Queryable, entityId: string): Promise<number> {
+  const rows = await q.query<{ id: string }>(`update governance.approval_ticket t set expires_at = now()
+     where t.kind in ('SEND', 'INTRO_ASK') and (t.expires_at is null or t.expires_at > now())
+       and (t.id in (select o.ticket_id from email.outreach_send o where o.sent_at is null and o.ticket_id is not null
+                      and identity.canonical_entity_id(o.entity_id) = identity.canonical_entity_id($1::uuid))
+         or (t.subject_type = 'ask' and t.subject_id in (select a.ask_id from coordination.ask a
+                      where identity.canonical_entity_id(a.entity_id) = identity.canonical_entity_id($1::uuid))))
+     returning t.id::text id`, [entityId]);
+  return rows.length;
+}
