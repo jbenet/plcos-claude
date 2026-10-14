@@ -12,6 +12,7 @@ Postgres 16.
 | /neurotech/calendar | 5.6 MB (after the first change below) | 4.5 MB |
 | /neurotech/pipeline | 2.75 MB | 2.19 MB |
 | /performance (content performance) | 5.7 MB | 0.2 MB |
+| /neurotech/visualizations | 1.82 MB | 1.25 MB |
 | Every vehicle's list, rebuilt after a status move | ~1.9 s | ~1.4 s |
 | JuanMail's queue read (a page of 50, cached list) | ~1.2 s | ~0.46 s, same answer |
 
@@ -22,6 +23,9 @@ Postgres 16.
     they are. A tail that is the same as an earlier text column's tail is sent as `0`. For example, a calendar row's
     link `/meetings?e=<LP>&m=<meeting>` ends in its own id's meeting, and the links went from 5.1 MB to 0.8 MB.
   - A shared column with 36 distinct values or fewer (a lane, a standing, a vehicle) sends one character per row.
+  - A column of dates is sent as numbers. A column that is an earlier one with the same text around it on every row
+    (an LP's key, `<entityId>:neurotech`) is sent as that column's name and the text around it. The visualizations'
+    rows read back equal to the rows sent, on every vehicle.
 - **The calendar's week grid** was sent as plain rows (1.1 MB); it is packed like the list. It reads each row's dates
   once instead of once per lane and week on every click, and the numbers above the list are counted in one pass. Both
   render the same markup as before on 300 random calendars.

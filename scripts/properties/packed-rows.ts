@@ -15,8 +15,9 @@ export async function packedRowsProperties(check: Check) {
   check('PACKED ROWS read back equal to the rows packed: values, types, missing keys and Dates',
     back.length === rows.length && back.every((row, i) => isDeepStrictEqual(row, rows[i]))
       && back.every((row, i) => ('optional' in row) === ('optional' in rows[i]!)), JSON.stringify(back.slice(0, 2)));
-  check('PACKED ROWS share repeated plain values, and send other columns as they are',
-    'd' in packed.c.scoreKind! && 'd' in packed.c.spv! && 'v' in packed.c.at! && 'v' in packed.c.nan!,
+  check('PACKED ROWS share repeated plain values, send Dates as instants, and other columns as they are',
+    'd' in packed.c.scoreKind! && 'd' in packed.c.spv! && 'e' in packed.c.at! && 'v' in packed.c.nan!
+      && back[0]!.at !== back[1]!.at && (back[0]!.at as Date).getTime() === when.getTime(),
     JSON.stringify(Object.fromEntries(Object.entries(packed.c).map(([k, c]) => [k, 'd' in c ? 'shared' : 'raw']))));
   check('PACKED ROWS keep a string and a number that print alike apart',
     back.every((row, i) => row.odd === rows[i]!.odd), '');
@@ -38,13 +39,17 @@ export async function packedRowsProperties(check: Check) {
     href: i % 5 ? `/meetings?e=e-${i % 40}&m=${(i * 7919).toString(16).padStart(8, '0')}` : `/close/${i}`,
     link: i % 6 ? `/meetings?e=e-${i % 40}&m=${(i * 7919).toString(16).padStart(8, '0')}-invented` : `/close`,
     loose: i % 2 ? `x${i}` : null, copyOfLoose: i % 2 ? `x${i}` : null, text: i % 4 ? 'same' : 'other', notText: i % 4 ? 'same' : 0,
+    key: `e-${i % 40}:invented`, almostKey: i === 399 ? 'other' : `e-${i % 40}:invented`,
+    seen: i % 3 ? new Date(Date.UTC(2026, 9, 1 + (i % 9), 10)) : null, ...(i % 3 ? { mixed: new Date(Date.UTC(2026, 9, 1)) } : {}),
   }));
   const shapedPacked = packRows(shaped), shapedBack = unpackRows<typeof shaped[number]>(shapedPacked);
   check('PACKED ROWS send a column equal to an earlier one as its name, and split unique text by its shape',
     shapedBack.every((row, i) => isDeepStrictEqual(row, shaped[i]) && ('maybe' in row) === ('alsoMaybe' in row))
       && 'a' in shapedPacked.c.orgId! && 'a' in shapedPacked.c.alsoMaybe! && 'a' in shapedPacked.c.m! && 'a' in shapedPacked.c.copyOfLoose!
       && !('a' in shapedPacked.c.notText!) && 'h' in shapedPacked.c.href! && 'h' in shapedPacked.c.id!
-      && (shapedPacked.c.link as { r?: string }).r === 'id',
+      && (shapedPacked.c.link as { r?: string }).r === 'id'
+      && (shapedPacked.c.key as { a?: string; s?: string }).s === ':invented' && !('a' in shapedPacked.c.almostKey!)
+      && 'e' in shapedPacked.c.seen! && 'v' in shapedPacked.c.mixed! && shapedBack[1]!.seen !== shapedBack[10]!.seen,
     JSON.stringify(Object.fromEntries(Object.entries(shapedPacked.c).map(([k, c]) => [k, Object.keys(c).join('')]))));
   check('PACKED ROWS of no rows read back as no rows', unpackRows(packRows([])).length === 0, '');
 }
