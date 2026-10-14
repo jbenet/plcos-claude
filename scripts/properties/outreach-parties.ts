@@ -52,3 +52,37 @@ export async function outreachPartiesProperties(check: Check, db: Db) {
     && r.json.data.counts.parties === 4 && r.json.data.counts.internal === 1 && before === after,
     `stranger: ${JSON.stringify({ issues: s?.issues, raise: s?.raiseVehicles, suggest: s?.suggest?.map((x: any) => x.action) })}; copied: ${c?.suggest?.map((x: any) => x.action)}; rows ${before}→${after}`);
 }
+
+/**
+ * outreach_add_research (docs/27 §5a), on invented data: a person goes into the research set on no vehicle, matched
+ * first; a second request changes nothing; the research export takes them with no pursuit; undo takes it back.
+ */
+export async function outreachResearchProperties(check: Check, db: Db) {
+  const { resetWindows } = await import('../../lib/mcp/envelope');
+  const { OUTREACH_READ, OUTREACH_WRITE } = await import('../../lib/outreach/scopes');
+  const { researchSet } = await import('../../lib/enrich/candidates');
+  resetWindows();
+  const call = await outreachClient();
+  const { juan, token } = await fixtures(db);
+  const rw = await token(juan, [OUTREACH_READ, OUTREACH_WRITE]);
+  const ro = await token(juan, [OUTREACH_READ]);
+  const body = { address: 'Quill@Invented-Research.example', name: 'Invented Quill Research', firm: 'Invented Research Partners', note: 'Invented: emailed about a talk.', source: 'props-reconcile', idempotencyKey: 'props-research-1' };
+  const refused = await call(ro, 'research', {}, { method: 'POST', body });
+  const r = await call(rw, 'research', {}, { method: 'POST', body });
+  const id = r.json?.data?.entityId as string;
+  const again = await call(rw, 'research', {}, { method: 'POST', body: { ...body, idempotencyKey: 'props-research-2' } });
+  const pursuits = (await db.one<{ n: number }>(`select count(*)::int n from strategy.pursuit where entity_id = $1`, [id]))!.n;
+  const claim = await db.one(`select 1 from research.claim where entity_id = $1 and field = 'email' and value = 'quill@invented-research.example'`, [id]);
+  const inSet = (await researchSet()).some((c) => c.key === id && c.pursuits.length === 0);
+  check('Research on no vehicle: needs outreach:write; adds the person with the address and a request, in no pipeline; a second request changes nothing; the research set takes them',
+    refused.status === 403 && r.status === 200 && r.json.data.created === true && r.json.data.requested === true && pursuits === 0 && Boolean(claim)
+    && again.status === 200 && again.json.data.entityId === id && again.json.data.requested === false && inSet,
+    `read-only ${refused.status}; add ${r.status} ${JSON.stringify(r.json?.data ?? r.json)?.slice(0, 120)}; again requested=${again.json?.data?.requested}; pursuits ${pursuits}; in set ${inSet}`);
+  const undo = await call(rw, 'research', { entityId: id }, { method: 'DELETE' });
+  const left = await db.one<{ notes: number; retired: boolean }>(`select (select count(*)::int from research.note where entity_id = $1 and kind = 'research_request') notes,
+    (select retired_at is not null from identity.entity where entity_id = $1) retired`, [id]);
+  const twice = await call(rw, 'research', { entityId: id }, { method: 'DELETE' });
+  check('Research on no vehicle: undo removes the request and retires the person it created; a second undo is refused',
+    undo.status === 200 && left?.notes === 0 && left.retired === true && twice.status === 409,
+    `undo ${undo.status} ${JSON.stringify(undo.json?.data ?? undo.json)?.slice(0, 120)}; notes left ${left?.notes}, retired ${left?.retired}; again ${twice.status}`);
+}

@@ -183,13 +183,15 @@ async function researchSnapshot() {
   // below skips Dakota's, and nothing from dakota.* is exported).
   const allPursuits = await listPursuits(null);
   const all = allPursuits.filter(inResearchSet);
+  // Asked for with no vehicle (outreach_add_research, 14 Oct 2026): researched like an LP, in no pipeline.
+  const requested = new Set((await db.query<{ id: string }>(`select distinct identity.canonical_entity_id(entity_id)::text as id from research.note where kind = 'research_request'`)).map(r => r.id));
   const tagged = await db.query<{ id: string }>(`select distinct identity.canonical_entity_id(entity_id)::text as id from meetings.meeting where cardinality(about_vehicles)>0`);
   const byEntity = new Map<string, Pursuit[]>();
   for (const p of all) byEntity.set(p.entityId, [...(byEntity.get(p.entityId) ?? []), p]);
   const lpIds = [...byEntity.keys()];
   const contacts = await lpContactsFor(lpIds, undefined, { excludeDakota: true });
-  const ids = [...new Set([...tagged.map(t => t.id), ...lpIds, ...[...contacts.values()].flatMap(cs => cs.map(c => c.entityId))])];
-  if (!ids.length) return { candidates: [] as Candidate[], touches: new Map<string, import('@/modules/meetings').Touchpoint[]>(), entries: [] as Entry[] };
+  const ids = [...new Set([...tagged.map(t => t.id), ...lpIds, ...requested, ...[...contacts.values()].flatMap(cs => cs.map(c => c.entityId))])];
+  if (!ids.length) return { requested, candidates: [] as Candidate[], touches: new Map<string, import('@/modules/meetings').Touchpoint[]>(), entries: [] as Entry[] };
 
   // entity_type includes audited local corrections; both export files must use this DB value.
   const [entities, affiliations, links, entries, contact] = await Promise.all([
@@ -360,13 +362,13 @@ async function researchSnapshot() {
   for (const c of out) if (byEntity.has(c.key) && c.contact.awaitingSince) sentOn.set(c.contact.awaitingSince, (sentOn.get(c.contact.awaitingSince) ?? 0) + 1);
   for (const c of out) c.contact.outreachShared = c.contact.awaitingSince ? (sentOn.get(c.contact.awaitingSince) ?? 0) : 0;
   const byKey = new Map(out.map(c => [c.key, c]));
-  const candidates = out.filter(c => byEntity.has(c.key) || c.vehicleTaggedWithoutPursuit?.length).map(c => ({ ...c,
+  const candidates = out.filter(c => byEntity.has(c.key) || requested.has(c.key) || c.vehicleTaggedWithoutPursuit?.length).map(c => ({ ...c,
     ...(contacts.has(c.key) ? { contacts: contacts.get(c.key)!.flatMap(person => {
       const contact = byKey.get(person.entityId);
       return contact ? [{ ...contact, contacts: undefined, contactRole: person.role }] : [];
     }) } : {}),
   }));
-  return { candidates, touches: everything, entries: entries.map((r) => r.payload) };
+  return { requested, candidates, touches: everything, entries: entries.map((r) => r.payload) };
 }
 
 /** A row's tag as the strategy step reads it (N81). */
@@ -395,7 +397,7 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
   // empty placeholders for them (27 Sep). It stays in the pipeline, just not in the export.
   const dir = enrichDir();
   const snapshot = await researchSnapshot();
-  const set = snapshot.candidates.filter((c) => c.pursuits.length > 0 && /[\p{L}\p{N}].*[\p{L}\p{N}]/u.test(c.name ?? ''));
+  const set = snapshot.candidates.filter((c) => (c.pursuits.length > 0 || snapshot.requested.has(c.key)) && /[\p{L}\p{N}].*[\p{L}\p{N}]/u.test(c.name ?? ''));
   await mkdir(dir, { recursive: true });
   const identity = (c: Candidate): ResearchIdentity => ({
     key: c.key, name: c.name, type: c.type, org: c.org, role: c.role, location: c.location, domains: c.domains,

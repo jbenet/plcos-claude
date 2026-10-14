@@ -49,6 +49,8 @@ const OPS: Record<string, Op> = {
   playbook: { tool: 'outreach_playbook', method: 'GET' },
   // An LP added from mail (docs/27 §5); DELETE ?pursuitId= undoes one this op added, within a day.
   lps: { tool: 'outreach_add_lp', method: 'POST', del: { tool: 'outreach_undo_add_lp' } },
+  // Someone to research, on no vehicle (docs/27 §5a); DELETE ?entityId= undoes it, within a day.
+  research: { tool: 'outreach_add_research', method: 'POST', del: { tool: 'outreach_undo_add_research' } },
   trace: { tool: 'comms_trace', method: 'GET' },
   audit: { tool: 'audit_recent', method: 'GET' },
   // Mail reconcile (docs/27 §4e): POST the addresses you emailed, get what PLC OS and Affinity know of each.
