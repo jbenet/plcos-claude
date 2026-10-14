@@ -8,16 +8,17 @@ Postgres 16.
 
 | What | Before | After |
 |---|---|---|
-| /all/calendar | 11.6 MB | 9.1 MB |
-| /neurotech/calendar | — | 7.3 MB |
-| /neurotech/pipeline | 2.75 MB | 2.64 MB |
+| /all/calendar | 11.6 MB | 6.9 MB |
+| /neurotech/calendar | — | 5.6 MB |
+| /neurotech/pipeline | 2.75 MB | 2.36 MB |
 | Every vehicle's list, rebuilt after a status move | ~1.9 s | ~1.4 s |
 
 - **Packed lists send less** (`lib/packed-rows.ts`):
   - A column equal to an earlier one is sent as that column's name, for example an organisation's `entityId` and
     `orgId`, or its `org` and `name`.
   - Unique text with a few shapes is split at its last `=`, `:` or `/`. The heads are shared and the tails are sent as
-    they are. For example, each calendar row's link `/meetings?e=<LP>&m=<meeting>` went from 5.1 MB to 2.8 MB.
+    they are. A tail that is the same as an earlier text column's tail is sent as `0`. For example, a calendar row's
+    link `/meetings?e=<LP>&m=<meeting>` ends in its own id's meeting, and the links went from 5.1 MB to 0.8 MB.
 - **The list rebuild after a status move:**
   - Each LP's touchpoint summary is made in one pass instead of a dozen filters.
   - "On file" finds the first meeting, reply and event without sorting every touchpoint.
