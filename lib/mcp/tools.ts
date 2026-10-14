@@ -10,6 +10,7 @@ import { contactInput, contacts, requestTicket, ticketInput, update, updateInput
 import { commsTrace, ingest, ingestInput, link, linkInput, recordSendAlias, sentInput, traceInput } from '@/lib/outreach/comms';
 import { OUTREACH_READ, OUTREACH_WRITE } from '@/lib/outreach/scopes';
 import { auditRecent } from './audit';
+import { checkParties, partiesInput } from '@/lib/outreach/parties';
 import { insights, insightsInput, playbook, recordSignals, signalsFor, signalsInput, signalsReadInput } from '@/lib/outreach/signals';
 
 /**
@@ -231,6 +232,13 @@ export const TOOLS: readonly Tool[] = [
     description: 'One LP\'s timeline from the comms trace: Affinity\'s emails, meetings and calls, the Gmail messages you reported, PLC OS updates and notes, Affinity notes and linked Linear issues — each with its source, one row per event (matched by Message-ID, else date, participants and subject, with a confidence). With last touch, who owes a reply, who holds the thread, and where the app\'s log and the trace disagree.',
     input: traceInput,
     run: (env, a) => commsTrace({ env }, a),
+  }),
+  // Mail reconcile (docs/27 §4e): who you emailed, checked against PLC OS and its copy of Affinity. Read-only.
+  tool({
+    name: 'outreach_check_parties', title: 'Check emailed parties', policy: OUT_READ,
+    description: 'For each address you emailed (with when, and optionally the subject and To line of each send): whether it is internal, on file in PLC OS (by claim or Affinity), in which vehicles\' pipelines, which raises the mail was about, whether Affinity has the person and an email with them as recent as your last send. Each party comes with issues and suggested fixes (add_lp, research, affinity_add_person, affinity_add_note). Uses PLC OS\'s daily copy of Affinity; no Affinity request is made.',
+    input: partiesInput,
+    run: (env, a) => checkParties(env.principal, a),
   }),
   // Your own calls (docs/26 §4): what this person's tokens did, for a client's own history.
   tool({

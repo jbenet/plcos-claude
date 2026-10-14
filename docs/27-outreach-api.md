@@ -443,6 +443,47 @@ vehicle (or on every vehicle the token reads), in one page:
   source: "gmail", confirmedBy, confirmedAt?, idempotencyKey? }`. `pursuitId` (7 Oct 2026) names the LP by its pursuit;
   give one of the two.
 
+## 4e. Check emailed parties (14 Oct 2026)
+
+Juan wants a reconcile page for everyone he emails: are they in PLC OS, in the right vehicle's pipeline, in Affinity, and
+is the mail in Affinity. JuanMail holds the mail and hosts the page; PLC OS answers for its own records.
+
+`POST /api/outreach/parties` (MCP `outreach_check_parties`, outreach read scope) takes up to 200 parties, each with up to
+500 sends:
+
+```json
+{ "parties": [{ "address": "ravi@invented.example", "name": "Ravi Invented",
+    "sends": [{ "at": "2026-10-13T16:02:00Z", "subject": "Invented Fund I: update", "to": true }] }] }
+```
+
+and answers, per address, read-only and without calling Affinity:
+
+```json
+{ "data": {
+    "parties": [{ "address": "ravi@invented.example", "internal": false, "name": "Ravi Invented", "sends": 1,
+      "firstSent": "2026-10-13", "lastSent": "2026-10-13",
+      "onFile": { "entityId": "7f3a…", "name": "Ravi Invented", "matchedBy": "claim" },
+      "pursuits": [{ "vehicle": "spv-cortex", "status": "selected", "via": "self" }],
+      "raiseVehicles": ["fund-i"],
+      "affinity": { "person": true, "name": "Ravi Invented", "lastEmail": "2026-10-08", "covered": false },
+      "issues": ["no_pursuit", "email_not_in_affinity"],
+      "suggest": [{ "action": "add_lp", "vehicle": "fund-i", "reason": "…" }, { "action": "affinity_add_note", "lastSent": "2026-10-13", "reason": "…" }] }],
+    "counts": { "parties": 1, "internal": 0, "notOnFile": 0, "noPursuit": 1, "notInAffinity": 0, "emailNotInAffinity": 1 },
+    "affinityCopyAsOf": "2026-10-14T03:04:00.000Z", "note": "…" } }
+```
+
+- `internal`: the team, its domains, the fundraising domains and Protocol Labs'. Nothing more is said about them.
+- `onFile`: an email claim (never Dakota's), else a person in PLC OS's copy of Affinity with that address.
+- `pursuits` and `add_lp` cover only the vehicles the token reads; `via` is `self`, `firm` (their current firm) or
+  `contact` (they are a contact on that LP's pursuit).
+- `raiseVehicles` comes from sends with `to` not false, by the same classifier the Affinity sync uses
+  (lib/connectors/affinity/about.ts). Someone copied in is never pitched by the mail.
+- `add_lp` is only for active vehicles other than the grants rail, never for a portfolio company or a teammate; it goes to
+  `POST /api/outreach/lps`. `research` is for an unknown address with no raise mail.
+- `affinity.*` is PLC OS's daily copy as of `affinityCopyAsOf`. `covered` is true when Affinity's last email with them is
+  on or after the last send, by day. `affinity_add_person` and `affinity_add_note` are for the Affinity writes Juan
+  approves by batch (14 Oct 2026); that write path is not built yet.
+
 ## 5. Write
 
 | MCP tool | REST | Risk (docs/26 §3) |

@@ -75,10 +75,10 @@ const startOf = (e: CalendarEvent) => (e.start.dateTime ? new Date(e.start.dateT
 /** One occurrence across everyone's calendars: Google keeps one iCalUID for an event in every guest's calendar. */
 const keyOf = (e: CalendarEvent, start: Date) => createHash('sha256').update(`${e.iCalUID ?? e.id}\u0000${start.toISOString()}`).digest('hex').slice(0, 24);
 /** GUESS: personal mail services. A guest there names no firm, and a teammate there does not make the domain ours. */
-const PUBLIC_MAIL = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'icloud.com', 'me.com', 'mac.com',
+export const PUBLIC_MAIL = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'icloud.com', 'me.com', 'mac.com',
   'proton.me', 'protonmail.com', 'pm.me', 'aol.com', 'fastmail.com', 'hey.com', 'gmx.com', 'zoho.com']);
 /** GUESS: Protocol Labs' own domains beyond the team's addresses: a guest there is ours, not an LP. */
-const PL_DOMAINS = ['protocol.ai'];
+export const PL_DOMAINS = ['protocol.ai'];
 const domainOf = (address: string) => address.slice(address.lastIndexOf('@') + 1);
 /** GUESS: an LP's name is looked for only when it is distinctive enough: a firm of 4 or more letters, a person by two words or more. */
 const nameWorthy = (name: string, type: string) => (type === 'person' ? name.trim().split(/\s+/).length >= 2 && name.trim().length >= 6 : name.trim().length >= 4);
@@ -107,7 +107,7 @@ async function lpUniverse(q: Queryable): Promise<{ lps: Set<string>; contactOf: 
  * callers filtering on `email` (lowercased). Affinity's addresses never became claims (lib/outreach/addresses.ts), so
  * reading claims alone left nearly every meeting matched by name only.
  */
-const AFFINITY_PERSON_EMAILS = `
+export const AFFINITY_PERSON_EMAILS = `
     select lower(trim(e.v)) email, identity.canonical_entity_id(s.entity_id)::text id
       from sources.raw_record r
       cross join lateral (select r.payload->>'primaryEmailAddress' v
@@ -148,7 +148,7 @@ async function firmsByDomain(domains: string[], lps: Set<string> | null, q: Quer
   return out;
 }
 
-const NOT_A_PERSON = /(@resource\.calendar\.google\.com|@group\.calendar\.google\.com|@group\.v\.calendar\.google\.com|@import\.calendar\.google\.com)$/;
+export const NOT_A_PERSON = /(@resource\.calendar\.google\.com|@group\.calendar\.google\.com|@group\.v\.calendar\.google\.com|@import\.calendar\.google\.com)$/;
 
 /** The people on record behind addresses (email claims, never Dakota's licensed ones) and each one's current firms. */
 async function partiesOf(addresses: string[], q: Queryable): Promise<Map<string, { person: string; firms: string[] }>> {

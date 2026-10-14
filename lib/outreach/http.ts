@@ -47,6 +47,8 @@ const OPS: Record<string, Op> = {
   playbook: { tool: 'outreach_playbook', method: 'GET' },
   trace: { tool: 'comms_trace', method: 'GET' },
   audit: { tool: 'audit_recent', method: 'GET' },
+  // Mail reconcile (docs/27 §4e): POST the addresses you emailed, get what PLC OS and Affinity know of each.
+  parties: { tool: 'outreach_check_parties', method: 'POST' },
 };
 
 /** null: no Origin (a device or a server) or same-origin; a string: an allowlisted origin; false: refused. */
