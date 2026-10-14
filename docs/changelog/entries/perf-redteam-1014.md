@@ -13,6 +13,7 @@ Postgres 16.
 | /neurotech/pipeline | 2.75 MB | 2.19 MB |
 | /performance (content performance) | 5.7 MB | 0.2 MB |
 | /neurotech/visualizations | 1.82 MB | 1.25 MB |
+| /today | ~0.27 s | ~0.05 s, same page |
 | Every vehicle's list, rebuilt after a status move | ~1.9 s | ~1.4 s |
 | JuanMail's queue read (a page of 50, cached list) | ~1.2 s | ~0.46 s, same answer |
 
@@ -41,6 +42,8 @@ Postgres 16.
 - **The outreach queue** reads each vehicle's touchpoints from the list's own cache (`touchesOn`). It used to read every
   LP's touchpoints again on each poll. On the fixture, the old and new answers were byte-for-byte the same across four
   pages of every vehicle.
+- **Today** reads only the LPs at Connecting, and counts the open ones in the database. It loaded every pursuit with
+  its history on each visit.
 - **Content performance** lists the LPs with a rung on file, the latest 200, and counts the rest. It listed every
   pursuit, most with nothing on file.
 - **The strategy page's "This week"** lists the latest 100 status changes, and says how many there were. A reconcile

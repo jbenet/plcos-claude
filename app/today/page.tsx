@@ -14,7 +14,7 @@ import { usdM, multiple } from '@/lib/money';
 import { KIND_CLASS, listOpenTickets } from '@/modules/governance';
 import { listAsks, listConflicts } from '@/modules/coordination';
 import { listPursuits } from '@/lib/authz/read/strategy';
-import { touchesOn } from '@/modules/strategy';
+import { openPursuitCounts, touchesOn } from '@/modules/strategy';
 import { listExposures, vehicleTotals } from '@/modules/pipeline';
 import { sprintStrip, urgency } from '@/modules/calendar';
 import { actionableSignals, heldBack } from '@/modules/signals';
@@ -29,7 +29,8 @@ async function Today() {
 }
 
 async function todayContent() {
-  const [user, sink, selection, audit, tickets, conflicts, asks, pursuits, totals, weeks, urgencyState] =
+  // Only the LPs at Connecting are read whole; the open count is counted (performance pass, 14 Oct 2026).
+  const [user, sink, selection, audit, tickets, conflicts, asks, connecting, openCounts, totals, weeks, urgencyState] =
     await Promise.all([
       auth().then((a) => a.currentUser()),
       issueSink(),
@@ -38,7 +39,8 @@ async function todayContent() {
       listOpenTickets(),
       listConflicts('open'),
       listAsks(),
-      listPursuits(),
+      listPursuits(null, { status: 'connecting' }),
+      openPursuitCounts(),
       vehicleTotals(),
       sprintStrip(7),
       urgency(),
@@ -58,7 +60,6 @@ async function todayContent() {
   const blocked = asks.filter((a) => a.status === 'blocked');
   // Waiting on a first reply (N62, issue 0008): LPs at Connecting with nothing from them on
   // record — the status's view of what "stuck at rung one" used to count. Longest wait first.
-  const connecting = pursuits.filter((p) => p.status === 'connecting');
   // Each vehicle's touchpoints from the cache its pipeline keeps (network 020), not a fresh read of them all.
   const touches = new Map((await Promise.all([...new Set(connecting.map((p) => p.vehicleId))].map((id) => touchesOn(id)))).flatMap((m) => [...m]));
   // A pair the cache has no entry for (no touchpoints yet, or an import's new pursuit the build predates) is read fresh.
@@ -119,7 +120,7 @@ async function todayContent() {
             <div className="lbl">Coverage</div>
             <div className="n">{focus.coverage === null ? '—' : multiple(focus.coverage)}</div>
             <div className="f">
-              Pipeline depth, not money. {pursuits.filter((p) => p.vehicleId === focus.vehicleId && !p.closedAt).length}{' '}
+              Pipeline depth, not money. {openCounts.get(focus.vehicleId) ?? 0}{' '}
               pursuits open.
             </div>
           </div>
