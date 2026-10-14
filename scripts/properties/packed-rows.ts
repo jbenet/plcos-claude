@@ -31,5 +31,20 @@ export async function packedRowsProperties(check: Check) {
     'l' in nested.c.people! && again.every((row, i) => isDeepStrictEqual(row, listed[i]))
       && again[1]!.people !== again[5]!.people && JSON.stringify(nested).length < JSON.stringify(listed).length * 0.7,
     `${JSON.stringify(nested).length} vs ${JSON.stringify(listed).length}`);
+  // A column equal to an earlier one is sent as its name; unique text of a few shapes splits at its last separator.
+  const shaped = Array.from({ length: 400 }, (_, i) => ({
+    id: `meet:${(i * 7919).toString(16).padStart(8, '0')}-invented`, entityId: `e-${i % 40}`, orgId: `e-${i % 40}`,
+    ...(i % 9 ? { maybe: `m${i}`, alsoMaybe: `m${i}` } : {}), n: i % 3 ? i : null, m: i % 3 ? i : null,
+    href: i % 5 ? `/meetings?e=e-${i % 40}&m=${(i * 7919).toString(16).padStart(8, '0')}` : `/close/${i}`,
+    link: i % 6 ? `/meetings?e=e-${i % 40}&m=${(i * 7919).toString(16).padStart(8, '0')}-invented` : `/close`,
+    loose: i % 2 ? `x${i}` : null, copyOfLoose: i % 2 ? `x${i}` : null, text: i % 4 ? 'same' : 'other', notText: i % 4 ? 'same' : 0,
+  }));
+  const shapedPacked = packRows(shaped), shapedBack = unpackRows<typeof shaped[number]>(shapedPacked);
+  check('PACKED ROWS send a column equal to an earlier one as its name, and split unique text by its shape',
+    shapedBack.every((row, i) => isDeepStrictEqual(row, shaped[i]) && ('maybe' in row) === ('alsoMaybe' in row))
+      && 'a' in shapedPacked.c.orgId! && 'a' in shapedPacked.c.alsoMaybe! && 'a' in shapedPacked.c.m! && 'a' in shapedPacked.c.copyOfLoose!
+      && !('a' in shapedPacked.c.notText!) && 'h' in shapedPacked.c.href! && 'h' in shapedPacked.c.id!
+      && (shapedPacked.c.link as { r?: string }).r === 'id',
+    JSON.stringify(Object.fromEntries(Object.entries(shapedPacked.c).map(([k, c]) => [k, Object.keys(c).join('')]))));
   check('PACKED ROWS of no rows read back as no rows', unpackRows(packRows([])).length === 0, '');
 }

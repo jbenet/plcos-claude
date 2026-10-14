@@ -149,7 +149,7 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
             </span>
           </div>
 
-          <CalendarWindow rows={rows.filter(r => new Date(r.to ?? r.from).getTime() >= first && new Date(r.from).getTime() <= last + 86_400_000)} lanes={[...new Set(rows.map(r => r.lane))]} first={weeks[0]!.start.toISOString()} weeks={weeks.length} now={now.toISOString()} look={windowLook} />
+          <CalendarWindow packed={packRows(rows.filter(r => new Date(r.to ?? r.from).getTime() >= first && new Date(r.from).getTime() <= last + 86_400_000))} lanes={[...new Set(rows.map(r => r.lane))]} first={weeks[0]!.start.toISOString()} weeks={weeks.length} now={now.toISOString()} look={windowLook} />
 
         </div>
       )}

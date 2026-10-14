@@ -83,6 +83,8 @@ function duration(value: string): number | null {
 
 /** GUESS: a rule left unbounded still stops here; a travel or events calendar never needs more in a window. */
 const MAX_OCCURRENCES = 500;
+/** GUESS: steps walked before giving up, in or out of the window (a daily rule since 1900 is ~46k). */
+const MAX_STEPS = 200_000;
 
 function expand(rule: string, start: Date, allDay: boolean, from: Date, to: Date): Date[] | null {
   const r = Object.fromEntries(rule.split(';').map((p) => p.split('=') as [string, string]).map(([k, v]) => [k.toUpperCase(), v ?? '']));
@@ -93,12 +95,15 @@ function expand(rule: string, start: Date, allDay: boolean, from: Date, to: Date
   const count = r.COUNT ? Number(r.COUNT) : Infinity;
   const until = r.UNTIL ? icsTime(r.UNTIL)?.at ?? null : null;
   const out: Date[] = [];
-  for (let n = 0; n < count && out.length < MAX_OCCURRENCES; n++) {
+  for (let n = 0; n < count && out.length < MAX_OCCURRENCES && n < MAX_STEPS; n++) {
     const d = new Date(start);
     if (freq === 'DAILY') d.setUTCDate(d.getUTCDate() + n * interval);
     if (freq === 'WEEKLY') d.setUTCDate(d.getUTCDate() + n * 7 * interval);
     if (freq === 'MONTHLY') d.setUTCMonth(d.getUTCMonth() + n * interval);
     if (freq === 'YEARLY') d.setUTCFullYear(d.getUTCFullYear() + n * interval);
+    // Past the last date a Date holds (INTERVAL=300000), every comparison is false: stop, or this never ends
+    // and the one server process with it (red-team pass, 14 Oct 2026).
+    if (!Number.isFinite(d.getTime())) break;
     if (until && d.getTime() > until.getTime() + (allDay ? 86_399_999 : 0)) break;
     if (d.getTime() > to.getTime()) break;
     if (d.getTime() >= from.getTime() - 366 * 86_400_000) out.push(d);

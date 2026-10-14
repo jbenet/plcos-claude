@@ -88,4 +88,47 @@ export async function affinityWriteProperties(check: Check, db: Db) {
     && sent.some((s) => s.kind === 'note' && s.arg.personIds[0] === 880001) && /2026-10-08 · Invented hello/.test(noteOnKnown?.content ?? '')
     && after.filter((a) => a.state === 'written').length === 2 && after.some((a) => a.state === 'skipped') && twice instanceof aw.WriteBatchRefused,
     `not admin: ${String((notAdmin as Error)?.message).slice(0, 40)}; over cap: ${String((overCap as Error)?.message).slice(0, 40)}; written ${res.written}; calls ${sent.map((s) => s.kind).join(',')}; states ${after.map((a) => a.state).join(',')}`);
+
+  // ── Red-team pass, 14 Oct 2026 ──
+  // Proposing again after a write: the person we created is noted, never made twice; mail already noted is not noted
+  // again, while mail sent later the same day is; an address an older Affinity record listed is not a match.
+  await db.query(`insert into sources.raw_record (source, kind, source_id, payload_hash, payload, fetched_at) values
+    ('affinity', 'person', '777002', 'props-aw-2', $1::jsonb, now() - interval '2 days'),
+    ('affinity', 'person', '777002', 'props-aw-3', $2::jsonb, now())`,
+    [JSON.stringify({ id: 777002, firstName: 'Invented', lastName: 'Moved', emailAddresses: ['moved@invented-aw.example'] }),
+     JSON.stringify({ id: 777002, firstName: 'Invented', lastName: 'Moved', emailAddresses: ['elsewhere@invented-aw.example'] })]);
+  const writtenDay = new Date().toISOString().slice(0, 10);
+  const later = new Date(Date.now() + 60_000).toISOString();
+  const re = await call(rw, 'affinity', {}, { method: 'POST', body: { items: [
+    { address: 'new.person@invented-aw.example', messages: [{ at: at('2026-10-09'), subject: 'Invented intro' }] },
+    { address: 'known@invented-aw.example', messages: [{ at: at('2026-10-08'), subject: 'Invented hello' }, { at: later, subject: 'Invented same day' }] },
+    { address: 'moved@invented-aw.example', messages: [{ at: at('2026-10-10'), subject: 'Invented moved' }] },
+  ] } });
+  const rePlan = new Map<string, any>((re.json?.data?.items ?? []).map((i: any) => [i.address, i]));
+  const reItems = (await aw.openWriteBatch())?.items ?? [];
+  const knownItem = reItems.find((i) => i.address === 'known@invented-aw.example');
+  check('Affinity writes: proposing again skips mail already noted, notes mail sent later the same day, and reads only each Affinity person\'s newest record',
+    rePlan.get('new.person@invented-aw.example')?.plan === 'skip' && rePlan.get('known@invented-aw.example')?.plan === 'note'
+    && knownItem?.messages.length === 1 && knownItem.messages[0]!.subject === 'Invented same day'
+    && rePlan.get('moved@invented-aw.example')?.plan === 'person+note',
+    `plans ${JSON.stringify([...rePlan.values()].map((i) => [i.address, i.plan]))}; known messages ${knownItem?.messages.length}; day ${writtenDay}`);
+  // The person we created and our copy has not synced: a new mail to them is a note on that person.
+  const fresh = await call(rw, 'affinity', {}, { method: 'POST', body: { items: [
+    { address: 'new.person@invented-aw.example', messages: [{ at: later, subject: 'Invented next' }] }] } });
+  const freshItem = ((await aw.openWriteBatch())?.items ?? []).find((i) => i.address === 'new.person@invented-aw.example');
+  check('Affinity writes: an address whose person we created is a note on that person, never a second person',
+    fresh.json?.data?.items?.[0]?.plan === 'note' && freshItem?.affinityPersonId === 880001, `plan ${fresh.json?.data?.items?.[0]?.plan}; person ${freshItem?.affinityPersonId}`);
+  // Deciding with only what was shown: an item proposed after the page was drawn moves to the next batch, undecided.
+  const drawn = (await aw.openWriteBatch())!;
+  const shownIds = drawn.items.map((i) => i.itemId);
+  await call(rw, 'affinity', {}, { method: 'POST', body: { items: [{ address: 'late@invented-aw.example', messages: [{ at: at('2026-10-12'), subject: 'Invented late' }] }] } });
+  sent.length = 0;
+  await aw.decideWriteBatch(juan, drawn.batchId, [], scripted, shownIds);
+  const nextBatch = await aw.openWriteBatch();
+  let badId: unknown = null;
+  try { await aw.decideWriteBatch(juan, 'not-a-batch', [], scripted); } catch (e) { badId = e; }
+  check('Affinity writes: an item proposed after the page was drawn is not rejected unseen; it waits in the next batch',
+    nextBatch !== null && nextBatch.batchId !== drawn.batchId && nextBatch.items.length === 1 && nextBatch.items[0]!.address === 'late@invented-aw.example'
+    && nextBatch.items[0]!.state === 'proposed' && sent.length === 0 && badId instanceof aw.WriteBatchRefused,
+    `next ${nextBatch?.batchId === drawn.batchId ? 'same batch' : nextBatch?.items.map((i) => i.address).join(',')}; calls ${sent.length}; bad id ${String((badId as Error)?.message).slice(0, 40)}`);
 }

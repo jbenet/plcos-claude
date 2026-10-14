@@ -44,6 +44,18 @@ export async function calendarFeedProperties(check: Check) {
       && icsTime('20260308T023000', { TZID: 'America/New_York' }) !== null && icsTime('not a time') === null,
     JSON.stringify(ev.map((e) => [e.uid, e.start.toISOString(), e.end.toISOString(), e.title])));
 
+  // Red-team pass, 14 Oct 2026: a repeat that runs past the last date a Date holds once looped forever.
+  const huge = CAL(['YEARLY;INTERVAL=300000', 'MONTHLY;INTERVAL=99999999', 'DAILY;INTERVAL=999999999'].map((r, i) =>
+    EV([`UID:huge-${i}`, 'SUMMARY:Invented far repeat', 'DTSTART:20261001T170000Z', 'DTEND:20261001T180000Z', `RRULE:FREQ=${r}`])).join(''));
+  const t0 = Date.now(), far = parseIcs(huge, window);
+  check('Calendar feeds: a repeat that runs past the last representable date ends, with its first occurrence',
+    Date.now() - t0 < 2000 && far.length === 3, `${far.length} events in ${Date.now() - t0} ms`);
+  const { fetchIcs, IcsError } = await import('../../lib/connectors/ics/fetch');
+  const dropped: IcsFetch = async () => ({ status: 200, text: async () => { throw Object.assign(new Error('aborted'), { name: 'TimeoutError' }); } });
+  let readErr: unknown = null;
+  try { await fetchIcs('https://calendar.google.com/calendar/ical/x%40group.calendar.google.com/private-abc123/basic.ics', dropped); } catch (e) { readErr = e; }
+  check('Calendar feeds: a download that stops while sending is that calendar\'s error, not the page\'s', readErr instanceof IcsError, String(readErr));
+
   const ok = ['https://calendar.google.com/calendar/ical/x%40group.calendar.google.com/private-abc123/basic.ics', 'webcal://www.tripit.com/feed/ical/private/ABC/tripit.ics'];
   const no = ['http://calendar.google.com/calendar/ical/x/basic.ics', 'https://169.254.169.254/latest/meta-data', 'https://localhost/x.ics', 'https://calendar.google.com.evil.example/x.ics',
     'https://user:pw@calendar.google.com/x.ics', 'https://calendar.google.com:8443/x.ics', 'file:///etc/passwd', 'not a url'];

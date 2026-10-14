@@ -13,6 +13,12 @@ async function Performance() {
   ]);
   const sent = sends.filter((s) => s.status === 'sent');
   const docsend = sources.find((s) => s.source === 'docsend');
+  // Only LPs with a rung on file, latest evidence first: listing every pursuit (thousands, most with nothing on file)
+  // made this page 5.7 MB (performance pass, 14 Oct 2026). GUESS: 200 is enough to read the pattern.
+  const reached = pursuits.filter((p) => p.rung)
+    .map((p) => ({ p, at: p.events[p.events.length - 1]?.occurredAt?.getTime() ?? 0 }))
+    .sort((a, b) => b.at - a.at).map((x) => x.p);
+  const ATTRIBUTION_SHOWN = 200;
 
   return (
     <Page
@@ -100,7 +106,7 @@ async function Performance() {
             </tr>
           </thead>
           <tbody>
-            {pursuits.map((p) => {
+            {reached.slice(0, ATTRIBUTION_SHOWN).map((p) => {
               const latest = p.events[p.events.length - 1];
               return (
                 <tr key={p.pursuitId}>
@@ -117,6 +123,10 @@ async function Performance() {
             })}
           </tbody>
         </table>
+        <p className="muted" style={{ margin: '6px 12px' }}>
+          {reached.length > ATTRIBUTION_SHOWN ? `The latest ${ATTRIBUTION_SHOWN} of ${reached.length} LPs with a rung on file. ` : `${reached.length} LPs with a rung on file. `}
+          {pursuits.length - reached.length} more have nothing on file yet.
+        </p>
         <p className="cover">
           <b>This is the honest version of content attribution.</b> A rung was reached, and a
           specific piece of evidence justified it. Nothing here claims a document caused it —
