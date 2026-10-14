@@ -102,7 +102,6 @@ Left as they are:
   migration.
 - An idempotency key is not tied to its payload or its token, so reusing a key with a different body returns the first
   answer. Only JuanMail calls, with one token per person. That also needs a migration.
-
 - If one daily step fails, the rest of that day's chain is skipped, and nothing retries until the next day. The
   property suite asserts this on purpose, and a retry would spend the Affinity call budget again.
 - A token for one vehicle can ask the emailed-parties check about any address, and learn whether PLC OS or Affinity
