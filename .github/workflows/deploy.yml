@@ -1,0 +1,66 @@
+# Deploy master to Railway on request (14 Oct 2026). Juan: "I dont want merges to automatically deploy. it should
+# be explicit, BUT i want every claude thread here to be able to deploy, and to stop wasting time and tokens by asking."
+# A thread runs this with the GitHub MCP tool `actions_run_trigger` (workflow deploy.yml, ref master); nothing runs it
+# on a push. Railway builds the `deploy` branch (docs/deploy/railway.md), so this fast-forwards `deploy` to master.
+# A deploy restarts the server and kills running imports (memory deploy-after-merge, 7–8 Oct 2026), so it first waits
+# until /api/health has shown no "importing" field on every check for 5 straight minutes, polling every 30 s.
+name: Deploy to Railway
+on:
+  workflow_dispatch:
+# One deploy at a time; a second request waits, then ships whatever master is by then.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+permissions:
+  contents: write
+env:
+  URL: https://plcos-production.up.railway.app
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wait for imports to finish
+        run: |
+          clear=0
+          # GUESS: 5 h covers the longest import queue; past it the run fails and can be run again.
+          for i in $(seq 600); do
+            body=$(curl -s -m 15 "$URL/api/health" || true)
+            if printf '%s' "$body" | grep -q '"importing"'; then
+              [ "$clear" -gt 0 ] && echo "imports running again; restarting the 5-minute wait"
+              [ $((i % 10)) = 1 ] && echo "waiting: $(printf '%s' "$body" | grep -o '"importing":[0-9]*')"
+              clear=0
+            else
+              clear=$((clear + 1))
+            fi
+            # 11 clear checks 30 s apart span 5 minutes.
+            [ "$clear" -ge 11 ] && { echo "no imports for 5 minutes"; exit 0; }
+            sleep 30
+          done
+          echo "imports never stayed clear for 5 minutes"; exit 1
+      - name: Fast-forward deploy to master
+        id: push
+        run: |
+          git fetch -q origin master deploy
+          sha=$(git rev-parse origin/master)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "$(git rev-parse origin/deploy)" = "$sha" ]; then echo "deploy already at ${sha:0:12}"; exit 0; fi
+          git merge-base --is-ancestor origin/deploy "$sha" || { echo "deploy has commits master lacks; not forcing"; exit 1; }
+          git push origin "$sha:refs/heads/deploy"
+          echo "pushed ${sha:0:12} to deploy"
+      - name: Wait for Railway to serve it
+        run: |
+          sha=${{ steps.push.outputs.sha }}
+          # GUESS: a Railway build and start takes 4–8 min; 25 min covers a slow queue.
+          for i in $(seq 75); do
+            served=$(curl -s -m 15 "$URL/api/health" | sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p')
+            [ -n "$served" ] && [ "${sha#$served}" != "$sha" ] && break
+            served=""; sleep 20
+          done
+          [ -n "$served" ] || { echo "Railway is not serving ${sha:0:12} after 25 min; check the build in Railway"; exit 1; }
+          code=$(curl -s -o /dev/null -m 60 -w '%{http_code}' "$URL/signin")
+          [ "$code" = 200 ] || { echo "/signin answered $code on ${sha:0:12}; roll back in Railway: Deployments → the previous one → Redeploy"; exit 1; }
+          echo "live: ${sha:0:12}"
