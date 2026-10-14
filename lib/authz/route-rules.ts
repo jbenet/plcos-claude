@@ -44,8 +44,6 @@ export const routeRules = {
   // A record's local type by an Admin's token (lib/sync/entity-type.ts, issue 0063).
   'app/api/sync/entity-type/route.ts#GET': 'sync:admin',
   'app/api/sync/entity-type/route.ts#POST': 'sync:admin',
-  // An Admin's token screens our records for a vehicle's field and can add the top matches as New (lib/sync/screen.ts).
-  'app/api/sync/screen/route.ts#POST': 'sync:admin',
   'app/api/session/route.ts#POST': 'session',
   // Google sign-in and first-run setup (docs/deploy/railway.md §3): nobody is signed in yet. Each handler
   // checks for itself (the signed state cookie, the setup code); a POST must come from this origin.
