@@ -83,7 +83,7 @@ const at = (d: string) => new Date(`${d}T12:00:00Z`);
  * How many rows of each table point at this pursuit or person, by every foreign key the schema has: read after an add,
  * and again at undo, so anything written on it since — an update, a touchpoint, a link, a ticket's send, a merge — shows.
  */
-async function refCounts(q: Queryable, schema: 'strategy' | 'identity', table: 'pursuit' | 'entity', id: string): Promise<Record<string, number>> {
+export async function refCounts(q: Queryable, schema: 'strategy' | 'identity', table: 'pursuit' | 'entity', id: string): Promise<Record<string, number>> {
   const cols = await q.query<{ ref: string; tbl: string; col: string }>(`
     select format('%I.%I', n.nspname, cl.relname) || '.' || a.attname::text ref, format('%I.%I', n.nspname, cl.relname) tbl, format('%I', a.attname) col
       from pg_constraint c join pg_class cl on cl.oid = c.conrelid join pg_namespace n on n.oid = cl.relnamespace
@@ -99,7 +99,7 @@ async function refCounts(q: Queryable, schema: 'strategy' | 'identity', table: '
   return out;
 }
 
-const changed = (before: Record<string, number>, now: Record<string, number>) =>
+export const changed = (before: Record<string, number>, now: Record<string, number>) =>
   [...new Set([...Object.keys(before), ...Object.keys(now)])].filter((k) => (before[k] ?? 0) !== (now[k] ?? 0));
 
 const TABLE_WORD: Record<string, string> = {

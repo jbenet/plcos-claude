@@ -12,6 +12,7 @@ import { OUTREACH_READ, OUTREACH_WRITE } from '@/lib/outreach/scopes';
 import { addLp, addLpInput, undoAddLp, undoAddLpInput, UNDO_HOURS } from '@/lib/outreach/lps';
 import { auditRecent } from './audit';
 import { checkParties, partiesInput } from '@/lib/outreach/parties';
+import { addResearch, researchInput, undoAddResearch, undoResearchInput } from '@/lib/outreach/research';
 import { insights, insightsInput, playbook, recordSignals, signalsFor, signalsInput, signalsReadInput } from '@/lib/outreach/signals';
 
 /**
@@ -221,6 +222,19 @@ export const TOOLS: readonly Tool[] = [
     description: `Take back an LP outreach_add_lp added: only one it created, by your own token's owner, within ${UNDO_HOURS} hours, and only while nothing else has happened on it (no update, status change, touchpoint, link, ticket or merge). Removes the pursuit, the address and the evidence it recorded, and retires the person if that call created them and nothing else refers to them. Otherwise 409 with why.`,
     input: undoAddLpInput,
     run: (env, a) => undoAddLp({ env }, a),
+  }),
+  // Research on no vehicle (docs/27 §5a): someone emailed who is not here and was not pitched.
+  tool({
+    name: 'outreach_add_research', title: 'Outreach: research someone, on no vehicle', policy: { risk: 'write-guarded', scopes: [OUTREACH_WRITE], ticket: 'none', approval: false },
+    description: `Put a person you emailed into the research set without adding them to any vehicle's pipeline. Matched first, never duplicated (as outreach_add_lp): a person whose address is on record is that person; otherwise by name with the address's domain and the firm as evidence, refusing (409) when the name could be several people here. Records the address and a research request; the next research run picks them up. Already requested: nothing changes. Once per idempotencyKey; undo within ${UNDO_HOURS} hours with outreach_undo_add_research.`,
+    input: researchInput,
+    run: (env, a) => addResearch({ env }, a),
+  }),
+  tool({
+    name: 'outreach_undo_add_research', title: 'Outreach: undo a research request', policy: { risk: 'write-guarded', scopes: [OUTREACH_WRITE], ticket: 'none', approval: false },
+    description: `Take back a research request outreach_add_research made: by your own token's owner, within ${UNDO_HOURS} hours. Removes the request and the address it recorded, and retires the person if that call created them and nothing has referred to them since.`,
+    input: undoResearchInput,
+    run: (env, a) => undoAddResearch({ env }, a),
   }),
   // The comms trace (Juan, 5 Oct 2026: "let email be the state"). docs/27 §5–§6.
   tool({

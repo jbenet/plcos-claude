@@ -741,6 +741,25 @@ reach further). The pursuit is removed by undo, not archived: nothing else refer
 would hold the person's slot on the vehicle (one pursuit per person and vehicle). No migration: the audit entry carries
 what undo needs.
 
+## 5a. Research someone, on no vehicle (14 Oct 2026)
+
+JuanMail's reconcile page finds people Juan emailed who are not here and whose mail was not about a raise (`research` in
+§4e). Juan, relayed by JuanMail: "Should be possible to research entities without a vehicle".
+
+`POST /api/outreach/research` (MCP `outreach_add_research`, outreach:write) takes
+`{ address, name?, firm?, note?, source, idempotencyKey }` and answers `{ entityId, created, requested, next }`.
+
+- Matched first, as `outreach_add_lp` does: a person whose address is on record is that person. Otherwise the resolver
+  decides on the name (the address when no name is given), with the address's domain and the firm as evidence. A name
+  that could be several people here is refused (409) and nothing is written.
+- It records the address (confirmed by the token's owner, unconfirmed when autonomous) and a `research.note` of kind
+  `research_request`. No pursuit is made. Already requested: `requested: false` and nothing changes.
+- The research export (lib/enrich/candidates.ts) takes everyone with a request, pursuit or not. A run focused on a
+  vehicle leaves them out; an unfocused one picks them up after the LPs.
+- `DELETE /api/outreach/research?entityId=` (`outreach_undo_add_research`) takes it back within 24 hours, by the same
+  person's token. It removes the request and the address, and retires the person if that call created them and nothing
+  has referred to them since.
+
 ## 6. Audit, and the later web client
 
 Every call — MCP or REST — is one `mcp.call` record (docs/26 §4): the user, the token and its name (client
