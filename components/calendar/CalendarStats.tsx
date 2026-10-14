@@ -14,17 +14,23 @@ const monthName = (key: string) => formatDate(new Date(`${key}-01T00:00:00Z`), {
 
 export function CalendarStats({ rows, now }: { rows: DatedRow[]; now: string }) {
   if (!rows.length) return null;
-  const by = (s: DatedRow['standing']) => rows.filter((r) => r.standing === s).length;
-  const lanes = (Object.keys(LANE_LOOK) as Lane[]).filter((l) => rows.some((r) => r.lane === l));
+  const standing = new Map<DatedRow['standing'], number>(), perLane = new Map<Lane, number>();
+  for (const r of rows) { standing.set(r.standing, (standing.get(r.standing) ?? 0) + 1); perLane.set(r.lane, (perLane.get(r.lane) ?? 0) + 1); }
+  const by = (s: DatedRow['standing']) => standing.get(s) ?? 0;
+  const lanes = (Object.keys(LANE_LOOK) as Lane[]).filter((l) => perLane.has(l));
 
   // Every month from the first dated thing to the last, the latest MAX_MONTHS of them.
-  const keys = rows.map((r) => monthKey(r.from)).sort();
-  const first = keys[0]!, last = keys[keys.length - 1]! > monthKey(now) ? keys[keys.length - 1]! : monthKey(now);
+  let first = monthKey(rows[0]!.from), latest = first;
+  for (const r of rows) { const k = monthKey(r.from); if (k < first) first = k; if (k > latest) latest = k; }
+  const last = latest > monthKey(now) ? latest : monthKey(now);
   const months: string[] = [];
   for (let d = new Date(`${first}-01T00:00:00Z`); monthKey(d.toISOString()) <= last; d.setUTCMonth(d.getUTCMonth() + 1)) months.push(monthKey(d.toISOString()));
   const shown = months.slice(-MAX_MONTHS);
   const dropped = months.length - shown.length;
-  const bins = shown.map((m) => ({ m, n: Object.fromEntries(lanes.map((l) => [l, rows.filter((r) => r.lane === l && monthKey(r.from) === m).length])) as Record<Lane, number> }));
+  // One pass over the rows (a calendar of every meeting has tens of thousands), not one per lane and month.
+  const bins = shown.map((m) => ({ m, n: Object.fromEntries(lanes.map((l) => [l, 0])) as Record<Lane, number> }));
+  const binOf = new Map(bins.map((b) => [b.m, b]));
+  for (const r of rows) { const b = binOf.get(monthKey(r.from)); if (b) b.n[r.lane] += 1; }
   const peak = Math.max(1, ...bins.map((b) => lanes.reduce((a, l) => a + b.n[l], 0)));
   const nowKey = monthKey(now);
 
@@ -42,7 +48,7 @@ export function CalendarStats({ rows, now }: { rows: DatedRow[]; now: string }) 
           {lanes.map((l) => (
             <div key={l} className={`lane-${l}`}>
               <span className="lbl"><Glyph name={LANE_LOOK[l].glyph} title={LANE_LOOK[l].label} /> {LANE_LOOK[l].label}</span>
-              <b>{rows.filter((r) => r.lane === l).length}</b>
+              <b>{perLane.get(l)}</b>
             </div>
           ))}
         </div>

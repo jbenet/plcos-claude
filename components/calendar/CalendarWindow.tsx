@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { DatedRow } from '@/lib/lanes';
 import { LANE_LOOK } from '@/lib/lanes';
 import { Glyph } from '@/components/ui/Glyph';
 import { PagedRows } from '@/components/floor/Paging';
 import Link from '@/components/ui/AppLink';
 import { formatDate } from '@/lib/time';
+import { unpackRows, type PackedRows } from '@/lib/packed-rows';
 
 const WEEK = 7 * 86_400_000;
 const short = (stamp: number) => formatDate(new Date(stamp), { day: '2-digit', month: 'short', timeZone: 'UTC' });
@@ -18,18 +19,27 @@ const short = (stamp: number) => formatDate(new Date(stamp), { day: '2-digit', m
  * Its styles come from the page (app/[vehicle]/calendar/window.module.css), so the component also
  * renders in plain Node, where the property checks draw it.
  */
-export function CalendarWindow({ rows, lanes: given, first, weeks, now, look = {} }: {
-  /** The rows touching these weeks; `lanes` names every lane with a row anywhere, so an empty one still shows. */
-  rows: DatedRow[]; lanes?: DatedRow['lane'][]; first: string; weeks: number; now?: string; look?: Record<string, string>;
+export function CalendarWindow({ rows: listed, packed, lanes: given, first, weeks, now, look = {} }: {
+  /**
+   * The rows touching these weeks, as they are or packed for the trip (lib/packed-rows.ts; the page's window was
+   * 1.1 MB as plain rows); `lanes` names every lane with a row anywhere, so an empty one still shows.
+   */
+  rows?: DatedRow[]; packed?: PackedRows; lanes?: DatedRow['lane'][]; first: string; weeks: number; now?: string; look?: Record<string, string>;
 }) {
+  const rows = useMemo(() => listed ?? (packed ? unpackRows<DatedRow>(packed) : []), [listed, packed]);
   const s = new Proxy(look, { get: (o, k: string) => o[k] ?? '' });
   const [chosen, setChosen] = useState<{ lane: DatedRow['lane']; week: number } | null>(null);
   const start = new Date(first).getTime();
   const today = now ? new Date(now).getTime() : Date.now();
   const bins = Array.from({ length: weeks }, (_, i) => ({ start: start + i * WEEK, end: start + (i + 1) * WEEK }));
-  const lanes = given ?? [...new Set(rows.map((r) => r.lane))];
-  const overlaps = (r: DatedRow, week: number) => new Date(r.from).getTime() < bins[week]!.end && new Date(r.to ?? r.from).getTime() >= bins[week]!.start;
-  const counts = lanes.map((lane) => bins.map((_, week) => rows.filter((r) => r.lane === lane && overlaps(r, week)).length));
+  const lanes = useMemo(() => given ?? [...new Set(rows.map((r) => r.lane))], [given, rows]);
+  // Each row's dates read once, not once per lane and week on every click.
+  const spans = useMemo(() => new Map(rows.map((r) => [r, [new Date(r.from).getTime(), new Date(r.to ?? r.from).getTime()] as const])), [rows]);
+  const overlaps = (r: DatedRow, week: number) => spans.get(r)![0] < bins[week]!.end && spans.get(r)![1] >= bins[week]!.start;
+  const counts = lanes.map((lane) => {
+    const mine = rows.filter((r) => r.lane === lane);
+    return bins.map((_, week) => mine.filter((r) => overlaps(r, week)).length);
+  });
   const peak = Math.max(1, ...counts.flat());
   const selected = chosen ? rows.filter((r) => r.lane === chosen.lane && overlaps(r, chosen.week)) : [];
   const current = bins.findIndex((b) => today >= b.start && today < b.end);
