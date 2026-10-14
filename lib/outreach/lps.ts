@@ -88,11 +88,11 @@ const at = (d: string) => new Date(`${d}T12:00:00Z`);
  * reuses the claim and records none of its own) or a confirmed contact. An undo keeps such a claim (red-team pass,
  * 14 Oct 2026: undoing a research request removed the address an LP added the same day was reached at).
  */
-export async function claimReliedOnSince(q: Queryable, entityId: string, since: Date): Promise<boolean> {
-  // To the millisecond, as `since` was read: the add's own record is not later than itself.
-  return Boolean(await q.one(`select 1 from platform.audit_log where date_trunc('milliseconds', at) > $2 and (
+export async function claimReliedOnSince(q: Queryable, entityId: string, sinceAuditId: string): Promise<boolean> {
+  // By audit id, not time: two adds can share a millisecond (PGlite does them within one).
+  return Boolean(await q.one(`select 1 from platform.audit_log where id > $2::bigint and (
       (subject_type = 'entity' and subject_id = $1 and action in ('outreach.research_added', 'contact.confirmed'))
-      or (action = 'outreach.lp_added' and detail->>'entityId' = $1)) limit 1`, [entityId, since]));
+      or (action = 'outreach.lp_added' and detail->>'entityId' = $1)) limit 1`, [entityId, sinceAuditId]));
 }
 
 export async function refCounts(q: Queryable, schema: 'strategy' | 'identity', table: 'pursuit' | 'entity', id: string): Promise<Record<string, number>> {
@@ -293,7 +293,7 @@ export async function undoAddLp(ctx: DeskContext, raw: Record<string, unknown>) 
       if (added.updateId) await tx.query('delete from strategy.pursuit_update where update_id = $1', [added.updateId]);
       await tx.query('delete from strategy.pursuit where pursuit_id = $1', [pursuitId]);
       await tx.query('delete from research.note where note_id = $1', [added.noteId]);
-      if (added.claimId && !(await claimReliedOnSince(tx, added.entityId, addedAt))) await tx.query('delete from research.claim where claim_id = $1', [added.claimId]);
+      if (added.claimId && !(await claimReliedOnSince(tx, added.entityId, row.audit_id))) await tx.query('delete from research.claim where claim_id = $1', [added.claimId]);
       if (added.sourceRecord && (retire || !added.created.entity)) {
         await tx.query(`delete from research.note where entity_id = $1 and kind = 'identity_creation' and data->>'source' = 'mail_desk' and data->>'sourceId' = $2`, [added.entityId, added.sourceRecord]);
         await tx.query(`delete from identity.source_record where source = 'mail_desk' and source_id = $1`, [added.sourceRecord]);

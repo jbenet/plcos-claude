@@ -120,7 +120,7 @@ export async function undoAddResearch(ctx: DeskContext, raw: Record<string, unkn
   requireMutationProfile();
   const owner = ctx.env.owner;
   const db = await getDb();
-  const row = await db.one<{ at: Date | string; detail: Requested }>(`select at, detail from platform.audit_log
+  const row = await db.one<{ audit_id: string; at: Date | string; detail: Requested }>(`select id::text audit_id, at, detail from platform.audit_log
     where action = 'outreach.research_added' and subject_type = 'entity' and subject_id = $1 order by id desc limit 1`, [entityId]);
   if (!row) throw new OutreachRefused(404, 'No research request added through the mail desk for that entityId.');
   const req = row.detail, addedAt = new Date(row.at);
@@ -136,7 +136,7 @@ export async function undoAddResearch(ctx: DeskContext, raw: Record<string, unkn
     // The person is retired only when this call created them and nothing has referred to them since.
     const retire = req.createdEntity && changed(req.refs, await refCounts(tx, 'identity', 'entity', entityId)).length === 0;
     await tx.query('delete from research.note where note_id = $1', [req.noteId]);
-    if (req.claimId && !(await claimReliedOnSince(tx, entityId, addedAt))) await tx.query('delete from research.claim where claim_id = $1', [req.claimId]);
+    if (req.claimId && !(await claimReliedOnSince(tx, entityId, row.audit_id))) await tx.query('delete from research.claim where claim_id = $1', [req.claimId]);
     if (req.sourceRecord && retire) {
       await tx.query(`delete from research.note where entity_id = $1 and kind = 'identity_creation' and data->>'source' = 'mail_desk' and data->>'sourceId' = $2`, [entityId, req.sourceRecord]);
       await tx.query(`delete from identity.source_record where source = 'mail_desk' and source_id = $1`, [req.sourceRecord]);
