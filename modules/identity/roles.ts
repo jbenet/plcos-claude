@@ -18,7 +18,7 @@ const filters: Record<RelationshipGroup, string> = {
 };
 /** Resolve each fact once, rather than each fact once per entity. Materialized sets
  * keep the optimizer from inlining canonical lookups into a 94K-row nested loop. */
-const facts = (only = 'true') => `with money as materialized (
+const facts = (only = 'true', materialized = true) => `with money as materialized (
   select identity.canonical_entity_id(x.entity_id) entity_id,
     coalesce(sum(x.amount) filter(where x.track = 'hard'),0) hard,
     coalesce(sum(x.amount) filter(where x.track = 'soft'),0) soft,
@@ -37,7 +37,7 @@ const facts = (only = 'true') => `with money as materialized (
     select from_entity id from network.edge where kind = 'coinvestor'
     union select to_entity from network.edge where kind = 'coinvestor'
   ) ids
-), base as materialized (
+), base as ${materialized ? 'materialized ' : ''}(
   select e.entity_id, e.display_name name, e.entity_type::text entity_type,
     coalesce(m.hard,0) hard, coalesce(m.soft,0) soft, m.vehicles,
     coalesce(a.connector_asks,0) connector_asks, t.entity_id is not null is_team,
@@ -101,7 +101,8 @@ export async function relationshipMatchCount(group: RelationshipGroup, q: string
 
 export async function relationshipCounts() {
   const db = await getDb();
-  return (await db.one<Record<RelationshipGroup | RelationshipRole, number>>(`${FACTS}
+  // Counted as base streams by, not after holding all 117K rows (15 Oct 2026: 105 → 66 ms, on every org list page).
+  return (await db.one<Record<RelationshipGroup | RelationshipRole, number>>(`${facts('true', false)}
     select count(*) filter(where not is_team)::int "all",
       count(*) filter(where not is_team and entity_type = 'person')::int people,
       count(*) filter(where not is_team and entity_type <> 'person')::int firms,
