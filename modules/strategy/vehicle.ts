@@ -61,10 +61,10 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
   if (!total) return null;
   const ids = [...new Set(pursuits.map(p => p.entityId))];
   const [suggestions, profiles, claims, restrictions, owners, history, touches, routes, contexts, dakota] = await Promise.all([
-    // The latest per pursuit is chosen on keys and the ask's vehicle, then only the winners' data and bodies are
+    // The latest per pursuit is chosen on keys and the ask's vehicle (strategy 012), then only the winners' data and bodies are
     // read: sorting every candidate with its jsonb and body cost 3× (15 Oct 2026, Neurotech: 93 → 38 ms in SQL).
     db.query<SuggestionRow>(`with cand as materialized (
-        select s.pursuit_id, s.suggestion_id, s.created_at, nullif(lower(trim(s.data#>>'{ask,vehicle}')),'') askv
+        select s.pursuit_id, s.suggestion_id, s.created_at, s.ask_vehicle askv
         from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id) where p.vehicle_id=$1 and s.status in ('proposed','accepted')
       ), pick as (
         select distinct on (c.pursuit_id) c.suggestion_id from cand c join platform.vehicle v on v.id=$1

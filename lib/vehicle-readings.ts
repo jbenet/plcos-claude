@@ -17,9 +17,9 @@ export async function vehicleReadings(vehicleId: string | null, entityId: string
   ), mine as materialized (
     select * from ps where ($2::uuid is null or ps.entity_id=$2)
   ), cand as materialized (
-    -- The ask's vehicle is read once per suggestion, and only for the pursuits asked about: testing it against
+    -- The ask's vehicle is a stored column (strategy 012), read only for the pursuits asked about: testing the jsonb against
     -- every vehicle row read the whole jsonb eight times over (one LP page, 15 Oct 2026: 440 ms → 20 ms).
-    select s.pursuit_id, s.suggestion_id, s.created_at, nullif(lower(trim(s.data#>>'{ask,vehicle}')),'') askv, m.vehicle_id
+    select s.pursuit_id, s.suggestion_id, s.created_at, s.ask_vehicle askv, m.vehicle_id
     from strategy.suggestion s join mine m using(pursuit_id)
     where s.status in ('proposed','accepted')
   ), latest as (
