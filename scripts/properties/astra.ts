@@ -1,4 +1,7 @@
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { researchExport, RESEARCH_FRESH_MS } from '../../lib/astra/research';
 import { syncGuard } from '../../lib/sync/auth';
 import { SYNC_ADMIN, SYNC_PUSH } from '../../lib/sync/scopes';
 import { astraCall } from '../../lib/sync/astra';
@@ -164,4 +167,22 @@ export async function astraProperties(check: Check) {
   await cancelQueued(db);
   await poll({ inWindow: true, night: '2026-10-14', free: 0, workflows: all, slots: two });
   check('astra queues nothing from the plan with Keep busy off', (await recentJobs(db)).every((j) => j.night !== '2026-10-14'), 'keep busy off');
+
+  // The research export the runner fetches each night (14 Oct 2026: a stale Mac copy left every plan step "Nobody is left").
+  const dir = await mkdtemp(join(tmpdir(), 'astra-research-'));
+  try {
+    let queued = 0;
+    const queue = async () => { queued++; return { id: '00000000-0000-0000-0000-000000000001' }; };
+    const none = await researchExport(db, juan.id, { dir, queue });
+    await writeFile(join(dir, 'candidates.jsonl'), '{"key":"invented-1"}\n');
+    await writeFile(join(dir, 'team.json'), '[]\n');
+    await writeFile(join(dir, 'notes.json'), '{}\n');
+    const fresh = await researchExport(db, juan.id, { dir, queue });
+    const old = new Date(Date.now() - RESEARCH_FRESH_MS - 60_000);
+    await utimes(join(dir, 'candidates.jsonl'), old, old);
+    const stale = await researchExport(db, juan.id, { dir, queue });
+    check('astra research export: none or stale queues a fresh export; a fresh one hands out only the export files, hashed',
+      none.pending && stale.pending && queued === 2 && !fresh.pending && Object.keys(fresh.files).sort().join() === 'candidates.jsonl,team.json'
+        && fresh.files['candidates.jsonl']!.sha256.length === 64, JSON.stringify({ queued, files: fresh.pending ? null : Object.keys(fresh.files) }));
+  } finally { await rm(dir, { recursive: true, force: true }); }
 }

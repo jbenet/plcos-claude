@@ -89,6 +89,13 @@ busy" and "would be good to come up with a schedule".
 - **Focus.** A step with vehicles cuts its batches with `enrich-batch.ts --vehicle`: only LPs with a pursuit in those
   vehicles, and for Shorten strategies every stage of those vehicles, furthest first. Only a runner that announces
   `features: ["focus"]` is handed a focused run; an older one skips that step.
+- **A fresh research export each night** (14 Oct 2026). Batches are cut from the Mac's `enrich/candidates.jsonl` and
+  its siblings, and nothing brought the server's export down (a files snapshot leaves the exports out), so the Mac's
+  copy stayed at 8 Oct and every step said "Nobody is left" while 270+ newer LPs sat on the server. Now, inside the
+  window, a runner whose copy is over 12 hours old asks for `op: "research"`: the server rebuilds its export first
+  when that is over 12 hours old too, then hands out research-set.jsonl, candidates.jsonl, entity-keys.json,
+  vehicles.json and team.json with their hashes, and the runner swaps them in between batch cuts. While that is
+  pending it claims nothing, so no step ends the night on the old copy; after 30 minutes of trying it goes ahead.
 
 ## Not yet
 

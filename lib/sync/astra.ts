@@ -18,6 +18,9 @@ import type { PushAnswer } from './push';
  *   POST { op: "command-report", id, status: "done" | "failed", result?, message? }: the runner answers a command it took.
  *   POST { op: "plan", keepBusy?, plan?: [{ workflow, size, focus? }], windowStart?, windowEnd? } → 200 { runner }: what the
  *        page's Night plan form saves (migration 027; Juan, 12 Oct 2026: "would be good to come up with a schedule").
+ *   POST { op: "research" } → 200 { pending: true, job } while a fresh research export is built (one older than 12 h is
+ *        redone), else { pending: false, exportedAt, files: { name: { text, sha256 } } }: the export the runner cuts its
+ *        batches from (lib/astra/research.ts). Names leave the server here, as they do in a snapshot, to the Admin's Mac.
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
@@ -104,5 +107,16 @@ export async function astraCall(caller: SyncCaller, request: Request, o: { db?: 
     const runner = await astra.readRunner(db);
     return answer(200, 'ok', { runner }, { op: 'plan', keepBusy: runner.keepBusy, steps: runner.plan.length });
   }
-  return answer(422, 'invalid', { error: 'op must be poll, report, queue, status, command, command-report or plan.' }, { reason: 'op' });
+  if (input?.op === 'research') {
+    const { researchExport } = await import('@/lib/astra/research');
+    const { enrichDir } = await import('@/lib/enrich/candidates');
+    try {
+      const got = await researchExport(db, caller.user.id, { dir: enrichDir() });
+      return got.pending ? answer(200, 'ok', got, { op: 'research', pending: true })
+        : answer(200, 'ok', got, { op: 'research', pending: false, files: Object.keys(got.files).length });
+    } catch (e) {
+      return answer(409, 'refused', { error: e instanceof Error ? e.message.slice(0, 200) : 'No export.' }, { op: 'research', reason: 'export' });
+    }
+  }
+  return answer(422, 'invalid', { error: 'op must be poll, report, queue, status, command, command-report, plan or research.' }, { reason: 'op' });
 }

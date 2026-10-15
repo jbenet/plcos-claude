@@ -335,3 +335,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Smaller calendar, faster pipeline after an edit, safer Affinity writes](entries/perf-redteam-1014.md)
 - [PLC OS as a Mac app, reading from a copy on the Mac](entries/desktop-app.md)
 - [Outreach conversion, a page per vehicle](entries/conversion.md)
+- [Astra works from a fresh LP list each night](entries/astra-fresh-export.md)
