@@ -75,6 +75,7 @@ async function shape(db: Queryable, table: string): Promise<Shape | null> {
   return { schema, name, pk };
 }
 
+const PAGE_BYTES = 16 * 1024 * 1024;
 const xid8 = (s: string | null): string | null => (s && /^\d{1,20}$/.test(s) ? s : null);
 
 /**
@@ -92,6 +93,8 @@ export async function syncRows(table: string, since: string | null, after: strin
   return db.transaction(async (tx) => {
     // One snapshot for the page, its horizon and its count.
     await tx.exec('set transaction isolation level repeatable read');
+    // A page of a big or wide table can take longer than a page view's 20 s limit; this is an Admin's background read.
+    await tx.exec("set local statement_timeout = '5min'");
     const h = (await tx.one<{ horizon: string }>('select pg_snapshot_xmin(pg_current_snapshot())::text as horizon'))!.horizon;
     const params: unknown[] = [];
     const where: string[] = [];
@@ -112,8 +115,11 @@ export async function syncRows(table: string, since: string | null, after: strin
     const rows = await tx.query<{ j: string; k: string[] | null }>(
       `select ${rowJson(table)}::text as j, ${s.pk.length ? `array[${s.pk.map((c) => `t.${ident(c.name)}::text`).join(', ')}]` : 'null'} as k
          from ${from} t ${where.length ? `where ${where.join(' and ')}` : ''} ${order} ${pageLimit}`, params);
-    const more = s.pk.length > 0 && rows.length > lim;
-    const page = more ? rows.slice(0, lim) : rows;
+    // A page stops at about 16 MB of rows, so wide rows (long notes, big JSON) never make one huge response.
+    let kept = 0, bytes = 0;
+    while (kept < Math.min(rows.length, lim) && (kept === 0 || bytes + rows[kept]!.j.length <= PAGE_BYTES)) bytes += rows[kept++]!.j.length;
+    const more = s.pk.length > 0 && rows.length > kept;
+    const page = rows.slice(0, kept);
     const count = more ? null : Number((await tx.one<{ n: string }>(`select count(*)::text as n from ${from}`))!.n);
     return { ok: true as const, horizon: h, rowsJson: `[${page.map((r) => r.j).join(',')}]`, n: page.length, next: more ? page[page.length - 1]!.k : null, count };
   });

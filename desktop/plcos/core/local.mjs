@@ -332,7 +332,7 @@ class LocalCopy {
     // On a failure the others finish the table they are on (each is its own transaction) and take no more.
     await Promise.all(Array.from({ length: Math.min(TABLES_AT_ONCE, queue.length) }, async () => {
       for (let info = queue.shift(); info && !failed; info = queue.shift()) {
-        try { await one(info); } catch (e) { failed ??= e; }
+        try { await one(info); } catch (e) { if (e instanceof Error) e.message = `${info.t}: ${e.message}`; failed ??= e; }
       }
     }));
     this.progress = new Map();
@@ -354,11 +354,19 @@ class LocalCopy {
       await client.query("set session_replication_role = 'replica'");
       await client.query('begin');
       if (whole) await client.query(`delete from ${table}`);
+      // Pages shrink when the server is slow to answer them (wide rows, a busy server) and grow back when it is quick.
+      let limit = PAGE;
       const fetchPage = (from) => {
-        const qs = new URLSearchParams({ op: 'rows', t: info.t, limit: String(PAGE) });
+        const qs = new URLSearchParams({ op: 'rows', t: info.t, limit: String(limit) });
+        const asked = Date.now();
         if (!whole) qs.set('since', since);
         if (from) qs.set('after', JSON.stringify(from));
-        const p = this.remoteJson(`/api/desktop/sync?${qs}`);
+        const p = this.remoteJson(`/api/desktop/sync?${qs}`).then((page) => {
+          const ms = Date.now() - asked;
+          if (ms > 8_000) limit = Math.max(500, Math.floor(limit / 2));
+          else if (ms < 2_000) limit = Math.min(PAGE, limit * 2);
+          return page;
+        });
         p.catch(() => undefined); // awaited below; never an unhandled rejection if applying fails first
         return p;
       };
