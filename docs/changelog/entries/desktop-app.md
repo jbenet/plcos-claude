@@ -41,3 +41,6 @@ The import progress every open page polls answers "unchanged" with no body (it s
 results every 5 seconds).
 The text editor's script (about 400 KB) is no longer part of every page: it loads when a field that uses it is drawn,
 so a page without one, like Pipeline or an LP's page with drafting off, never fetches or parses it.
+A vehicle's plan, the pipeline list, LP stats and conversion now rebuild as soon as a commitment, a signing, a
+do-not-contact restriction or a research claim is recorded. They were cached until some other change, so a new hard
+commitment or restriction could be missing from them for a while.

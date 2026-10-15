@@ -4,7 +4,7 @@ import { getDb } from '@/lib/db';
 import { CONTEXT_BY_RULE, isStale, type Strategy } from '@/lib/enrich/strategy';
 import { vehicleTotals, listExposures } from '@/modules/pipeline';
 import { touchpointSummaries, touchpointsByPair } from '@/modules/meetings';
-import { buildCache, touchRevisions } from '@/lib/build-cache';
+import { buildCache, liveRevisions, touchRevisions } from '@/lib/build-cache';
 import { strategyRouteSummaries, type RecordedRoute } from '@/modules/network';
 import { listPursuits } from './repo';
 
@@ -188,4 +188,4 @@ export type StrategyAction = VehicleStrategy['rows'][number];
 
 /** A vehicle's plan, built once per revision for the list and the strategy page (performance pass,
  * 8 Oct 2026); `now` is the build's. Immutable to callers. */
-export const strategyOf = buildCache((vehicleId: string) => vehicleStrategy(vehicleId));
+export const strategyOf = buildCache((vehicleId: string) => vehicleStrategy(vehicleId), 16, liveRevisions);

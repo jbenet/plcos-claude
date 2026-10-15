@@ -68,6 +68,26 @@ export async function commitRevisionProperties(check: Check) {
       && personal.r !== background.r && personal.f === personal.r,
       `start ${start.r}/${start.f}, import ${background.r}/${background.f}, person ${personal.r}/${personal.f}`);
 
+    // Money, restrictions and claims move the live revision alone (network 024): the cached plans, pipeline list, LP
+    // stats and conversion key on it; the read revision, which the routes' snapshots key on, stays where it was.
+    const live = async () => (await db.one<{ r: string; l: string; f: string }>('select revision::text r, live::text l, foreground::text f from network.read_revision'))!;
+    const l0 = await live();
+    await db.query(`insert into pipeline.exposure (entity_id, vehicle_id, instrument, track, amount, owner_id, evidence_ref)
+      values ($1, $2, 'lp_commitment', 'hard', 1000000, $3, 'fixture:invented-commitment')`, [org, vehicle, user]);
+    const l1 = await live();
+    await db.query(`insert into coordination.restriction (entity_id, scope, instruction) values ($1, 'blanket', 'Invented restriction')`, [org]);
+    const l2 = await live();
+    await db.transaction(async tx => {
+      await tx.query(`select set_config('plcos.background', 'on', true)`);
+      await tx.query(`insert into pipeline.commitment_event (exposure_id, step)
+        select exposure_id, 'signed' from pipeline.exposure where evidence_ref = 'fixture:invented-commitment'`);
+    });
+    const l3 = await live();
+    check('REVISIONS: a commitment, a restriction or a signing moves the live revision, not the read one',
+      [l1, l2, l3].every((x, i) => x.r === l0.r && BigInt(x.l) > BigInt([l0, l1, l2][i]!.l))
+        && BigInt(l1.f) > BigInt(l0.f) && BigInt(l2.f) > BigInt(l1.f) && l3.f === l2.f,
+      `read ${l0.r} → ${l3.r}; live ${l0.l} → ${l1.l} → ${l2.l} → ${l3.l}; foreground ${l0.f} → ${l1.f} → ${l2.f} → ${l3.f} (an import's signing leaves it)`);
+
     // The route generation's contact signature skips its recompute while its inputs are unchanged
     // (modules/network/cache.ts): a status move keeps it; a new pursuit contact or affiliation moves it.
     const { revisionFor } = await import('../../modules/network/cache');

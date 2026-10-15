@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { buildCache } from '@/lib/build-cache';
+import { buildCache, liveRevisions } from '@/lib/build-cache';
 import { teamAddresses } from '@/lib/comms/read';
 import { lpStatsData } from '@/lib/lp-stats/data';
 import { redactFact } from '@/lib/authz/read/r3';
@@ -124,4 +124,4 @@ export const conversionData = buildCache(async (vehicleId: string): Promise<Conv
     dims: dims.map((d) => ({ key: d.key, title: d.title, order: d.order, labels: labels(d) })),
     asOf: now.toISOString(),
   };
-});
+}, 16, liveRevisions);

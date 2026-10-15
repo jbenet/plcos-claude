@@ -160,16 +160,16 @@ async function edgeSummary(): Promise<{ coverage: { edges: number; from: Date | 
   const value = withSharedDb(async () => {
     const rows = await db.query<{ tier: EvidenceTier; n: number; reviewed: number; since: string | null; until: string | null }>(`
       with totals as (
-        select tier::text tier, count(*)::int n, count(reviewed_by)::int reviewed,
+        select tier::text label, count(*)::int n, count(reviewed_by)::int reviewed,
           min(valid_from)::text since, max(coalesce(valid_to,current_date))::text until
         from network.edge group by tier
         union all
         select 'D', count(*)::int, 0, min(created_at)::text, current_date::text
         from identity.possible_match
         where active and identity.canonical_entity_id(left_entity) <> identity.canonical_entity_id(right_entity)
-      ) select tier, sum(n)::int n, sum(reviewed)::int reviewed,
+      ) select label as tier, sum(n)::int n, sum(reviewed)::int reviewed,
           min(since::timestamptz)::text since, max(until::timestamptz)::text until
-        from totals where n > 0 group by tier order by tier limit 4`);
+        from totals where n > 0 group by label order by label limit 4`);
     const dates = rows.flatMap(r => r.since ? [new Date(r.since).getTime()] : []);
     const ends = rows.flatMap(r => r.until ? [new Date(r.until).getTime()] : []);
     const current = (await db.one<{ key: string }>(`select revision::text || ':' || current_date::text as key

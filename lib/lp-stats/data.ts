@@ -1,6 +1,6 @@
 import { strategyRouteSummaries } from '@/modules/network';
 import { getDb } from '@/lib/db';
-import { buildCache } from '@/lib/build-cache';
+import { buildCache, liveRevisions } from '@/lib/build-cache';
 import { pipelineData } from '@/lib/pipeline-data';
 import { vehicleReadings } from '@/lib/vehicle-readings';
 import { listVehicles } from '@/modules/platform';
@@ -213,4 +213,4 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
       .sort((a, b) => a.sortOrder - b.sortOrder).map((v) => ({ slug: v.slug, name: v.name })),
     asOf, onHistory,
   };
-});
+}, 16, liveRevisions);
