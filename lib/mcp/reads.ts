@@ -58,10 +58,11 @@ export async function search(user: AppUser, a: { query: string; kind?: 'any' | '
   const ids = found.map((e) => e.entityId);
   const db = await getDb();
   const [pursuits, restricted, vehicles] = await Promise.all([
+    // The found records' aliases, then their pursuits by index: not canonical_entity_id() on every pursuit (15 Oct 2026).
     ids.length ? db.query<{ id: string; entity: string; vehicleId: string; status: string; owner: string }>(`select p.pursuit_id::text id,
-      identity.canonical_entity_id(p.entity_id)::text entity, p.vehicle_id::text "vehicleId", p.status::text status, u.name owner
-      from strategy.active_pursuit p join platform.app_user u on u.id = p.owner_id
-      where identity.canonical_entity_id(p.entity_id) = any($1::uuid[])`, [ids]) : [],
+      a.canonical_id::text entity, p.vehicle_id::text "vehicleId", p.status::text status, u.name owner
+      from identity.alias_pairs($1::uuid[]) a join strategy.active_pursuit p on p.entity_id = a.entity_id
+      join platform.app_user u on u.id = p.owner_id`, [ids]) : [],
     ids.length ? db.query<{ entity: string }>(`select distinct identity.canonical_entity_id(entity_id)::text entity from coordination.restriction
       where identity.canonical_entity_id(entity_id) = any($1::uuid[]) and (expires_at is null or expires_at >= current_date)`, [ids]) : [],
     listVehicles(),
