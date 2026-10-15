@@ -61,7 +61,7 @@ export async function addedInBulk(): Promise<BulkDay[]> {
     if (id && (!firstAdded.has(id) || e.day < firstAdded.get(id)!)) firstAdded.set(id, e.day);
   }
 
-  const pursuits = (await listPursuits(null)).filter((p) => !p.historical && RESEARCH_STATUSES.includes(p.status));
+  const pursuits = (await listPursuits(null, { fresh: true })).filter((p) => !p.historical && RESEARCH_STATUSES.includes(p.status));
   const ids = [...new Set(pursuits.map((p) => p.entityId))];
   // Anything else on record: a touchpoint, a note in Affinity on them, the team's own context.
   const withRecord = new Set((await db.query<{ id: string }>(

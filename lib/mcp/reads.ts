@@ -319,7 +319,7 @@ export async function repliesOwed(user: AppUser, a: { vehicle?: string; withinDa
   const vehicles = a.vehicle ? [await resolveVehicle(user, a.vehicle)] : (await readableVehicles(user)).filter((v) => v.phase !== 'historical');
   const allowed = vehicles.filter((v) => words(user, v.id));
   if (!allowed.length) throw new ToolRefused('Replies owed read the log of contact, which your access does not include.');
-  const pursuits = (await Promise.all(allowed.map((v) => listPursuits(v.id)))).flat().filter((p) => p.status !== 'passed' && !p.closedAt);
+  const pursuits = (await Promise.all(allowed.map((v) => listPursuits(v.id, { fresh: true })))).flat().filter((p) => p.status !== 'passed' && !p.closedAt);
   const sums = await touchpointSummaries(pursuits.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId })));
   const now = Date.now(), within = (a.withinDays ?? 60) * 86_400_000, limit = a.limit ?? 50;
   const slug = new Map(allowed.map((v) => [v.id, v.slug]));
