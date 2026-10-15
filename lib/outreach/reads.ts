@@ -135,7 +135,18 @@ function decodeCursor(a: QueueArgs, cursor: string): { after: string; position: 
  * next step, an update or an indication (the audit log), a touchpoint, a strategy, the close track, the SPV seat, a
  * restriction, a desk send, an address, a message in the comms trace or a link. One query; a pursuit with no change since is absent.
  */
-async function changedSince(ids: string[], since: Date): Promise<Map<string, Date>> {
+/**
+ * The polling time, from the database's clock (the times it is compared with are the database's). A row written in
+ * the same tick as the cursor read as changed after it, so a quiet poll listed it again (15 Oct 2026, once pages got
+ * fast enough to answer within the millisecond of a write). Waiting two milliseconds first puts every earlier write
+ * strictly before the cursor, on a clock that counts microseconds (Postgres) or milliseconds (PGlite).
+ */
+async function pollCursor(): Promise<string> {
+  await new Promise((r) => setTimeout(r, 2));
+  return (await (await getDb()).one<{ c: string }>(`select to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') c`))!.c;
+}
+
+async function changedSince(ids: string[], since: string): Promise<Map<string, Date>> {
   if (!ids.length) return new Map();
   const rows = await (await getDb()).query<{ id: string; at: Date | string }>(`
     with p as (select p.pursuit_id, identity.canonical_entity_id(p.entity_id) e, p.vehicle_id v, p.status_set_at, p.opened_at
@@ -160,7 +171,7 @@ async function changedSince(ids: string[], since: Date): Promise<Map<string, Dat
       union all select p.pursuit_id::text, l.linked_at from p join email.message_link l on l.pursuit_id = p.pursuit_id where l.linked_at >= $2
       union all select p.pursuit_id::text, c.created_at from p join pa on pa.canonical_id = p.e join research.claim c on c.entity_id = pa.entity_id
         where c.field ~ '(^|\\.)email$' and c.created_at >= $2
-    ) t where at >= $2 group by id`, [ids, since]);
+    ) t where at >= $2::timestamptz group by id`, [ids, since]);
   return new Map(rows.map((r) => [r.id, new Date(r.at)]));
 }
 
@@ -188,7 +199,7 @@ export function replyOwedFrom(touches: Touchpoint[], now = new Date()): { since:
 
 export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit = {}) {
   // The next poll's updatedSince: taken before reading, so a change committed while this runs is seen next time.
-  const cursor = new Date().toISOString();
+  const cursor = await pollCursor();
   const limit = Math.min(a.limit ?? config.outreach.defaultQueueRows, config.outreach.maxQueueRows);
   if (a.cursor && a.offset !== undefined) throw new OutreachRefused(400, 'Page with cursor or with offset, not both.');
   if (a.bucket === 'passed' && !a.includePassed) throw new OutreachRefused(400, 'Passed LPs are left out unless you ask for them: add includePassed.');
@@ -263,7 +274,7 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
       : ['new', 'sourcing', 'selected'].includes(r.status) ? 'invite' : 'follow_up';
     return { r, v, s, last, close, seat, indicated, replyOwed, funds, bucket };
   });
-  const changed = since ? await changedSince(base.map((b) => b.r.id), since) : null;
+  const changed = since ? await changedSince(base.map((b) => b.r.id), a.updatedSince!) : null;
   const chosen = base.filter((b) => (!a.bucket || b.bucket === a.bucket) && (!changed || changed.has(b.r.id)))
     // A total order (the id last), so a position and a row's place are stable between pages.
     .sort((x, y) => QUEUE_BUCKETS.indexOf(x.bucket) - QUEUE_BUCKETS.indexOf(y.bucket) || (y.r.priority ?? -1) - (x.r.priority ?? -1)
@@ -498,14 +509,14 @@ export interface ContactsArgs {
  * polling cursor), so ifChanged answers { unchanged: true } when nothing a row shows has moved.
  */
 export async function outreachContacts(user: AppUser, a: ContactsArgs, fit: QueueFit = {}) {
-  const cursor = new Date().toISOString();
+  const cursor = await pollCursor();
   const since = a.updatedSince ? new Date(a.updatedSince) : null;
   if (since && Number.isNaN(since.getTime())) throw new OutreachRefused(400, 'updatedSince is not a time.');
   const vehicles = a.vehicle === 'all' ? await deskVehicles(user) : [await deskVehicle(user, a.vehicle)];
   const all = (await Promise.all(vehicles.map(async (v) => (await pipelineData(v.id)).rows
     .filter((r) => r.vehicleId === v.id && (a.includePassed || r.status !== 'passed')).map((r) => ({ r, v })))))
     .flat().sort((x, y) => x.v.slug.localeCompare(y.v.slug) || x.r.name.localeCompare(y.r.name) || (x.r.id < y.r.id ? -1 : x.r.id > y.r.id ? 1 : 0));
-  const changed = since ? await changedSince(all.map((b) => b.r.id), since) : null;
+  const changed = since ? await changedSince(all.map((b) => b.r.id), a.updatedSince!) : null;
   const chosen = changed ? all.filter((b) => changed.has(b.r.id)) : all;
   const readable = vehicles.filter((v) => words(user, v.id));
   const entityIds = [...new Set(chosen.map((b) => b.r.entityId))];
