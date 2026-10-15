@@ -48,6 +48,21 @@ const KEY_COOKIE = 'plcos_desktop';
 const LOG_FILE = env.PLCOS_DESKTOP_LOG || path.join(DATA_DIR, 'core.log');
 const VERSION = '0.1.0';
 
+// One line per page or data request, so the app's speed can be read from real use (15 Oct 2026): time, upstream,
+// method, path, kind (page / rsc / action / other), status, ms to first byte, ms in all, bytes. Paths only, never a
+// query string or a body. Kept on this Mac; rolled over at 5 MB.
+const REQUEST_LOG = path.join(DATA_DIR, 'requests.log');
+let requestLogChecked = 0;
+function logRequest(fields) {
+  try {
+    if (Date.now() - requestLogChecked > 60_000) {
+      requestLogChecked = Date.now();
+      if (existsSync(REQUEST_LOG) && statSync(REQUEST_LOG).size > 5e6) renameSync(REQUEST_LOG, `${REQUEST_LOG}.1`);
+    }
+    appendFileSync(REQUEST_LOG, `${new Date().toISOString()}\t${fields.join('\t')}\n`);
+  } catch { /* best effort */ }
+}
+
 function log(...parts) {
   const line = `${new Date().toISOString()} ${parts.map((p) => (typeof p === 'string' ? p : JSON.stringify(p))).join(' ')}\n`;
   try { appendFileSync(LOG_FILE, line); } catch { /* the log is best effort */ }
@@ -333,6 +348,15 @@ function forward(req, res, url, which, body, { retryRemoteOnError = false } = {}
     }
     upRes.pipe(res);
     if (env.PLCOS_DESKTOP_VERBOSE) upRes.on('end', () => log(which, req.method, url.pathname, upRes.statusCode, `${Date.now() - started}ms`));
+    if (!isStatic) {
+      const ttfb = Date.now() - started;
+      let bytes = 0;
+      upRes.on('data', (d) => { bytes += d.length; });
+      upRes.on('end', () => {
+        const kind = req.headers['next-action'] ? 'action' : req.headers.rsc === '1' ? 'rsc' : (req.headers.accept ?? '').includes('text/html') ? 'page' : 'other';
+        logRequest([which, req.method, url.pathname, kind, upRes.statusCode, ttfb, Date.now() - started, bytes]);
+      });
+    }
   });
   up.on('error', (e) => {
     if (which === 'local' && retryRemoteOnError && !res.headersSent) {
