@@ -64,11 +64,15 @@ export function useLpView({ rows, statuses, asOf, initialFilters = {}, mode, ini
 
   // Typing stays instant; the list catches up a frame later.
   const q = useDeferredValue(f.q);
-  const hay = useMemo(() => new Map(rows.map((r) => [r.id, haystack(r)])), [rows]);
+  // Each row's search text, made the first time a search needs it rather than on every load (6,000 rows, ~20 ms).
+  const hay = useMemo(() => {
+    let byId: Map<string, string> | null = null;
+    return (id: string) => (byId ??= new Map(rows.map((r) => [r.id, haystack(r)]))).get(id);
+  }, [rows]);
   const words = useMemo(() => q.toLowerCase().split(/\s+/).filter(Boolean), [q]);
   const deferred = useMemo(() => ({ ...f, q }), [f, q]);
   // Every filter but the Firms/Individuals toggles, so each toggle can say how many it holds (0113).
-  const anyUnit = useMemo(() => rows.filter((r) => matches(r, { ...deferred, units: 'both' }, words, now, hay.get(r.id))), [rows, deferred, words, now, hay]);
+  const anyUnit = useMemo(() => rows.filter((r) => matches(r, { ...deferred, units: 'both' }, words, now, words.length ? hay(r.id) : undefined)), [rows, deferred, words, now, hay]);
   const filtered = useMemo(() => anyUnit.filter((r) => unitShown(r, deferred.units)), [anyUnit, deferred.units]);
   const shown = useMemo(() => filtered.filter((r) => enabled.includes(r.status)), [filtered, enabled]);
   const unitCounts = useMemo(() => {
