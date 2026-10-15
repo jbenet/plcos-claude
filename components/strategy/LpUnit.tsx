@@ -14,9 +14,7 @@ export async function LpUnitLine({ pursuitId, vehicleId, capacity, review }: {
   const firms = row?.firms ?? [];
   return (
     <>
-      <span>Individual LP</span>
-      {review ? <span className={`${u.tag} ${u.review}`} title={review}>firm or personal?</span>
-        : capacity === 'personal' ? <span className={`${u.tag} ${u.personal}`}>personal</span> : null}
+      <LpUnitTags capacity={capacity} review={review} />
       {firms.length > 0 && <span className="muted"> · </span>}
       {firms.map((f, i) => (
         <span key={f.id}>
@@ -26,6 +24,17 @@ export async function LpUnitLine({ pursuitId, vehicleId, capacity, review }: {
           {f.lpRow && <span className="muted"> (LP here)</span>}
         </span>
       ))}
+    </>
+  );
+}
+
+/** The line's own words, which need no pipeline: also what shows while the firms load (an LP page's Suspense fallback). */
+export function LpUnitTags({ capacity, review }: { capacity: 'organisation' | 'personal' | null; review: string | null }) {
+  return (
+    <>
+      <span>Individual LP</span>
+      {review ? <span className={`${u.tag} ${u.review}`} title={review}>firm or personal?</span>
+        : capacity === 'personal' ? <span className={`${u.tag} ${u.personal}`}>personal</span> : null}
     </>
   );
 }

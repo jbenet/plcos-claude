@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { DakotaClaims } from '@/components/entity/DakotaClaims';
 import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
@@ -21,7 +22,7 @@ import { StatusForm } from '@/components/strategy/StatusForm';
 import { Timeline, meetingLine, type StatusEvent, type TouchContext } from '@/components/strategy/Timeline';
 import { READ_LABEL, aboutThisRaise, type Touchpoint, raiseWindows, summarize, touchpointsFor } from '@/modules/meetings';
 import { relatedLpHeadings } from '@/lib/authz/read/headings';
-import { LpUnitCard, LpUnitLine } from '@/components/strategy/LpUnit';
+import { LpUnitCard, LpUnitLine, LpUnitTags } from '@/components/strategy/LpUnit';
 import { SpvCard } from '@/components/strategy/SpvCard';
 import { latestRun } from '@/modules/sources';
 import { CLOSE_STATE_LABEL, closeTracksFor, indicationFor } from '@/modules/pipeline';
@@ -239,7 +240,10 @@ async function TargetWorkspace({ params, searchParams }: {
             <h1 className={hd.name}><Link href={`/orgs/${p.entityId}`}>{p.entityName}</Link></h1>
             {isPerson ? (
               <div className="h1second">
-                <LpUnitLine pursuitId={p.pursuitId} personId={p.entityId} vehicleId={p.vehicleId} capacity={p.lpCapacity} review={p.lpReview} />
+                {/* The firms come from the vehicle's pipeline, rebuilt after any write: the page shows without waiting for it. */}
+                <Suspense fallback={<LpUnitTags capacity={p.lpCapacity} review={p.lpReview} />}>
+                  <LpUnitLine pursuitId={p.pursuitId} personId={p.entityId} vehicleId={p.vehicleId} capacity={p.lpCapacity} review={p.lpReview} />
+                </Suspense>
               </div>
             ) : relatedLps.length > 0 && (
               <div className="h1second">
@@ -550,10 +554,12 @@ async function TargetWorkspace({ params, searchParams }: {
         {/* An organisation that is the LP lists its people (issue 0092). */}
         {(() => {
           // The LP unit (docs/23): an organisation's page lists its people; a person's asks who the LP is.
-          return isPerson
+          // Both read the vehicle's pipeline, rebuilt after any write (0.27 s on the Mac's copy, 15 Oct 2026): the rest of
+          // the page is sent first and this card follows.
+          return <Suspense fallback={null}>{isPerson
             ? <LpUnitCard pursuitId={pursuit.pursuitId} personId={pursuit.entityId} personName={pursuit.entityName} vehicleId={pursuit.vehicleId}
                 capacity={pursuit.lpCapacity} review={pursuit.lpReview} historical={pursuit.historical} />
-            : <OrgPeople orgId={pursuit.entityId} orgName={pursuit.entityName} vehicleId={pursuit.vehicleId} currentPursuitId={pursuit.pursuitId} />;
+            : <OrgPeople orgId={pursuit.entityId} orgName={pursuit.entityName} vehicleId={pursuit.vehicleId} currentPursuitId={pursuit.pursuitId} />}</Suspense>;
         })()}
         {/* Whether they do SPVs (Juan, 27 Sep 2026): the stance, its evidence, and a person's setting. */}
         <SpvCard entityId={pursuit.entityId} entityName={pursuit.entityName} spvVehicle={vehicleKind === 'spv'} />
