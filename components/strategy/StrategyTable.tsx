@@ -24,7 +24,7 @@ export interface StrategyTableRow {
   /** Expected capital moved per team hour; a planning GUESS, never a forecast. */
   priority: number | null; expected: number | null; evidencePriority: number;
   capacity: number | null; likelihood: number | null; route: number | null; days: number | null;
-  views: string[]; risks: string[]; held: boolean; basis: StrategyRowBasis;
+  views: string[]; risks: string[]; held: boolean;
   /** Whether the LP does SPVs (Juan, 27 Sep 2026). */
   spv: SpvRowMark;
 }
@@ -46,8 +46,10 @@ const money = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency',
 const label = (v: string) => v.charAt(0).toUpperCase() + v.slice(1).replaceAll('-', ' ');
 const PAGE = 50;
 
-export function StrategyTable({ table, asOf, initialFilters = {}, views = [{ id: 'all', label: 'All LPs' }], rules, spvVehicle = false }: {
-  table: PackedTable; asOf: string; initialFilters?: Record<string, string>; views?: Array<{ id: string; label: string }>;
+export function StrategyTable({ table, basisUrl, asOf, initialFilters = {}, views = [{ id: 'all', label: 'All LPs' }], rules, spvVehicle = false }: {
+  table: PackedTable;
+  /** Where a row's basis is read when it opens (`?lp=` its id); not sent with the rows. */
+  basisUrl: string; asOf: string; initialFilters?: Record<string, string>; views?: Array<{ id: string; label: string }>;
   rules: { hours: number; share: number; prior: number };
   /** The vehicle is an SPV: an LP that doesn't do SPVs is flagged in its row and its detail. */
   spvVehicle?: boolean;
@@ -124,7 +126,20 @@ export function StrategyTable({ table, asOf, initialFilters = {}, views = [{ id:
     return { status: of('status'), group: of('group'), owner: of('owner') };
   }, [rows]);
   const maxPriority = useMemo(() => Math.max(0, ...rows.map(r => r.priority ?? 0)), [rows]);
-  const toggle = (id: string) => setExpanded(before => { const next = new Set(before); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const [bases, setBases] = useState<Map<string, StrategyRowBasis | 'failed'>>(new Map());
+  const asked = useRef(new Set<string>());
+  const loadBasis = (id: string) => {
+    if (asked.current.has(id)) return;
+    asked.current.add(id);
+    fetch(`${basisUrl}?lp=${encodeURIComponent(id)}`, { headers: { accept: 'application/json' } })
+      .then(r => r.ok ? r.json() as Promise<{ basis: StrategyRowBasis }> : Promise.reject(new Error(String(r.status))))
+      .then(({ basis }) => setBases(before => new Map(before).set(id, basis)))
+      .catch(() => { asked.current.delete(id); setBases(before => new Map(before).set(id, 'failed')); });
+  };
+  const toggle = (id: string) => {
+    if (!expanded.has(id)) loadBasis(id);
+    setExpanded(before => { const next = new Set(before); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  };
   // The whole row opens its detail (a large target on a touch screen); links and buttons keep their own click.
   const rowClick = (id: string) => (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('a,button,input,select')) toggle(id); };
   const Th = ({ k, children, className }: { k: SortKey; children: ReactNode; className?: string }) =>
@@ -175,7 +190,7 @@ export function StrategyTable({ table, asOf, initialFilters = {}, views = [{ id:
             <td className={`${s.r} ${s.opt} ${s.wideOnly}`}>{row.likelihood === null ? <span className="muted">—</span> : `${Math.round(row.likelihood * 100)}%`}</td>
             <td className={`${s.r} ${s.opt} ${s.wideOnly}`}>{row.route === null ? <span className="muted">—</span> : row.route}</td>
           </tr>
-          {open && <tr className={s.basisRow} id={`lp-basis-${row.id}`}><td colSpan={11}><Basis row={row} rules={rules} spvVehicle={spvVehicle} /></td></tr>}
+          {open && <tr className={s.basisRow} id={`lp-basis-${row.id}`}><td colSpan={11}><Basis row={row} basis={bases.get(row.id)} rules={rules} spvVehicle={spvVehicle} /></td></tr>}
         </Fragment>;
       })}</tbody>
     </table></div>}
@@ -189,8 +204,10 @@ function Field({ label: name, set, children }: { label: string; set: boolean; ch
   return <label className={`${s.field}${set ? ` ${s.fieldSet}` : ''}`}><span className={s.fieldLabel}>{name}</span>{children}</label>;
 }
 
-function Basis({ row, rules, spvVehicle }: { row: StrategyTableRow; rules: { hours: number; share: number; prior: number }; spvVehicle: boolean }) {
-  const b = row.basis;
+function Basis({ row, basis, rules, spvVehicle }: { row: StrategyTableRow; basis: StrategyRowBasis | 'failed' | undefined; rules: { hours: number; share: number; prior: number }; spvVehicle: boolean }) {
+  if (basis === undefined) return <p className="muted" role="status">Loading the basis…</p>;
+  if (basis === 'failed') return <p className="muted" role="status">The basis could not be loaded. <Link href={row.href}>Open the LP</Link> for its strategy and sources.</p>;
+  const b = basis;
   const [forward, observed, factor] = b.conversion;
   const unknown = <span className="muted">Unknown</span>;
   return <div className={s.basis}>

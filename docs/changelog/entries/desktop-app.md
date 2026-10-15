@@ -33,3 +33,5 @@ real data. The copy now analyzes its tables, rebuilds the pages you just opened 
 and hands reads back to the Mac sooner after a write. The research corpus page shows 200 documents at a time (it sent
 17 MB), an LP's fit page sends only the documents its dimensions cite, and the server warms each vehicle's strategy and
 stats pages after a change.
+On a vehicle's plan, "LPs by next action" no longer sends every row's basis with the page (most of its 1.9 MB on the
+real data): a row's angle, plan and score inputs load when you open it, from the plan the page was built from.

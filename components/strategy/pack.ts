@@ -3,7 +3,8 @@
  * search and sorting are instant. Most of its text repeats from row to row (the same risk labels,
  * the same "no supported capacity estimate"), so strings travel once, in a table, and rows carry
  * their indices; the coverage views travel as a bitmask and the link as a shared prefix.
- * Packing and unpacking are exact inverses; no text is shortened or dropped.
+ * Packing and unpacking are exact inverses; no text is shortened or dropped. A row's basis is not here: it is read
+ * when the row opens (lib/strategy-basis.ts, 15 Oct 2026).
  */
 import type { StrategyTableRow } from './StrategyTable';
 import type { SpvRowMark } from '@/modules/strategy/client';
@@ -17,24 +18,8 @@ export interface PackedRow {
   views: number; risks: S[]; held: boolean;
   /** SPV stance: stance, known count, why, basis, conflict (1) or not (0), the short why. */
   spv: [S, number | null, S | null, S, 0 | 1, S | null];
-  basis: {
-    angle: S | null; capacity: S; likelihood: S | null; route: S | null; decision: S | null;
-    conversion: [number, number, number]; work: Array<[S, number]>; due: S | null; proposed: S | null; strategy: S | null;
-    plan: Array<[S, S]>;
-  };
 }
-/** Rows travel by column (lib/packed-rows, performance pass 12 Oct 2026), so no key repeats per row; the basis as a tuple. */
-type FlatRow = Omit<PackedRow, 'basis'> & { b: [
-  S | null, S, S | null, S | null, S | null, [number, number, number], Array<[S, number]>, S | null, S | null, S | null, Array<[S, S]>,
-] };
 export interface PackedTable { rows: PackedRows; strings: string[]; views: string[]; hrefBase: string }
-
-const flat = ({ basis: b, ...r }: PackedRow): FlatRow =>
-  ({ ...r, b: [b.angle, b.capacity, b.likelihood, b.route, b.decision, b.conversion, b.work, b.due, b.proposed, b.strategy, b.plan] });
-const nested = ({ b, ...r }: FlatRow): PackedRow => ({ ...r, basis: {
-  angle: b[0], capacity: b[1], likelihood: b[2], route: b[3], decision: b[4], conversion: b[5], work: b[6], due: b[7],
-  proposed: b[8], strategy: b[9], plan: b[10],
-} });
 
 export function packRows(rows: StrategyTableRow[], views: string[], hrefBase: string): PackedTable {
   const strings: string[] = []; const index = new Map<string, number>();
@@ -45,7 +30,6 @@ export function packRows(rows: StrategyTableRow[], views: string[], hrefBase: st
     strings, views, hrefBase,
     rows: packColumns(rows.map((r): PackedRow => {
       if (r.href !== hrefBase + r.id) throw new Error('A row link does not follow the shared prefix.');
-      const b = r.basis;
       return {
         id: r.id, name: r.name, action: r.action, group: s(r.group), status: s(r.status), owner: s(r.owner), rank: r.rank,
         priority: r.priority, expected: r.expected, evidencePriority: r.evidencePriority,
@@ -53,30 +37,19 @@ export function packRows(rows: StrategyTableRow[], views: string[], hrefBase: st
         views: r.views.reduce((m, v) => views.includes(v) ? m | (1 << views.indexOf(v)) : m, 0),
         risks: r.risks.map(s), held: r.held,
         spv: [s(r.spv.stance), r.spv.minDeals, n(r.spv.why), s(r.spv.basis), r.spv.conflict ? 1 : 0, n(r.spv.short)],
-        basis: {
-          angle: n(b.angle), capacity: s(b.capacity), likelihood: n(b.likelihood), route: n(b.route), decision: n(b.decision),
-          conversion: b.conversion, work: b.work.map(([w, p]) => [s(w), p]), due: n(b.due), proposed: n(b.proposed),
-          strategy: n(b.strategy), plan: b.plan.map(([m, why]) => [s(m), s(why)]),
-        },
       };
-    }).map(flat)),
+    })),
   };
 }
 
 export function unpackRows({ rows, strings, views, hrefBase }: PackedTable): StrategyTableRow[] {
   const s = (i: S) => strings[i]!;
   const n = (i: S | null) => i === null ? null : strings[i]!;
-  return unpackColumns<FlatRow>(rows).map(nested).map(r => ({
+  return unpackColumns<PackedRow>(rows).map(r => ({
     id: r.id, name: r.name, href: hrefBase + r.id, action: r.action, group: s(r.group), status: s(r.status), owner: s(r.owner), rank: r.rank,
     priority: r.priority, expected: r.expected, evidencePriority: r.evidencePriority,
     capacity: r.capacity, likelihood: r.likelihood, route: r.route, days: r.days,
     views: views.filter((_, i) => r.views & (1 << i)), risks: r.risks.map(s), held: r.held,
     spv: { stance: s(r.spv[0]) as SpvRowMark['stance'], minDeals: r.spv[1], why: n(r.spv[2]), basis: s(r.spv[3]) as SpvRowMark['basis'], conflict: r.spv[4] === 1, short: n(r.spv[5]) },
-    basis: {
-      angle: n(r.basis.angle), capacity: s(r.basis.capacity), likelihood: n(r.basis.likelihood), route: n(r.basis.route),
-      decision: n(r.basis.decision), conversion: r.basis.conversion, work: r.basis.work.map(([w, p]) => [s(w), p]),
-      due: n(r.basis.due), proposed: n(r.basis.proposed), strategy: n(r.basis.strategy),
-      plan: r.basis.plan.map(([m, why]) => [s(m), s(why)]),
-    },
   }));
 }
