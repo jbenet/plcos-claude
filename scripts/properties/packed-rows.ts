@@ -51,5 +51,24 @@ export async function packedRowsProperties(check: Check) {
       && (shapedPacked.c.key as { a?: string; s?: string }).s === ':invented' && !('a' in shapedPacked.c.almostKey!)
       && 'e' in shapedPacked.c.seen! && 'v' in shapedPacked.c.mixed! && shapedBack[1]!.seen !== shapedBack[10]!.seen,
     JSON.stringify(Object.fromEntries(Object.entries(shapedPacked.c).map(([k, c]) => [k, Object.keys(c).join('')]))));
+  const vehicles = ['invented-one', 'invented-two', 'invented-three'];
+  const floor = Array.from({ length: 300 }, (_, i) => {
+    const entityId = `00000000-0000-4000-8000-${(i * 104729).toString(16).padStart(12, '0')}`;
+    return { key: `${entityId}:${vehicles[i % 3]}`, label: i % 2 ? `${entityId}!` : `${entityId}?`, entityId, name: `Invented ${i}`,
+      upper: i === 7 ? entityId.toUpperCase() : entityId.replace('00000000', 'ffffffff'), edge: i % 2 ? 'ffffffff-ffff-4fff-bfff-ffffffffffff' : `0000000${i % 10}-0000-4000-8000-00000000000${i % 10}` };
+  });
+  const floorPacked = packRows(floor);
+  check('PACKED ROWS send a column that is a later column plus a few endings as that column and the endings',
+    unpackRows<typeof floor[number]>(floorPacked).every((row, i) => isDeepStrictEqual(row, floor[i]))
+      && (floorPacked.c.key as { a?: string }).a === 'entityId' && 'x' in floorPacked.c.key!
+      && 'x' in floorPacked.c.label! && 'u' in floorPacked.c.entityId! && !('u' in floorPacked.c.upper!)
+      && JSON.stringify(floorPacked.c.key).length < 1000,
+    JSON.stringify(Object.fromEntries(Object.entries(floorPacked.c).map(([k, c]) => [k, `${Object.keys(c).join('')} ${JSON.stringify(c).length}`]))));
+  const ids = Array.from({ length: 50 }, (_, i) => ({ id: `${(i * 2654435761 % 4294967296).toString(16).padStart(8, '0')}-abcd-4ef0-9123-${(i * 40503).toString(16).padStart(12, '0')}` }));
+  const idsPacked = packRows(ids);
+  check('PACKED ROWS send distinct ids as 22 characters each and read them back exactly',
+    unpackRows<{ id: string }>(JSON.parse(JSON.stringify(idsPacked))).every((row, i) => row.id === ids[i]!.id)
+      && (idsPacked.c.id as { u?: string }).u?.length === 50 * 22,
+    JSON.stringify(idsPacked).length + ' bytes for 50 ids');
   check('PACKED ROWS of no rows read back as no rows', unpackRows(packRows([])).length === 0, '');
 }

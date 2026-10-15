@@ -25,13 +25,18 @@
  * - A column of Dates (and nulls) is sent as epoch milliseconds, shared as above when that is shorter; each row reads
  *   back its own Date. A text column equal on every row to an earlier one with the same text before and after it
  *   (`<entityId>:neurotech`) is sent as that column's name and the two affixes.
+ * - A text column that is, on every row, another plain text column (earlier or later) followed by one of a few endings
+ *   (a floor item's key, `<entityId>:<vehicle>` across vehicles; 15 Oct 2026) is sent as that column's name and the
+ *   endings, shared as above.
+ * - A column of distinct ids (every value a lowercase uuid) is one string of 22 base64url characters per row, instead
+ *   of 39 characters of quoted text: ids were over half of what Pipeline sent once text was shared (15 Oct 2026).
  */
 export interface PackedRows {
   n: number;
   /** Column → its values in row order, or `[distinct values, index per row]`. */
   c: Record<string, { v: unknown[] } | { d: unknown[]; i: Index } | { l: PackedRows; k: number[] }
-    | { a: string; p?: string; s?: string } | { h: { d: unknown[]; i: Index }; t: Array<string | 0>; r?: string }
-    | { e: { d: unknown[]; i: Index } | { v: unknown[] } }>;
+    | { a: string; p?: string; s?: string } | { a: string; x: { d: unknown[]; i: Index } } | { h: { d: unknown[]; i: Index }; t: Array<string | 0>; r?: string }
+    | { e: { d: unknown[]; i: Index } | { v: unknown[] } } | { u: string }>;
 }
 
 /** An index per row; with 36 distinct values or fewer, one base-36 character per row (a lane, a standing). */
@@ -73,6 +78,27 @@ function share(values: unknown[]) {
   const small = d.length <= SMALL;
   dictLength += small ? i.length : indexLength;
   return { d, i: small ? i.map((x) => x.toString(36)).join('') : i, rawLength, dictLength };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+/** 32 hex digits, three at a time (12 bits) as two characters; the last two digits are padded to 12 bits. */
+function uuidsOut(values: string[]) {
+  let out = '';
+  for (const v of values) {
+    const hex = v.replaceAll('-', '') + '0';
+    for (let at = 0; at < 33; at += 3) { const n = parseInt(hex.slice(at, at + 3), 16); out += B64[n >> 6]! + B64[n & 63]!; }
+  }
+  return out;
+}
+function uuidsIn(text: string, n: number) {
+  const out: string[] = [];
+  for (let r = 0; r < n; r++) {
+    let hex = '';
+    for (let at = r * 22; at < r * 22 + 22; at += 2) hex += ((B64.indexOf(text[at]!) << 6) | B64.indexOf(text[at + 1]!)).toString(16).padStart(3, '0');
+    out.push(`${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`);
+  }
+  return out;
 }
 
 const cut = (v: string) => Math.max(v.lastIndexOf('='), v.lastIndexOf(':'), v.lastIndexOf('/')) + 1;
@@ -142,10 +168,33 @@ export function packRows<T extends object>(rows: readonly T[]): PackedRows {
     if (values.every((v) => v === undefined || v === null || typeof v !== 'object')) plainColumns.push([k, values]);
     const { d, i, rawLength, dictLength } = share(values);
     const col = dictLength < rawLength ? { d, i } : split(values, rawLength, textTails) ?? { v: values };
-    c[k] = col;
+    c[k] = !('d' in col) && !('r' in col) && values.every((v) => typeof v === 'string' && UUID.test(v)) ? { u: uuidsOut(values as string[]) } : col;
     if (!('r' in col) && values.every((v) => typeof v === 'string')) textTails.push([k, (values as string[]).map((v) => v.slice(cut(v)))]);
   }
+  ending(c, plainColumns);
   return { n: rows.length, c };
+}
+
+/**
+ * Columns that are another column plus a shared ending become references to it. Only a column that nothing refers
+ * to may become one, and only a column that is not, and will not become, a reference may be its source.
+ */
+function ending(c: PackedRows['c'], plainColumns: Array<[string, unknown[]]>) {
+  const sources = new Set<string>();
+  for (const col of Object.values(c)) { if ('a' in col) sources.add(col.a); if ('h' in col && col.r) sources.add(col.r); }
+  const references = new Set<string>();
+  const texts = plainColumns.filter(([, v]) => v.length && v.every((x) => typeof x === 'string' && x)) as Array<[string, string[]]>;
+  for (const [k, values] of texts) {
+    const col = c[k]!;
+    if (sources.has(k) || 'a' in col || ('h' in col && col.r)) continue;
+    const length = JSON.stringify(col).length;
+    for (const [o, other] of texts) {
+      if (o === k || references.has(o) || ('h' in c[o]! && (c[o] as { r?: string }).r) || !values.every((v, r) => v.length > other[r]!.length && v.startsWith(other[r]!))) continue;
+      const { d, i } = share(values.map((v, r) => v.slice(other[r]!.length)));
+      const x = { a: o, x: { d, i } };
+      if (JSON.stringify(x).length < length * 0.8) { c[k] = x; references.add(k); sources.add(o); break; }
+    }
+  }
 }
 
 export function unpackRows<T>(packed: PackedRows): T[] {
@@ -158,13 +207,15 @@ export function unpackRows<T>(packed: PackedRows): T[] {
     } else if ('e' in col) {
       const e = col.e;
       for (let r = 0; r < packed.n; r++) { const ms = 'v' in e ? e.v[r] : e.d[at(e.i, r)]; rows[r]![k] = ms === null ? null : new Date(ms as number); }
-    } else if ('v' in col) col.v.forEach((v, r) => { if (v !== undefined) rows[r]![k] = v; });
+    } else if ('u' in col) uuidsIn(col.u, packed.n).forEach((v, r) => { rows[r]![k] = v; });
+    else if ('v' in col) col.v.forEach((v, r) => { if (v !== undefined) rows[r]![k] = v; });
     else if ('h' in col && !col.r) col.t.forEach((tail, r) => { rows[r]![k] = (col.h.d[at(col.h.i, r)] as string) + tail; });
     else if ('d' in col) for (let r = 0; r < packed.n; r++) { const v = col.d[at(col.i, r)]; if (v !== undefined) rows[r]![k] = v; }
   }
   // A copied column reads its source's values; sources are always earlier, plain, and never copies.
   for (const [k, col] of Object.entries(packed.c)) {
-    if ('a' in col) rows.forEach((row) => { const v = row[col.a]; if (v !== undefined) row[k] = col.p || col.s ? `${col.p ?? ''}${v as string}${col.s ?? ''}` : v; });
+    if ('a' in col && 'x' in col) { const x = col.x; rows.forEach((row, r) => { row[k] = (row[col.a] as string) + (x.d[at(x.i, r)] as string); }); }
+    else if ('a' in col) rows.forEach((row) => { const v = row[col.a]; if (v !== undefined) row[k] = col.p || col.s ? `${col.p ?? ''}${v as string}${col.s ?? ''}` : v; });
     // A tail sent as 0 is the same row's tail of the column `r` names, which is never itself a reference.
     if ('h' in col && col.r) {
       const from = col.r;

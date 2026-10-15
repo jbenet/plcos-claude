@@ -35,3 +35,5 @@ and hands reads back to the Mac sooner after a write. The research corpus page s
 stats pages after a change.
 On a vehicle's plan, "LPs by next action" no longer sends every row's basis with the page (most of its 1.9 MB on the
 real data): a row's angle, plan and score inputs load when you open it, from the plan the page was built from.
+Lists send ids in 22 characters instead of 38, and a floor item's key (its LP's id and the vehicle) as a reference to
+the id: on an invented 1,000-LP fixture Pipeline sends 25% less and the visualizations' items 35% less.
