@@ -74,7 +74,7 @@ import { config } from '@/config/deployment';
 import { isLiveServer } from '@/config/ports';
 import { isDbBusy, prioritizeDb } from './scheduling';
 
-type Global = typeof globalThis & { __capitalOsDb?: Promise<Db>; __capitalOsMigrationCheck?: { at: number; files: string; running: Promise<void> | null } };
+type Global = typeof globalThis & { __capitalOsDb?: Promise<Db>; __capitalOsBackgroundDb?: Promise<Db>; __capitalOsMigrationCheck?: { at: number; files: string; running: Promise<void> | null } };
 const g = globalThis as Global;
 
 /**
@@ -91,6 +91,18 @@ export function getDb(): Promise<Db> {
   const db = g.__capitalOsDb.then(prioritizeDb);
   if (process.env.NODE_ENV === 'production') return db;
   return db.then(catchUp);
+}
+
+/**
+ * A second, small Postgres pool whose writes are background (network 017): pages answer from their last build while
+ * they land and rebuild behind, as for an import worker. For an agent's call with no person in the loop (an autonomous
+ * MCP call): writing at night, it emptied the pages' caches before Juan's next click (15 Oct 2026). Null on PGlite,
+ * where one handle serves the process.
+ */
+export function backgroundDb(): Promise<Db> | null {
+  if (!config.db.url) return null;
+  const url = config.db.url;
+  return (g.__capitalOsBackgroundDb ??= import('./postgres').then((m) => m.openPostgres(url, { max: 2, background: true })));
 }
 
 /**

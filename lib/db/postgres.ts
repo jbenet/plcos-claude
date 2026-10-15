@@ -8,6 +8,8 @@ export interface PostgresOptions {
   statementTimeoutMs?: number;
   /** GUESS — eight foreground connections; workers use a smaller independent pool. */
   max?: number;
+  /** Writes on this pool are background (network 017), as an import worker's are; its statement limits stay the foreground's. */
+  background?: boolean;
 }
 
 /** The application uses numbers for bigint counts, as PGlite does. Refuse precision loss. */
@@ -45,7 +47,7 @@ export async function openPostgres(url: string, options: PostgresOptions = {}): 
     application_name: 'plcos',
     // An import worker's writes are background (network 017): pages may answer from their last build
     // while it writes, and rebuild behind. Everyone else's writes rebuild before the next page answers.
-    ...(worker ? { options: '-c plcos.background=on' } : {}),
+    ...(worker || options.background ? { options: '-c plcos.background=on' } : {}),
     types: parsers,
   });
   // Idle connection failures must not become unhandled EventEmitter errors. pg removes

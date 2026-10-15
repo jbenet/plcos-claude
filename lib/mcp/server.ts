@@ -3,7 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { config } from '@/config/deployment';
 import { actAs } from '@/lib/auth/acting';
-import { getDb } from '@/lib/db';
+import { backgroundDb, getDb, withDb } from '@/lib/db';
 import { MutationGuardError } from '@/lib/mutation-policy';
 import { appendAudit, findMcpToken } from '@/modules/platform';
 import { admitCall, envelopeFor, type Envelope } from './envelope';
@@ -82,7 +82,11 @@ export async function runTool(env0: Envelope, name: string, args: Record<string,
     }
     const parsed = tool.input.safeParse(args ?? {});
     if (!parsed.success) return fail('invalid', 400, `Arguments not accepted: ${parsed.error.issues.map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; ')}`.slice(0, 600));
-    answer = await actAs(env.principal, () => tool.run(env, parsed.data));
+    // No person in the loop: its writes are background, so the pages a person opens answer from their last build and
+    // rebuild behind; the agent's change shows a rebuild later (15 Oct 2026). A person's calls rebuild first, as before.
+    const background = env.autonomous ? backgroundDb() : null;
+    const run = () => actAs(env.principal, () => tool.run(env, parsed.data));
+    answer = background ? await withDb(await background, run) : await run();
     if (render) {
       const out = renderAnswer(tool.name, answer);
       bytes = out.bytes; truncated = out.truncated;
