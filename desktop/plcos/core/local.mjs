@@ -157,6 +157,7 @@ class LocalCopy {
 
   async loop() {
     while (!this.stopped) {
+      const syncedBefore = this.lastSyncStartedAt;
       try {
         await this.tick();
         this.failures = 0;
@@ -169,7 +170,10 @@ class LocalCopy {
         await this.sleep(Math.min(30 * 60_000, 30_000 * 2 ** Math.min(6, this.failures - 1)));
         continue;
       }
-      await this.sleep(this.settling() || this.phase !== 'ready' ? BUSY_SYNC_MS : IDLE_SYNC_MS);
+      // A write made while that sync ran is caught up by the next one, at once: the poke at the write found the loop busy,
+      // and waiting the usual two seconds kept reads on the live server that long (15 Oct 2026).
+      const behind = this.settling() && this.phase === 'ready' && this.lastSyncStartedAt !== syncedBefore && this.lastWriteAt >= this.lastSyncStartedAt;
+      await this.sleep(behind ? 0 : this.settling() || this.phase !== 'ready' ? BUSY_SYNC_MS : IDLE_SYNC_MS);
     }
   }
 
@@ -254,9 +258,16 @@ class LocalCopy {
     // Stop the old server only once the new build is ready to replace it.
     await this.stopNext();
     await this.ensurePostgres();
-    this.detail = 'Making the database’s schema';
-    await sh(process.execPath, ['--import', 'tsx', 'scripts/desktop-migrate.ts'], { cwd: dir, env: this.childEnv(dir), timeout: 10 * 60_000 });
     await this.openPool(dir);
+    // The build's migrations run once per build: on a launch with the build already migrated here, the schema is as it
+    // left it, and starting tsx for nothing to do cost about a second of every launch (15 Oct 2026).
+    await this.pg.query('create table if not exists _desktop.migrated (singleton boolean primary key default true check (singleton), commit text not null)');
+    const done = (await this.pg.query('select commit from _desktop.migrated')).rows[0]?.commit;
+    if (done !== commitHere) {
+      this.detail = 'Making the database’s schema';
+      await sh(process.execPath, ['--import', 'tsx', 'scripts/desktop-migrate.ts'], { cwd: dir, env: this.childEnv(dir), timeout: 10 * 60_000 });
+      await this.pg.query('insert into _desktop.migrated (commit) values ($1) on conflict (singleton) do update set commit = excluded.commit', [commitHere]);
+    }
     this.build = { commit: commitHere, dir };
     this.pruneBuilds(builds, commitHere);
     // Counters are kept across builds: a migration that changes rows moves the server's counters, and a new table has
@@ -722,7 +733,8 @@ class LocalCopy {
     });
     this.next = child;
     writeFileSync(pidFile, String(child.pid));
-    for (let i = 0; i < 120 && !(await this.nextHealthy()); i++) await new Promise((r) => setTimeout(r, 500));
+    // Looked for every 100 ms (it is up about a second after starting), so the copy answers as soon as it can.
+    for (let i = 0; i < 600 && !(await this.nextHealthy()); i++) await new Promise((r) => setTimeout(r, 100));
   }
 
   async nextHealthy() {
