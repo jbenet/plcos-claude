@@ -1,7 +1,7 @@
 import type { PipelineRow } from '@/components/strategy/pipeline-model';
 import { getDb } from '@/lib/db';
 import { listEntities } from '@/modules/identity';
-import { buildCache } from '@/lib/build-cache';
+import { buildCache, liveRevisions } from '@/lib/build-cache';
 import { listVehicles } from '@/modules/platform';
 import { listAssessments } from '@/modules/fit';
 import { capacityEstimate, spvMarks, strategicMark, strategicRecords, strategicScope, strategyOf, pursuitsOn, touchesOn, type StrategicGrade } from '@/modules/strategy';
@@ -248,7 +248,7 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
   });
 
   return { rows, onHistory: all.length - pursuits.length, asOf: new Date().toISOString() };
-});
+}, 16, liveRevisions);
 
 const assessmentsFor = buildCache(async (vehicleId: string) => listAssessments(vehicleId));
 

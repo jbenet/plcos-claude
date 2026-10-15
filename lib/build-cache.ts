@@ -35,6 +35,17 @@ export async function routesRevisions(db: Db): Promise<{ revision: string; foreg
     foreground::text || ':' || routes::text || ':' || current_date::text as foreground from network.read_revision where singleton`);
   return row!;
 }
+/**
+ * For a cache that also reads money, restrictions or research claims (network 024): the read revision and the live
+ * one, which only writes to exposures, commitment events, restrictions and claims move. Those tables are kept off the
+ * read revision so the routes' snapshots do not rebuild on them; a plan, the pipeline list, LP stats and conversion
+ * read them, and so key on this.
+ */
+export async function liveRevisions(db: Db): Promise<{ revision: string; foreground: string }> {
+  const row = await db.one<{ revision: string; foreground: string }>(`select revision::text || ':' || live::text || ':' || current_date::text as revision,
+    foreground::text || ':' || current_date::text as foreground from network.read_revision where singleton`);
+  return row!;
+}
 type Revisions = (db: Db) => Promise<{ revision: string; foreground: string }>;
 
 // GUESS — the oldest build a page may answer with while only imports have written since. Each such
