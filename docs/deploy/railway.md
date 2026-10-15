@@ -424,6 +424,11 @@ and push up results".
   and MailGuard are doing it)"): list the open feedback issues, read them with their screenshots, and set an
   issue's status. `scripts/cloud-feedback.sh`; details in `docs/deploy/07-feedback-signal.md` §6.
 
+- **`GET|POST /api/sync/affinity`** (15 Oct, `sync:admin`; Juan: "update affinity"): read the open batch of Affinity
+  writes, or propose items from the token owner's sent mail PLC OS holds (`{ "since": "YYYY-MM-DD", "dryRun"? }`),
+  leaving out internal addresses, anyone Affinity's mail already covers, and anyone neither on file, in Affinity nor
+  sent raise mail. Proposing writes nothing to Affinity; a person decides the batch in Approvals → Affinity writes.
+
 **Why this is not two-way sync.** Sync would merge two writable databases: conflict rules for every table,
 deletes, and rebuilt caches. Here there is one writer. Copies come down as read-only previews. Results go up
 as new input files, which the cloud validates and imports itself, exactly like a button press. Nothing on

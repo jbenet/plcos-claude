@@ -45,6 +45,9 @@ export const routeRules = {
   // A record's local type by an Admin's token (lib/sync/entity-type.ts, issue 0063).
   'app/api/sync/entity-type/route.ts#GET': 'sync:admin',
   'app/api/sync/entity-type/route.ts#POST': 'sync:admin',
+  // An Admin's token reads the open batch of Affinity writes and proposes from our own sent mail (lib/sync/affinity-writes.ts).
+  'app/api/sync/affinity/route.ts#GET': 'sync:admin',
+  'app/api/sync/affinity/route.ts#POST': 'sync:admin',
   'app/api/session/route.ts#POST': 'session',
   // Google sign-in and first-run setup (docs/deploy/railway.md §3): nobody is signed in yet. Each handler
   // checks for itself (the signed state cookie, the setup code); a POST must come from this origin.

@@ -30,7 +30,8 @@ import { basename, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { beginRun, realRoot } from '../lib/workflows/ledger';
 import { finishWithUsage } from '../lib/workflows/usage';
-import { batchPrefix, CAPACITY_WAIT_MS, CODEX, codexArgs, fill, MODELS, nightOf, RUN_LIMIT_MS, shouldFallBack, WEB_WORKFLOWS } from '../lib/astra/runner';
+import { batchPrefix, CAPACITY_WAIT_MS, CODEX, codexArgs, fill, MODELS, nightOf, RESEARCH_HOLD_MS, RUN_LIMIT_MS, shouldFallBack, WEB_WORKFLOWS } from '../lib/astra/runner';
+import { RESEARCH_FILES, RESEARCH_FRESH_MS } from '../lib/astra/research';
 
 const run = promisify(execFile);
 const REPO = process.cwd();
@@ -69,11 +70,11 @@ async function keychain(account: string): Promise<string | null> {
   catch { return null; }
 }
 
-async function call(body: Record<string, unknown>): Promise<Record<string, any>> {
+async function call(body: Record<string, unknown>, timeoutMs = 30_000): Promise<Record<string, any>> {
   const [token, url] = [await keychain('push-token'), await keychain('app-url')];
   if (!token || !url) throw new Error('No Admin token or app URL in the Keychain item plcos-railway (push-token, app-url).');
   const res = await fetch(new URL('/api/sync/astra', url), { method: 'POST', body: JSON.stringify(body),
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(30_000) });
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(timeoutMs) });
   const json = await res.json().catch(() => ({})) as Record<string, any>;
   if (!res.ok) throw new Error(`The server answered ${res.status}: ${String(json.error ?? '').slice(0, 200)}`);
   return json;
@@ -176,6 +177,43 @@ async function codex(slot: Slot, brief: string, base: string, enrich: string): P
 
 let capacityUntil = 0;
 let cutting: Promise<unknown> = Promise.resolve();
+
+/**
+ * The server's research export, fetched once a night (14 Oct 2026: the Mac's copy dated from 8 Oct, so every plan
+ * step said "Nobody is left" and Astra idled while LPs added since sat on the server). In the window, a local export
+ * older than RESEARCH_FRESH_MS is replaced by the server's (which the server rebuilds first when it is stale too).
+ * While that is pending, nothing new is claimed, so a plan step can't end the night on stale data; after
+ * RESEARCH_HOLD_MS of trying, runs go ahead on the old copy.
+ */
+let researchTriedAt = 0, researchStaleSince = 0;
+async function refreshResearch(enrich: string): Promise<boolean> {
+  const at = await stat(join(enrich, 'candidates.jsonl')).then((x) => x.mtimeMs).catch(() => 0);
+  if (Date.now() - at < RESEARCH_FRESH_MS) { researchStaleSince = 0; return false; }
+  researchStaleSince ||= Date.now();
+  const holding = Date.now() - researchStaleSince < RESEARCH_HOLD_MS;
+  if (Date.now() - researchTriedAt < 60_000) return holding;
+  researchTriedAt = Date.now();
+  try {
+    const got = await call({ op: 'research' }, 300_000);
+    if (got.pending) { log(`research export: ${String(got.reason ?? 'pending')}`); return holding; }
+    const files = Object.entries((got.files ?? {}) as Record<string, { text: string; sha256: string }>)
+      .filter(([name]) => (RESEARCH_FILES as readonly string[]).includes(name));
+    if (!files.some(([name]) => name === 'candidates.jsonl')) throw new Error('the answer has no candidates.jsonl');
+    for (const [name, f] of files) if (sha(f.text) !== f.sha256) throw new Error(`${name} arrived damaged`);
+    // Between batch cuts, so no cut reads half-replaced files.
+    const install = cutting.then(async () => {
+      for (const [name, f] of files) { const tmp = join(enrich, `.${name}.astra-tmp`); await writeFile(tmp, f.text, 'utf8'); await rename(tmp, join(enrich, name)); }
+    });
+    cutting = install.catch(() => undefined);
+    await install;
+    researchStaleSince = 0;
+    log(`research export from ${String(got.exportedAt)} installed: ${files.length} files, ${lines(files.find(([n]) => n === 'candidates.jsonl')![1].text).length} candidates.`);
+    return false;
+  } catch (e) {
+    log(`research export failed: ${e instanceof Error ? e.message : e}`);
+    return holding;
+  }
+}
 
 async function work(slot: Slot, job: Job, root: string) {
   const astra = join(root, 'workflows', 'astra'), enrich = join(root, 'enrich'), batches = join(enrich, 'batches');
@@ -342,11 +380,13 @@ async function main() {
     const waiting = capacityUntil > Date.now();
     // A Restart or Update waiting for the running batches: start nothing new meanwhile.
     const holding = pendingCommands.some((c) => c.op !== 'diagnose');
+    const refreshing = inWindow && await refreshResearch(join(root, 'enrich'));
     try {
       const answer = await call({ op: 'poll', host: hostname().slice(0, 60), workflows: WORKFLOWS, features: FEATURES, commands: COMMANDS, commit: startCommit.slice(0, 12), startedAt,
-        inWindow, night, free: waiting || holding ? 0 : idle.length,
+        inWindow, night, free: waiting || holding || refreshing ? 0 : idle.length,
         held: pool.flatMap((s) => (s.job ? [s.job.id] : [])), slots: pool.map((s) => ({ slot: s.name, job: s.job?.id ?? null })),
-        capacityUntil: waiting ? new Date(capacityUntil).toISOString() : null, note: holding ? 'Waiting for running batches to finish before a restart.' : null });
+        capacityUntil: waiting ? new Date(capacityUntil).toISOString() : null,
+        note: holding ? 'Waiting for running batches to finish before a restart.' : refreshing ? 'Fetching tonight\'s research export before starting runs.' : null });
       window = answer.window ?? window;
       for (const c of (answer.commands ?? []) as Command[]) if (COMMANDS.includes(c.op) && !pendingCommands.some((x) => x.id === c.id)) pendingCommands.push(c);
       for (const id of answer.cancel ?? []) {

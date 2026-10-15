@@ -88,6 +88,10 @@ export const VEHICLE_MODULES: NavModule[] = [
   m('03c', 'LP stats', 'stats', 'L9',
     'The LPs counted by type, check size, score, place, status, path, source and owner; every count filters the list.',
     true, undefined, true),
+  // Outreach conversion (Juan, 14 Oct 2026, docs/33): after LP stats, how the outreach to those LPs is turning out.
+  m('03d', 'Conversion', 'conversion', 'L9',
+    'How outreach converts: the funnel, weekly cohorts, what works by segment, who is stuck, the weekly effort and money.',
+    true, undefined, true),
   m('22', 'Calendar', 'calendar', 'L7',
     'Everything dated for this vehicle on one compressed timeline, projected from the records that own it.',
     true, undefined, true),

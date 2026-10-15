@@ -14,6 +14,8 @@ export const MODELS = ['gpt-6-astra', 'gpt-6-sol'] as const;
 export const RUN_LIMIT_MS: Record<string, number> = { w1w5: 2 * 3600_000, w1: 90 * 60_000, w5: 45 * 60_000, w5t: 25 * 60_000,
   w1s: 90 * 60_000, w5r: 45 * 60_000 };
 /** Workflows that research the public web; the others work from local files only and get no web search. */
+/** How long the runner holds new runs while it fetches a stale research export (guessed: an export takes a few minutes). */
+export const RESEARCH_HOLD_MS = 30 * 60_000;
 export const WEB_WORKFLOWS: readonly string[] = ['w1w5', 'w1', 'w1s'];
 /** After both models report "at capacity", the runner claims nothing for this long. */
 export const CAPACITY_WAIT_MS = 30 * 60_000;
