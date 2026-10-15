@@ -35,7 +35,7 @@ ask. Nothing in this doc writes to DocSend, creates links, or downloads document
 - Its tools, as the help page lists them: read and analyze documents or pages; list the Spaces you can
   access; show a Space's documents and folders; **search contacts who visited your documents; show the
   documents a contact visited**; and update a Space group's members and download settings (a write).
-- Not yet known: the server URL, the exact tool names and arguments, and whether a visit comes back with
+- Server URL: `https://docsend.com/mcp` (Juan, 15 Oct 2026). Not yet known: the exact tool names and arguments, and whether a visit comes back with
   duration, pages or time per page. These decide how much of §3 the MCP can fill.
 - There is still no REST API or developer portal. Third-party pages describing `api.docsend.com/v1` cite no
   DocSend documentation; treat them as unconfirmed.
@@ -170,7 +170,7 @@ docsend: {
 1. Is your DocSend on Advanced Data Rooms, and does your DocSend org allow third-party AI connections?
    The MCP needs both.
 2. Fastest way to see the real tools: add DocSend's MCP as a custom connector in claude.ai (Settings →
-   Connectors, server URL from the Dropbox help page above) and enable it in this thread. I list its tools,
+   Connectors, server URL `https://docsend.com/mcp`) and enable it in this thread. I list its tools,
    read one visit, and build E against what it actually returns. The PLC OS server then gets its own
    sign-in.
 3. Which data rooms and documents belong to which vehicle? (Or let the Materials page mapping do it.)
