@@ -313,7 +313,9 @@ function forward(req, res, url, which, body, { retryRemoteOnError = false } = {}
       void refreshInfo();
     }
     out['x-plcos-upstream'] = which;
-    if (which === 'remote' && !(req.method === 'GET' || req.method === 'HEAD') && upRes.statusCode < 400) {
+    // Choosing a vehicle (or person) only sets a cookie: it is not a write the copy must catch up with, and counting it
+    // sent every page after a vehicle switch to the live server for seconds.
+    if (which === 'remote' && !(req.method === 'GET' || req.method === 'HEAD') && upRes.statusCode < 400 && url.pathname !== '/api/session') {
       state.lastWriteAt = Date.now();
       state.stats.writes++;
       state.local?.onWrite?.(url);
