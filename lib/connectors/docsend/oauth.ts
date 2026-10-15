@@ -56,7 +56,16 @@ export const httpsOAuth: OAuthTransport = async (url, init) => {
 async function json(t: OAuthTransport, url: string, init: Parameters<OAuthTransport>[1], seen?: string[]): Promise<Record<string, unknown> | null> {
   const res = await t(allowedUrl(url), init);
   const say = (what: string) => seen?.push(`${new URL(url).pathname} ${what}`);
-  if (res.status >= 400) { say(String(res.status)); return null; }
+  if (res.status >= 400) {
+    // An OAuth error body (RFC 6749 §5.2, RFC 7591 §3.2.2) says what was wrong; it carries no secret.
+    let why = '';
+    try {
+      const e = JSON.parse(await res.text()) as { error?: unknown; error_description?: unknown };
+      why = [e.error, e.error_description].filter((x) => typeof x === 'string' && x).join(': ').slice(0, 200);
+    } catch { /* not JSON */ }
+    say(why ? `${res.status}, ${why}` : String(res.status));
+    return null;
+  }
   try { return JSON.parse(await res.text()) as Record<string, unknown>; } catch { say(`${res.status}, not JSON`); return null; }
 }
 
@@ -110,17 +119,22 @@ export async function discover(t: OAuthTransport, server = DOCSEND_MCP_URL): Pro
 }
 
 /** Register PLC OS as a public client for this redirect URI. Returns the client id. */
+/**
+ * Register PLC OS as a public client for this redirect URI. Returns the client id. Servers differ in which optional
+ * fields they accept, so a refused registration is tried once more with only the required ones (RFC 7591 §2).
+ */
 export async function register(t: OAuthTransport, meta: ServerMeta, redirectUri: string): Promise<string> {
   const seen: string[] = [];
-  const body = await json(t, meta.registrationEndpoint, {
-    method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' },
-    body: JSON.stringify({
-      client_name: 'PLC OS', redirect_uris: [redirectUri], grant_types: ['authorization_code', 'refresh_token'],
-      response_types: ['code'], token_endpoint_auth_method: 'none',
-    }),
+  const post = (fields: Record<string, unknown>) => json(t, meta.registrationEndpoint, {
+    method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(fields),
   }, seen);
+  const scope = meta.scopes.length ? { scope: meta.scopes.join(' ') } : {};
+  const body = await post({
+    client_name: 'PLC OS', redirect_uris: [redirectUri], grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'], token_endpoint_auth_method: 'none', ...scope,
+  }) ?? await post({ client_name: 'PLC OS', redirect_uris: [redirectUri], token_endpoint_auth_method: 'none' });
   const id = body?.client_id;
-  if (typeof id !== 'string' || !id) throw new DocsendSignInError(`DocSend sign-in: registration was refused (${seen.join('; ') || 'no client id'})`);
+  if (typeof id !== 'string' || !id) throw new DocsendSignInError(`DocSend sign-in: registration was refused for ${redirectUri} (${seen.join('; ') || 'no client id'})`);
   return id;
 }
 
