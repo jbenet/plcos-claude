@@ -1,7 +1,8 @@
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import { DRAFTING_OFF, draftingOn, draftsOn, mailStatus, moveBlocks, PURPOSE_LABEL, voiceOf, warningsFor, type Draft, type Voice } from '@/modules/email';
-import { EmailDraftBox, type DraftView, type GmailView } from './EmailDraftBox';
+import type { DraftView, GmailView } from './EmailDraftBox';
+import { EmailDraftBox } from './EmailDraftBoxLazy';
 import { NewDraftButton } from './NewDraftButton';
 import s from './email.module.css';
 import { Info } from '@/components/ui/Info';

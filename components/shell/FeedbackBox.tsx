@@ -11,7 +11,8 @@ import { RegionPicker } from './RegionPicker';
 import shell from './Shell.module.css';
 import { ShortcutList, useShortcutPlatform } from './KeyboardShortcuts';
 import { isFeedbackKey, isShortcutsKey } from '@/lib/keyboard-shortcuts';
-import { MarkdownField, packAttachments, type DroppedImage } from '@/components/ui/MarkdownField';
+import { MarkdownField } from '@/components/ui/MarkdownFieldLazy';
+import { packAttachments, type DroppedImage } from '@/components/ui/markdown-attachments';
 import {
   discardDraft, listDrafts, readDraft, readPictures, writeDraft, writePictures, type DraftSummary,
 } from '@/lib/feedback-drafts';

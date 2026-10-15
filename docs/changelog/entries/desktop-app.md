@@ -39,3 +39,5 @@ Lists send ids in 22 characters instead of 38, and a floor item's key (its LP's 
 the id: on an invented 1,000-LP fixture Pipeline sends 25% less and the visualizations' items 35% less.
 The import progress every open page polls answers "unchanged" with no body (it sent about 80 KB of the day's job
 results every 5 seconds).
+The text editor's script (about 400 KB) is no longer part of every page: it loads when a field that uses it is drawn,
+so a page without one, like Pipeline or an LP's page with drafting off, never fetches or parses it.

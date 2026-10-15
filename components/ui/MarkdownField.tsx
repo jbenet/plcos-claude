@@ -10,17 +10,9 @@ import HardBreak from '@tiptap/extension-hard-break';
 import { NodeSelection } from '@tiptap/pm/state';
 import Image from '@tiptap/extension-image';
 import { Markdown } from 'tiptap-markdown';
+import type { DroppedImage } from './markdown-attachments';
 
-export interface DroppedImage {
-  /** 1-based, and the same number the body's `attachment:N` refers to. */
-  index: number;
-  name: string;
-  contentType: string;
-  /** Data URL, for the preview here and for the POST. */
-  dataUrl: string;
-  /** Drawn on after it was dropped in (issue 0018). */
-  annotated?: boolean;
-}
+export { packAttachments, type DroppedImage } from './markdown-attachments';
 
 const ACCEPT = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -119,28 +111,6 @@ const BlockImage = Image.extend<EmbedActions & Record<string, unknown>>({
     };
   },
 });
-
-/**
- * Only the pictures still in the text are sent (issue 0020).
- *
- * Deleting an image from the description used to leave it in the upload — so dragging in the
- * wrong picture and deleting it still filed it. This keeps the pictures the text refers to,
- * in the order it refers to them, and renumbers the references to match, because the server
- * resolves `attachment:N` by position.
- */
-export function packAttachments(body: string, images: DroppedImage[]): { body: string; images: DroppedImage[] } {
-  const order: number[] = [];
-  for (const m of body.matchAll(/\(attachment:(\d+)\)/g)) {
-    const n = Number(m[1]);
-    if (!order.includes(n) && images.some((i) => i.index === n)) order.push(n);
-  }
-  const renumber = new Map(order.map((n, k) => [n, k + 1]));
-  return {
-    body: body.replace(/\(attachment:(\d+)\)/g, (whole, n: string) =>
-      (renumber.has(Number(n)) ? `(attachment:${renumber.get(Number(n))})` : whole)),
-    images: order.map((n, k) => ({ ...images.find((i) => i.index === n)!, index: k + 1 })),
-  };
-}
 
 /**
  * `tiptap-markdown` adds this to the editor's storage; its types do not declare it.

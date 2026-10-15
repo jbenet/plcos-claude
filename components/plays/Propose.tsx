@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { propose } from '@/app/plays/actions';
-import { MarkdownField } from '@/components/ui/MarkdownField';
+import { MarkdownField } from '@/components/ui/MarkdownFieldLazy';
 
 /**
  * Commit to something in your own words.
