@@ -75,6 +75,7 @@ class LocalCopy {
     this.cookiePrefix = `capitalos_real_${NEXT_PORT}_`;
     this.origin = `http://127.0.0.1:${NEXT_PORT}`;
     this.lastWriteAt = 0;
+    this.hadCopy = false;               // a whole copy was made here once (then slow tables never block)
     this.slow = new Set(SLOW_TABLES);   // tables that sync in the background once the copy is whole
     this.background = new Set();         // those syncing in the background now
     this.lastSyncStartedAt = 0;
@@ -196,7 +197,7 @@ class LocalCopy {
     this.lastSync = { at: new Date().toISOString(), ms: Date.now() - t0, ...r };
     // The local server starts once the copy is whole, so it never renders (or warms) pages from a half-filled database.
     if (!this.next) await this.startNext();
-    if (this.phase !== 'ready' && this.next && await this.nextHealthy()) { this.phase = 'ready'; this.detail = 'Reading from this Mac'; this.log('local copy ready'); }
+    if (this.phase !== 'ready' && this.next && await this.nextHealthy()) { this.phase = 'ready'; this.hadCopy = true; this.detail = 'Reading from this Mac'; this.log('local copy ready'); }
   }
 
   // ---- the live server ----------------------------------------------------------------------------------------
@@ -410,6 +411,8 @@ class LocalCopy {
   async loadMeta(reset) {
     if (reset) await this.pg.query('update _desktop.sync_meta set counter = null');
     const { rows } = await this.pg.query('select t, counter, since from _desktop.sync_meta');
+    // A table synced before (its horizon kept through a reset) means this Mac has had a whole copy.
+    if (rows.some((r) => r.since)) this.hadCopy = true;
     return new Map(rows.map((r) => [r.t, { counter: r.counter, since: r.since }]));
   }
 
@@ -442,7 +445,10 @@ class LocalCopy {
     const local = await this.localTables();
     let tables = 0, rows = 0, deleted = 0;
     // Biggest first, so the long tables start early and the short ones fill the gaps.
-    const first = this.phase !== 'ready';
+    // Only a copy never made whole waits on every table. A new server build (which stops the local server, so the
+    // phase leaves 'ready') or a restart of the app keeps the slow tables in the background: on 15 Oct 2026 a deploy
+    // re-read route_cache in the foreground and sent every page to Railway for its 13 minutes.
+    const first = this.phase !== 'ready' && !this.hadCopy;
     const changed = st.tables
       .filter((info) => local.has(info.t) && this.meta.get(info.t)?.counter !== info.counter && !this.background.has(info.t))
       .sort((a, b) => (b.rows ?? 0) - (a.rows ?? 0));

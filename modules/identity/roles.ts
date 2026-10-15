@@ -47,6 +47,10 @@ const facts = (only = 'true') => `with money as materialized (
   where e.merged_into is null and e.retired_at is null and ${only}
 )`;
 const FACTS = facts();
+/** The same groups as `filters`, said on base's own joins, so a narrow group builds only its own rows (LPs: 14 of 117K). */
+const PREFILTER: Partial<Record<RelationshipGroup, string>> = {
+  lps: 'coalesce(m.hard,0) > 0', 'co-funders': '(f.entity_id is not null or c.entity_id is not null)', connectors: 'coalesce(a.connector_asks,0) > 0',
+};
 type Row = { entity_id: string; name: string; entity_type: string; hard: string; soft: string;
   vehicles: string[] | null; connector_asks: string; is_team: boolean; is_funder: boolean; is_coinvestor: boolean;
   rung: string | null; status: string | null };
@@ -73,7 +77,7 @@ export async function relationshipRoles(ids?: string[], group: RelationshipGroup
   const db = await getDb();
   // A detail read (ids) builds only its own rows, not all 117K (one org page, 15 Oct 2026: 107 → 20 ms), and
   // rung and status come from the shown records' own pursuits, found through their aliases, not from every pursuit.
-  const rows = await db.query<Row>(`${ids ? facts('e.entity_id = any($1::uuid[])') : FACTS}, shown as materialized (
+  const rows = await db.query<Row>(`${ids ? facts('e.entity_id = any($1::uuid[])') : facts(PREFILTER[group] ?? 'true')}, shown as materialized (
     select * from base where ${ids ? 'entity_id = any($1::uuid[]) and $3::text is null' : `not is_team and ${filters[group]} and $1::uuid[] is null and ($3::text is null or name ilike $3)`}
     order by hard desc, name, entity_id limit ${RELATIONSHIP_PAGE_SIZE} offset $2
   ), pursuits as materialized (
