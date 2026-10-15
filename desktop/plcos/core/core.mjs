@@ -29,6 +29,11 @@ const DEFAULT_SERVER = 'https://plcos-production.up.railway.app';
 const DATA_DIR = env.PLCOS_DESKTOP_DIR
   || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library/Application Support/PLC OS') : path.join(os.homedir(), '.local/share/plcos-desktop'));
 mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+// Spotlight would index the copy's build, dependencies and database files (hundreds of MB) and slow the Mac while
+// it does: these markers ask it not to.
+for (const sub of ['', 'builds', 'deps', 'cache']) { // pg/ is marked after initdb, which wants an empty folder
+  try { mkdirSync(path.join(DATA_DIR, sub), { recursive: true, mode: 0o700 }); writeFileSync(path.join(DATA_DIR, sub, '.metadata_never_index'), ''); } catch { /* best effort */ }
+}
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const readJson = (f, fallback) => { try { return JSON.parse(readFileSync(f, 'utf8')); } catch { return fallback; } };
 const settings = readJson(SETTINGS_FILE, {});

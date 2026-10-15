@@ -22,7 +22,9 @@ const env = process.env;
 const NEXT_PORT = Number(env.PLCOS_DESKTOP_LOCAL_PORT || 47101);
 const PG_PORT = Number(env.PLCOS_DESKTOP_PG_PORT || 57435);
 const DB_NAME = 'plcos_desktop';
-const PAGE = 5000;
+/** Rows per request (the server caps it at 20,000), and tables copied at once. */
+const PAGE = Number(env.PLCOS_DESKTOP_PAGE || 10_000);
+const TABLES_AT_ONCE = Number(env.PLCOS_DESKTOP_TABLES_AT_ONCE || 4);
 /** Reads go to the live server for this long after a write: Postgres's change counters usually lag about a second (docs/31). */
 const WRITE_SETTLE_MS = Number(env.PLCOS_DESKTOP_SETTLE_MS || 5_000);
 const IDLE_SYNC_MS = 15_000;
@@ -130,13 +132,14 @@ class LocalCopy {
       // A new build may bring new tables: read state again after its migrations.
       return;
     }
-    if (!this.next) await this.startNext();
     this.lastSyncStartedAt = syncStarted;
     const t0 = Date.now();
     const r = await this.sync(st);
     this.lastSyncFinishedAt = Date.now();
     if (r.rows || r.deleted) this.log(`synced ${r.tables} table(s), ${r.rows} row(s), ${r.deleted} deleted in ${Date.now() - t0} ms`);
     this.lastSync = { at: new Date().toISOString(), ms: Date.now() - t0, ...r };
+    // The local server starts once the copy is whole, so it never renders (or warms) pages from a half-filled database.
+    if (!this.next) await this.startNext();
     if (this.phase !== 'ready' && this.next && await this.nextHealthy()) { this.phase = 'ready'; this.detail = 'Reading from this Mac'; this.log('local copy ready'); }
   }
 
@@ -245,6 +248,7 @@ class LocalCopy {
         'shared_buffers = 256MB', 'work_mem = 32MB', 'max_connections = 40', 'fsync = off', 'synchronous_commit = off', 'full_page_writes = off',
       ].join('\n') + '\n');
     }
+    try { writeFileSync(path.join(data, '.metadata_never_index'), ''); } catch { /* best effort: no Spotlight on the database files */ }
     const running = await sh(path.join(bin, 'pg_ctl'), ['-D', data, 'status'], { env: pgEnv }).then(() => true, () => false);
     if (!running) await sh(path.join(bin, 'pg_ctl'), ['-D', data, '-l', path.join(data, 'server.log'), '-w', '-t', '60', 'start'], { env: pgEnv });
     const psql = path.join(bin, 'psql');
@@ -257,7 +261,7 @@ class LocalCopy {
     await this.pg?.end().catch(() => undefined);
     const require = createRequire(path.join(dir, 'package.json'));
     const { Pool } = require('pg');
-    this.pg = new Pool({ connectionString: this.dbUrl, max: 2 });
+    this.pg = new Pool({ connectionString: this.dbUrl, max: TABLES_AT_ONCE + 2 });
     await this.pg.query('create schema if not exists _desktop');
     await this.pg.query('create table if not exists _desktop.sync_meta (t text primary key, counter text, since text)');
   }
@@ -294,22 +298,49 @@ class LocalCopy {
   async sync(st) {
     const local = await this.localTables();
     let tables = 0, rows = 0, deleted = 0;
-    for (const info of st.tables) {
+    // Biggest first, so the long tables start early and the short ones fill the gaps.
+    const todo = st.tables
+      .filter((info) => local.has(info.t) && this.meta.get(info.t)?.counter !== info.counter)
+      .sort((a, b) => (b.rows ?? 0) - (a.rows ?? 0));
+    const first = this.phase !== 'ready';
+    const total = todo.length;
+    this.progress = new Map();
+    const showProgress = () => {
+      if (!first) return;
+      const now = [...this.progress].map(([t, n]) => `${t.split('.')[1]} ${n.toLocaleString('en-US')}`).join(', ');
+      this.detail = `Copying the database to this Mac: ${tables} of ${total} tables done${now ? ` (now ${now} rows)` : ''}`;
+    };
+    if (first && total) this.log(`copying ${total} table(s) to this Mac, ${TABLES_AT_ONCE} at a time`);
+    const one = async (info) => {
       const mine = local.get(info.t);
-      if (!mine) continue;
       const prev = this.meta.get(info.t);
-      if (prev && prev.counter === info.counter) continue;
-      let r = await this.pullTable(info, mine, prev?.since ?? null);
-      if (r.redo) r = await this.pullTable(info, mine, null);
+      const t0 = Date.now();
+      this.progress.set(info.t, 0);
+      showProgress();
+      let r = await this.pullTable(info, mine, prev?.since ?? null, (n) => { this.progress.set(info.t, n); showProgress(); });
+      if (r.redo) r = await this.pullTable(info, mine, null, (n) => { this.progress.set(info.t, n); showProgress(); });
+      this.progress.delete(info.t);
       tables++; rows += r.rows; deleted += r.deleted;
       const m = { counter: info.counter, since: r.since };
       this.meta.set(info.t, m);
       await this.pg.query('insert into _desktop.sync_meta (t, counter, since) values ($1, $2, $3) on conflict (t) do update set counter = excluded.counter, since = excluded.since', [info.t, m.counter, m.since]);
-    }
+      if (first && (r.rows > 10_000 || Date.now() - t0 > 2_000)) this.log(`copied ${info.t}: ${r.rows} row(s) in ${Date.now() - t0} ms (${tables}/${total})`);
+      showProgress();
+    };
+    const queue = [...todo];
+    let failed = null;
+    // On a failure the others finish the table they are on (each is its own transaction) and take no more.
+    await Promise.all(Array.from({ length: Math.min(TABLES_AT_ONCE, queue.length) }, async () => {
+      for (let info = queue.shift(); info && !failed; info = queue.shift()) {
+        try { await one(info); } catch (e) { failed ??= e; }
+      }
+    }));
+    this.progress = new Map();
+    if (failed) throw failed;
     return { tables, rows, deleted };
   }
 
-  async pullTable(info, mine, since) {
+  async pullTable(info, mine, since, onRows = () => {}) {
     const keyed = Boolean(info.pk?.length && mine.pk?.length);
     // The first read of a table, or of one without a key, replaces it whole, in one transaction: rows the build's
     // migrations made here never collide with the server's, and a reader sees the old table until the new one is in.
@@ -323,13 +354,21 @@ class LocalCopy {
       await client.query("set session_replication_role = 'replica'");
       await client.query('begin');
       if (whole) await client.query(`delete from ${table}`);
-      for (;;) {
+      const fetchPage = (from) => {
         const qs = new URLSearchParams({ op: 'rows', t: info.t, limit: String(PAGE) });
         if (!whole) qs.set('since', since);
-        if (after) qs.set('after', JSON.stringify(after));
-        const page = await this.remoteJson(`/api/desktop/sync?${qs}`);
+        if (from) qs.set('after', JSON.stringify(from));
+        const p = this.remoteJson(`/api/desktop/sync?${qs}`);
+        p.catch(() => undefined); // awaited below; never an unhandled rejection if applying fails first
+        return p;
+      };
+      // The next page downloads while this one is written.
+      let pending = fetchPage(after);
+      for (;;) {
+        const page = await pending;
         horizon ??= page.horizon;
-        if (page.rows.length) { await this.apply(client, table, mine, page.rows, keyed); n += page.rows.length; }
+        pending = page.next ? fetchPage(page.next) : null;
+        if (page.rows.length) { await this.apply(client, table, mine, page.rows, keyed); n += page.rows.length; onRows(n); }
         if (!page.next) { count = page.count; break; }
         after = page.next;
       }

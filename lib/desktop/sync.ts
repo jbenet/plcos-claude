@@ -87,7 +87,7 @@ export async function syncRows(table: string, since: string | null, after: strin
   const db = await getDb();
   const s = await shape(db, table);
   if (!s) return { ok: false, error: 'No such table.' };
-  const lim = Math.max(1, Math.min(5000, Math.trunc(limit) || 2000));
+  const lim = Math.max(1, Math.min(20_000, Math.trunc(limit) || 2000));
   const from = `${ident(s.schema)}.${ident(s.name)}`;
   return db.transaction(async (tx) => {
     // One snapshot for the page, its horizon and its count.
