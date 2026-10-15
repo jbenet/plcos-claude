@@ -37,9 +37,11 @@
 import { getDb } from '@/lib/db';
 
 // GUESS — how often to look (one small query) and the least time between two warm-ups, which bounds
-// the extra rendering while someone edits records every few seconds.
-export const WARM_POLL_MS = 5_000;
-export const WARM_MIN_GAP_MS = 30_000;
+// the extra rendering while someone edits records every few seconds. 15 Oct 2026: from 5 s and 30 s, so the pages a
+// write emptied are rebuilt within about 2 s of it, usually before the person's next click, rather than 5–10 s later
+// (and 30 s after a second write); a click during a warm-up shares its work.
+export const WARM_POLL_MS = 1_000;
+export const WARM_MIN_GAP_MS = 10_000;
 // GUESS — a page that takes longer than this is abandoned; a person's click still builds it.
 const PAGE_TIMEOUT_MS = 120_000;
 
