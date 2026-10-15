@@ -178,12 +178,16 @@ async function store(db: Db, search: RouteSearch, kind: string, version: Awaited
   }));
   const serialized = encode({ ...compact, routes, evidence });
   const shared = search.structural ? sharedNodes(search.structural, search.targetId) : null;
-  await db.query(`insert into network.route_cache (target_id, vehicle_kind, revision, input_revision, computed_at, search, best_score, candidate_count, shared_nodes)
-    select $1::uuid, $2, $3, $4::bigint, now(), $5::jsonb, $6::numeric, $7::integer, $8::uuid[]
+  // The summary is what strategyRouteSummaries reads (network 022), built here once rather than on every read.
+  await db.query(`insert into network.route_cache (target_id, vehicle_kind, revision, input_revision, computed_at, search, best_score, candidate_count, shared_nodes, summary)
+    select $1::uuid, $2, $3, $4::bigint, now(), $5::jsonb, $6::numeric, $7::integer, $8::uuid[],
+      coalesce((select jsonb_agg(jsonb_build_array(r->'fromEntity', r->'fromName', r->'weakestTier', r->'viaContact',
+          jsonb_path_query_array(r, '$.hops[*].toEntity'), jsonb_path_query_array(r, '$.hops[*].toName')))
+        from jsonb_array_elements(coalesce($5::jsonb->'routes','[]'::jsonb)) r), '[]'::jsonb)
       where exists (select 1 from identity.entity where entity_id = $1::uuid)
     on conflict (target_id, vehicle_kind) do update set revision = excluded.revision,
       input_revision = excluded.input_revision, computed_at = excluded.computed_at, search = excluded.search, best_score = excluded.best_score,
-      candidate_count = excluded.candidate_count, shared_nodes = excluded.shared_nodes`,
+      candidate_count = excluded.candidate_count, shared_nodes = excluded.shared_nodes, summary = excluded.summary`,
   [search.targetId, kind, version.generation, version.revision, serialized, search.stats?.bestScore ?? null,
     shared?.candidates ?? null, shared?.nodes ?? null]);
   return serialized.length * 2;

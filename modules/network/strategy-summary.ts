@@ -21,10 +21,11 @@ type StoredRow = { target_id: string; computed_at: Date; routes: Flat[] | null; 
  */
 const storedRoutes = buildCache(async (kind: string) => {
   const db = await getDb();
+  // The stored summary (network 022); a row written before it is summarized from its search, as before.
   const rows = await db.query<StoredRow>(`select c.target_id, c.computed_at,
-       (select jsonb_agg(jsonb_build_array(r->'fromEntity', r->'fromName', r->'weakestTier', r->'viaContact',
+       case when c.summary is not null then nullif(c.summary, '[]'::jsonb) else (select jsonb_agg(jsonb_build_array(r->'fromEntity', r->'fromName', r->'weakestTier', r->'viaContact',
           jsonb_path_query_array(r, '$.hops[*].toEntity'), jsonb_path_query_array(r, '$.hops[*].toName')))
-        from jsonb_array_elements(coalesce(c.search->'routes','[]'::jsonb)) r) routes,
+        from jsonb_array_elements(coalesce(c.search->'routes','[]'::jsonb)) r) end routes,
        c.input_revision::text, c.revision
       from network.route_cache c
       where c.vehicle_kind = $1`, [kind]);
