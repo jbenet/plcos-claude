@@ -173,6 +173,21 @@ export const config = {
     translateBatch: 200, // GUESS — same bound as Dakota's.
   },
   /**
+   * DocSend data-room visits, read-only (Juan, 14–15 Oct 2026; docs/32-docsend.md). Through DocSend's own MCP
+   * server, signed in once by an Admin (OAuth); only the read tools in lib/connectors/docsend/tools.ts are
+   * ever called. Off until an Admin connects it on Settings → Connections; the daily run then reads it. The
+   * server's address is named only in lib/connectors/docsend/mcp.ts (npm run boundaries).
+   */
+  docsend: {
+    /** Visits a page; DocSend's own maximum is 50. */
+    pageSize: 50,
+    minIntervalMs: 1000, // GUESS — one call a second; DocSend documents no limit for the MCP.
+    /** An incremental read stops at visits older than the last complete read, less this overlap. */
+    overlapMs: 24 * 3_600_000, // GUESS — a visit can be recorded after it started.
+    /** A read stops after this many pages of one Space, so a runaway cursor cannot hold a job open. */
+    maxPagesPerSpace: 400, // GUESS — 20,000 visits a Space.
+  },
+  /**
    * Email drafts moved into each person's own Gmail (Juan, 2 Oct 2026; docs/25-email-drafts.md), through
    * mailguard since 3 Oct 2026 (docs/25 §12): each person's key reaches only their own mailbox, and only
    * a drafts-only key is accepted. Nothing sends. The demo always uses the fake mailguard in

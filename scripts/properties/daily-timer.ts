@@ -31,7 +31,7 @@ export async function dailyTimerProperties(check: Check) {
     catch (error) { backupRan = (error as { code?: number }).code === 23; }
     await runDailyJobs(db, '03:00', today, queue);
     check('DAILY ordered imports precede backup; persisted date prevents replay',
-      backupRan && seen.join() === 'affinity:slice,affinity:translate,linear,spv-stance,calendar',
+      backupRan && seen.join() === 'affinity:slice,affinity:translate,linear,spv-stance,calendar,docsend',
       'Invented receipts use the existing queue store; a second invocation skips even after backup failure.');
 
     await db.query("delete from platform.import_job where input->>'schedule'='daily'");

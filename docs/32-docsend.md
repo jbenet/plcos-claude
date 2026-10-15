@@ -1,6 +1,6 @@
 # 32 — DocSend: dataroom and document views
 
-**Status: scope for Juan's review (14 Oct 2026). Nothing here is built yet.** Updated 15 Oct 2026: DocSend has an MCP server (§2).
+**Status: route E built, off until an Admin connects DocSend (15 Oct 2026).** Scoped 14 Oct; DocSend's MCP server found and confirmed 15 Oct (§2).
 Juan, 14 Oct 2026: "Are you connected to Docsend yet? if not … add API support, i'll try to get a token
 later today. scope it out for now and get it for my review." The thread "Outreach conversion per vehicle"
 consumes what this produces (§6).
@@ -69,39 +69,23 @@ One row per **visit**: who (visitor email), what (document, link, Space), when, 
 viewed, percent complete) when the source says. A visit is evidence of attention, never of interest or intent
 (Performance page wording stays): it moves no pipeline stage and never touches a consent rung (invariant 2).
 
-```
-docsend.visit
-  visit_id        text primary key    -- source + source id; idempotent re-delivery (types.ts seam 4)
-  source          text                -- 'affinity_note' | 'mcp' | 'webhook' | 'csv'
-  started_at      timestamptz
-  duration_sec    integer null
-  pages_viewed    integer null
-  page_count      integer null        -- pages in the document, so share viewed = pages_viewed / page_count
-  page_seconds    jsonb null          -- {"1": 42, "2": 7, …} when the source gives time per page
-  viewer_email    text null           -- lowercased; null when the link was not email-gated
-  entity_id       uuid null           -- canonical LP entity, matched by email the way comms are (§5)
-  link_id         text null           -- DocSend link id (the docsend.com/view/<id> part)
-  link_url        text null
-  document_id     text null
-  document_title  text null
-  space_id        text null           -- the data room, when the visit was to a Space
-  space_name      text null
-  vehicle_id      uuid null           -- from docsend.vehicle_map (§5); null when unmapped
-  raw             jsonb               -- the payload as it arrived, for replay
-  received_at     timestamptz
-```
+The table is `docsend.visit` (`modules/docsend/migrations/001_docsend.sql`): `visit_id`, `source`, `started_at`,
+`duration_sec`, `pages_viewed`, `page_count`, `percent_viewed`, `page_seconds` (`{"1": 9, "2": 6, …}`),
+`viewer_email`, `viewer_name`, `entity_id` (null when no one on record has the address), `internal` (our team),
+`link_name`, `document_id`, `document_title`, `space_id`, `space_name`, `vehicle_id`, `raw`. `visitsFor` returns
+the same fields with `linkId` always null, since DocSend gives a link's name only.
 
 From the MCP: `visit_id` = hash of (space_id, document_id, contact_email, visit_created_at), since visits
 carry no id; `started_at` = `visit_created_at`; `duration_sec` = `time_spent_viewing_ms / 1000`;
 `pages_viewed` = `unique_pages_viewed`; `page_count` = `total_pages_count`; `page_seconds` = `page_views`;
-`link_id` null, `link_name` kept in `raw`.
+`link_name` = `link_name`.
 
-`docsend.vehicle_map(kind 'link'|'document'|'space', key, vehicle_id, set_by, set_at)` holds the mapping.
-`docsend.sync_state(source, last_synced_at, last_error)` gives each source's as-of time.
+`docsend.vehicle_map(kind 'space'|'document', key, vehicle_id, set_by, set_at)` holds the mapping; a document's
+row wins over its data room's.
+`docsend.space.read_through` gives each data room's as-of time.
 
-The same visit can arrive by Affinity and by Zapier. Rows are deduplicated per
-(viewer_email, document title, started_at rounded to the minute), keeping the richer source, so counts never
-double.
+Only the MCP writes visits today. If route A (Affinity's notes) is added, a visit it also finds is deduplicated
+per (viewer_email, document title, started_at rounded to the minute), keeping the MCP's row, so counts never double.
 
 ## 4. Routes
 
@@ -123,15 +107,25 @@ paid plans (inferred from Zapier's plan pages; check when connecting).
 (Advanced Data Rooms plan). An Admin uploads it on Developer → Data (a new upload there); it lands as `source = 'csv'`. This
 is the only way to get duration and pages for visits before B is switched on.
 
-**E. DocSend MCP (main source).** The PLC OS server is the MCP client: `lib/connectors/docsend/` speaks
-MCP over HTTP to DocSend's remote server, signed in by OAuth (dynamic client registration and PKCE, the
-way any remote MCP client signs in). Juan clicks "Connect DocSend" in Settings → Connections once; the
-refresh token is stored encrypted like the mailguard key, never printed. A background job (night schedule
-plus the daily timer) walks Spaces → documents → visiting contacts → their visits, upserts
-`docsend.visit` with `source = 'mcp'`, and records `docsend.sync_state`. The client calls only an
-allowlist of read tools; the Space-group update tool and any other write tool throw in the client (a
-property test checks this, as for Affinity). One call a second, stop on a rate-limit error. If the
-sign-in lapses, the sync stops and Settings says so; nothing falls back to another connector.
+**E. DocSend MCP (main source, built 15 Oct 2026).** The PLC OS server is the MCP client.
+- `lib/connectors/docsend/mcp.ts` speaks Streamable HTTP (JSON-RPC over POST, JSON or event-stream answers) to
+  `https://docsend.com/mcp`, the only file that names it (`npm run boundaries`). It calls only `list_spaces` and
+  `list_visits` (`tools.ts`); any other name is refused before anything is sent. One call a second, backoff on 429/5xx.
+- `oauth.ts` signs in the way any remote MCP client does: protected-resource and authorization-server metadata, dynamic
+  client registration as a public client, the authorization code with PKCE (S256), refresh. Only https on DocSend's or
+  Dropbox's hosts is fetched (a GUESS that its sign-in lives on one of them; anything else is refused and Settings says
+  the sign-in could not be reached).
+- Settings → Connections → DocSend: **Connect DocSend** (an Admin signs in as themselves; the registration and tokens are
+  that person's encrypted secret, purpose `docsend`), **Read now**, **Disconnect**, and a vehicle picker per data room.
+  Routes `/api/connectors/docsend/connect` and `/callback`, Admins only, with a signed state cookie.
+- The read is an import job, `docsend` (`lib/connectors/docsend/sync.ts`): last in the daily run, on Read now, and
+  queueable by an Admin token (`POST /api/sync/jobs {"kind":"docsend"}`). Per data room it reads visits newest first
+  until one is older than the last complete read less a day, so the first read takes the whole history and later
+  ones a page or two. Then viewers are matched by email (`partiesOf` in `lib/calendar-sync.ts`: email claims, then
+  Affinity's addresses), our team's visits are marked `internal`, and each visit takes its data room's vehicle.
+- `modules/docsend` owns the tables (`connection`, `space`, `vehicle_map`, `visit`) and the read `visitsFor(vehicleId)`.
+- If the sign-in is refused, the client refreshes once; a second refusal is written on the connection and shown in
+  Settings. Nothing falls back to another connector.
 
 Only `lib/connectors/docsend/` reads DocSend payloads (`npm run boundaries`). DocSend view data is real data:
 it stays in our database and `data/real/`, never in git, screenshots or prompts (real-data rules).
@@ -155,7 +149,7 @@ name. Our own team's views (internal emails) are kept but excluded from every co
 
 The module exposes one read, `visitsFor(vehicleId)` in `modules/docsend`, for the conversion page's
 buildCache: every visit mapped to that vehicle with the §3 fields, plus `asOf` (the oldest
-`last_synced_at` across the sources that are on). Unmatched visits come back with `entity_id = null`.
+complete read across the vehicle's data rooms). Unmatched visits come back with `entity_id = null`.
 Fields a source cannot fill (duration and pages from Affinity notes) are null, never zero.
 
 A background job (the existing daily timer plus a run after each ingest) refreshes the mapping and

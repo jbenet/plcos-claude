@@ -12,7 +12,9 @@ import { dataDir, secretSource, storageWarning } from '@/lib/settings/key';
 import { publicUrl, setupOpen } from '@/lib/settings/setup';
 import { settingsReady, settingsView, type SettingView } from '@/lib/settings/store';
 import { ago } from '@/lib/time';
-import { appendAudit, listUsers } from '@/modules/platform';
+import { docsendConnection, listSpaces } from '@/modules/docsend';
+import { appendAudit, listUsers, listVehicles } from '@/modules/platform';
+import { disconnectDocsendAction, mapDocsendSpaceAction, syncDocsendAction } from './actions';
 import { SettingRow, type RowView } from './SettingRow';
 import s from './connections.module.css';
 
@@ -30,7 +32,15 @@ const REMOVE_WARNING: Record<string, string> = {
  * value comes from (the environment, the app, or nowhere), Replace and Remove, and a check where it is
  * cheap. A stored secret is never sent to the browser: the page shows •••• and its last four characters.
  */
-export default async function ConnectionsPage() {
+const DOCSEND_OUTCOME: Record<string, string> = {
+  connected: 'DocSend is connected. The first read takes the whole history; press Read now, or it runs tonight.',
+  declined: 'DocSend sign-in was cancelled.',
+  expired: 'The DocSend sign-in took too long or came from another browser. Connect again.',
+  failed: 'DocSend refused the sign-in. Connect again; the audit log says which step failed.',
+  unavailable: 'DocSend’s sign-in could not be reached from this server. The audit log has the reason.',
+};
+
+export default async function ConnectionsPage({ searchParams }: { searchParams?: Promise<{ docsend?: string }> } = {}) {
   const user = await (await auth()).currentUser();
   if (!can(user, 'admin')) {
     await appendAudit({ actorId: user.id, action: 'authz.refused', subjectType: 'page', subjectId: '/settings/connections', detail: { access: user.access } }).catch(() => undefined);
@@ -48,6 +58,8 @@ export default async function ConnectionsPage() {
   const key = secretSource();
   const storage = storageWarning();
   const people = (await listUsers()).filter((p) => p.email);
+  const [docsend, spaces, vehicles] = await Promise.all([docsendConnection(), listSpaces(), listVehicles()]);
+  const docsendOutcome = DOCSEND_OUTCOME[(await searchParams)?.docsend ?? ''] ?? null;
 
   return (
     <Page
@@ -106,6 +118,51 @@ export default async function ConnectionsPage() {
       <div className="card">
         <div className="chead"><h2>Connectors</h2><span className="lbl">read-only · optional</span></div>
         <div className="cbody" style={{ paddingTop: 0 }}>{by('connectors').map((r) => <SettingRow key={r.key} v={r} />)}</div>
+      </div>
+
+      <div className="card" id="docsend">
+        <div className="chead"><h2>DocSend</h2><span className="lbl">read-only · data-room visits</span></div>
+        <div className="cbody">
+          {docsendOutcome && <p className="note">{docsendOutcome}</p>}
+          <p className={s.help}>
+            Who opened each data room, for how long and how far, read nightly through DocSend&rsquo;s own MCP server (docs/32).
+            Only its two read tools are called; nothing in DocSend is changed. It sees what the connected person&rsquo;s DocSend account sees.
+          </p>
+          {docsend ? (
+            <>
+              <div className="fact"><span>Signed in as</span><span>{docsend.userName ?? 'an Admin'}, {ago(docsend.connectedAt)}</span></div>
+              {docsend.lastError && <div className="warn"><b>Last read failed.</b><p>{docsend.lastError}</p></div>}
+              {!readOnly && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <form action={syncDocsendAction}><button className="btn p" type="submit">Read now</button></form>
+                  <a className="btn" href="/api/connectors/docsend/connect">Connect again</a>
+                  <form action={disconnectDocsendAction}><button className="btn" type="submit">Disconnect</button></form>
+                </div>
+              )}
+            </>
+          ) : readOnly ? <p>Connect DocSend on the deployed server.</p> : (
+            <a className="btn p" href="/api/connectors/docsend/connect">Connect DocSend</a>
+          )}
+          {spaces.length > 0 && (
+            <>
+              <div className="lbl" style={{ marginTop: 16 }}>Data rooms and their vehicle</div>
+              {spaces.map((sp) => (
+                <form key={sp.spaceId} action={mapDocsendSpaceAction} className={s.row}>
+                  <input type="hidden" name="spaceId" value={sp.spaceId} />
+                  <b>{sp.name}</b>
+                  <p className={s.help}>{sp.visits} visits by {sp.viewers} people{sp.readAt ? `, read ${ago(sp.readAt)}` : ', not read yet'}.</p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select name="vehicleId" defaultValue={sp.vehicleId ?? ''} disabled={readOnly}>
+                      <option value="">No vehicle</option>
+                      {vehicles.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    </select>
+                    {!readOnly && <button className="btn" type="submit">Save</button>}
+                  </div>
+                </form>
+              ))}
+            </>
+          )}
+        </div>
       </div>
 
       <div className="card">

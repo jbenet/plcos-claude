@@ -20,7 +20,8 @@ export async function runDailyJobs(db: Db, at: string, now = new Date(), queue =
   // The calendar after Affinity, so a meeting Affinity already has stays Affinity's (lib/calendar-sync.ts).
   // The slice only lands Affinity's records; translate maps them onto LPs (last email, statuses), so a read that is
   // never translated changes nothing anyone sees (13 Oct 2026: LP pages showed no Affinity email after 8 Oct).
-  const steps = [['affinity', 'slice'], ['affinity', 'translate'], ['linear'], ['spv-stance'], ['calendar']] as const;
+  // DocSend after both, so a visitor Affinity or the calendar just added is matched (docs/32); unconnected, it reads nothing.
+  const steps = [['affinity', 'slice'], ['affinity', 'translate'], ['linear'], ['spv-stance'], ['calendar'], ['docsend']] as const;
   // The whole chain counts as importing, so /api/health shows no gap between two steps (8 Oct 2026).
   const release = holdImports();
   try {

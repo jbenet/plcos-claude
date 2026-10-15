@@ -83,6 +83,9 @@ export const actionRules = {
   'app/settings/connections/actions.ts#saveSettingAction': { action: 'admin', scope: 'global' },
   'app/settings/connections/actions.ts#clearSettingAction': { action: 'admin', scope: 'global' },
   'app/settings/connections/actions.ts#checkSettingAction': { action: 'admin', scope: 'global' },
+  'app/settings/connections/actions.ts#disconnectDocsendAction': { action: 'admin', scope: 'global' },
+  'app/settings/connections/actions.ts#mapDocsendSpaceAction': { action: 'admin', scope: 'global' },
+  'app/settings/connections/actions.ts#syncDocsendAction': { action: 'admin', scope: 'global' },
   // Settings → People: the roster Google sign-in admits. Admin only; a refusal is audit-logged.
   'app/settings/people/actions.ts#addPersonAction': { action: 'admin', scope: 'global' },
   'app/settings/people/actions.ts#updatePersonAction': { action: 'admin', scope: 'global' },
