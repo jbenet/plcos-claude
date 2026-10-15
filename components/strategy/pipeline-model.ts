@@ -17,6 +17,9 @@ export interface PipelineRow {
   /** An organisation's people (docs/23): its contacts on this pursuit first, then everyone acting for it now.
    * `individual` is their own LP row in this vehicle, when they also invest personally. */
   people: Array<{ id: string; name: string; role: string; contact?: boolean; individual?: string | null }>;
+  /** Sent to the browser (forBrowser): how many people there are in all, and the names of those past the first few. */
+  peopleCount?: number;
+  peopleRest?: string;
   /** A person's firms, as context: `lpRow` is the firm's own LP row in this vehicle, when it has one. */
   firms: Array<{ id: string; name: string; role: string | null; lpRow: string | null }>;
   /** 'organisation' for an organisation; 'personal' for a person with evidence of investing on their own account. */
@@ -193,11 +196,26 @@ export function sortFrom(given: Record<string, string | undefined> = {}, fallbac
   return { key, dir: (given.dir === 'asc' ? 1 : given.dir === 'desc' ? -1 : numeric.has(key) ? -1 : 1) as 1 | -1 };
 }
 
+/** People a row shows at most: three in the table, eight in Selection's detail. */
+export const PEOPLE_SHOWN = 8;
+/**
+ * A row as the browser gets it (performance pass, 15 Oct 2026). An organisation's people past the first eight
+ * travel only as their names, for search, and as a count; the columns no browser code reads are left empty. People
+ * were 40% of the pipeline's rows and the three ids another third.
+ */
+export function forBrowser(r: PipelineRow): PipelineRow {
+  const rest = r.people.slice(PEOPLE_SHOWN);
+  return { ...r, orgId: null, nextKind: null, setHere: null,
+    ...(rest.length ? { people: r.people.slice(0, PEOPLE_SHOWN), peopleCount: r.people.length, peopleRest: rest.map((p) => p.name).join(' ') } : {}) };
+}
+/** How many people an organisation has, sent or not. */
+export const peopleCount = (r: PipelineRow) => r.peopleCount ?? r.people.length;
+
 const DAY = 86_400_000;
 const t = (iso: string | null) => (iso ? Date.parse(iso) : 0);
 /** Every word must appear somewhere in what the row says. */
 export function haystack(r: PipelineRow): string {
-  return `${r.name} ${r.org ?? ''} ${r.headline ?? ''} ${r.owner} ${r.vehicle} ${r.said ?? ''} ${r.next ?? ''} ${r.ended ?? ''} ${r.capacity ?? ''} ${r.people.map((p) => p.name).join(' ')} ${r.firms.map((f) => f.name).join(' ')}`.toLowerCase();
+  return `${r.name} ${r.org ?? ''} ${r.headline ?? ''} ${r.owner} ${r.vehicle} ${r.said ?? ''} ${r.next ?? ''} ${r.ended ?? ''} ${r.capacity ?? ''} ${r.people.map((p) => p.name).join(' ')} ${r.peopleRest ?? ''} ${r.firms.map((f) => f.name).join(' ')}`.toLowerCase();
 }
 export function matches(r: PipelineRow, f: Filters, words: string[], now: number, hay?: string): boolean {
   if (!unitShown(r, f.units)) return false;

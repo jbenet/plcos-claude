@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import type { PipelineRow } from './pipeline-model';
+import { peopleCount, type PipelineRow } from './pipeline-model';
 import { cx, n } from './lp-view';
 import u from './lp-units.module.css';
 
@@ -25,7 +25,7 @@ export function LpWho({ r, max = 3, onJump, showRoles }: {
     : null;
   if (r.isOrg) {
     if (!r.people.length) return null;
-    const shown = r.people.slice(0, max), roles = showRoles ?? r.people.length <= 2;
+    const shown = r.people.slice(0, max), roles = showRoles ?? peopleCount(r) <= 2;
     return (
       <div className={u.who}>
         {shown.map((p) => (
@@ -35,7 +35,7 @@ export function LpWho({ r, max = 3, onJump, showRoles }: {
             {jump(p.individual, 'also individual', `${p.name} is also an LP in their own capacity: go to that row`)}
           </span>
         ))}
-        {r.people.length > max && <span>and {n(r.people.length - max)} more</span>}
+        {peopleCount(r) > max && <span>and {n(peopleCount(r) - max)} more</span>}
       </div>
     );
   }

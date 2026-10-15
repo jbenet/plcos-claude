@@ -7,7 +7,7 @@ import { actionFailure } from '@/lib/client/action-failure';
 import type { ScoreDetail } from '@/lib/pipeline-data';
 import { BulkLpActions } from './BulkLpActions';
 import { MoveButton, statusMix, statusWord, UndoToast, useMove } from './MoveToSelected';
-import { rankRows, unitShown, unitsFrom, unitsOn, EMPTY, lead, second, spvFlagged, type PipelineRow, type SortKey, type Status } from './pipeline-model';
+import { PEOPLE_SHOWN, peopleCount, rankRows, unitShown, unitsFrom, unitsOn, EMPTY, lead, second, spvFlagged, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { CapacityTag, LpWho, units } from './LpWho';
 import { UnitIcon } from './UnitIcon';
 import { useIsCursor, useRowCursor, type CursorStore } from './row-cursor';
@@ -425,10 +425,10 @@ const Why = memo(function Why({ r, position, sortLabel, rungNames, now, onJump }
       <div className={s.facts}>
         {/* Whose row it is (docs/23): an organisation's people, or an individual's capacity and firms. */}
         {r.isOrg && r.people.length > 0 && <div className={s.fact}><span>People</span><span><ul className={u.detailPeople}>
-          {r.people.slice(0, 8).map((p) => <li key={p.id}><span className={p.contact ? u.contact : undefined}>{p.name}</span>{p.role && <small> · {p.role}</small>}
+          {r.people.slice(0, PEOPLE_SHOWN).map((p) => <li key={p.id}><span className={p.contact ? u.contact : undefined}>{p.name}</span>{p.role && <small> · {p.role}</small>}
             {p.contact && <small> · contact on this LP</small>}
             {p.individual && <button type="button" className={u.jump} onClick={() => onJump(p.individual!)}>also individual</button>}</li>)}
-          {r.people.length > 8 && <li><small>and {n(r.people.length - 8)} more on the LP page</small></li>}
+          {peopleCount(r) > PEOPLE_SHOWN && <li><small>and {n(peopleCount(r) - PEOPLE_SHOWN)} more on the LP page</small></li>}
         </ul></span></div>}
         {!r.isOrg && <div className={s.fact}><span>Capacity</span><span>
           {r.lpReview ? <>Firm or personal? <span className={s.small}>{r.lpReview}</span></>
