@@ -303,7 +303,9 @@ function forward(req, res, url, which, body, { retryRemoteOnError = false } = {}
   if (cookie) headers.cookie = cookie;
   if (which === 'local') headers['x-plcos-desktop'] = state.local.secret;
   const isStatic = req.method === 'GET' && staticFile(url.pathname);
-  if (isStatic) headers['accept-encoding'] = 'identity';
+  // The copy on this Mac answers over loopback: compressing for it is only work. gzip took 66 ms of the 153 ms the
+  // Pipeline page cost to serve (3.6 MB, 15 Oct 2026); the window reads it uncompressed just as well.
+  if (isStatic || which === 'local') headers['accept-encoding'] = 'identity';
   const mod = base.protocol === 'https:' ? https : http;
   const started = Date.now();
   const up = mod.request({ protocol: base.protocol, hostname: base.hostname, port: base.port || undefined, method: req.method, path: url.pathname + url.search, headers, agent: agents[base.protocol] }, (upRes) => {
