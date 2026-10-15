@@ -35,6 +35,9 @@ const SEED_STAND_IN = {
   'platform.setting': { value: `case when "secret" then 'withheld' else "value" end` },
   'platform.mcp_token': { token_hash: `encode(sha256(convert_to('withheld:' || "token_id"::text, 'UTF8')), 'hex')` },
 };
+/** Tables that sync in the background once the copy is whole; any table whose sync takes longer joins them. */
+const SLOW_TABLES = ['network.route_cache'];
+const SLOW_TABLE_MS = 20_000;
 const TABLES_AT_ONCE = Number(env.PLCOS_DESKTOP_TABLES_AT_ONCE || 4);
 /** Reads go to the live server for this long after a write: Postgres's change counters usually lag about a second (docs/31). */
 const WRITE_SETTLE_MS = Number(env.PLCOS_DESKTOP_SETTLE_MS || 5_000);
@@ -69,6 +72,8 @@ class LocalCopy {
     this.cookiePrefix = `capitalos_real_${NEXT_PORT}_`;
     this.origin = `http://127.0.0.1:${NEXT_PORT}`;
     this.lastWriteAt = 0;
+    this.slow = new Set(SLOW_TABLES);   // tables that sync in the background once the copy is whole
+    this.background = new Set();         // those syncing in the background now
     this.lastSyncStartedAt = 0;
     this.lastSyncFinishedAt = 0;
     this.lastSync = null;             // { at, ms, tables, rows, deleted }
@@ -392,10 +397,14 @@ class LocalCopy {
     const local = await this.localTables();
     let tables = 0, rows = 0, deleted = 0;
     // Biggest first, so the long tables start early and the short ones fill the gaps.
-    const todo = st.tables
-      .filter((info) => local.has(info.t) && this.meta.get(info.t)?.counter !== info.counter)
-      .sort((a, b) => (b.rows ?? 0) - (a.rows ?? 0));
     const first = this.phase !== 'ready';
+    const changed = st.tables
+      .filter((info) => local.has(info.t) && this.meta.get(info.t)?.counter !== info.counter && !this.background.has(info.t))
+      .sort((a, b) => (b.rows ?? 0) - (a.rows ?? 0));
+    // Once the copy is whole, slow tables (a big derived cache rewritten daily, say) catch up in the background, so a
+    // write's settle never waits minutes on them: what a person writes lands in the ordinary tables.
+    const slow = first ? [] : changed.filter((info) => this.slow.has(info.t));
+    const todo = changed.filter((info) => !slow.includes(info));
     const total = todo.length;
     this.progress = new Map();
     const showProgress = () => {
@@ -422,9 +431,18 @@ class LocalCopy {
       const m = { counter: info.counter, since: r.since };
       this.meta.set(info.t, m);
       await this.pg.query('insert into _desktop.sync_meta (t, counter, since) values ($1, $2, $3) on conflict (t) do update set counter = excluded.counter, since = excluded.since', [info.t, m.counter, m.since]);
+      if (Date.now() - t0 > SLOW_TABLE_MS) this.slow.add(info.t);
       if (first && (r.rows > 10_000 || Date.now() - t0 > 2_000)) this.log(`copied ${info.t}: ${r.rows} row(s) in ${Date.now() - t0} ms (${tables}/${total})`);
       showProgress();
     };
+    for (const info of slow) {
+      this.background.add(info.t);
+      const t0 = Date.now();
+      one(info)
+        .then(() => this.log(`caught up ${info.t} in the background in ${Date.now() - t0} ms`))
+        .catch((e) => this.log(`background sync of ${info.t}:`, String(e?.message ?? e).slice(0, 300)))
+        .finally(() => this.background.delete(info.t));
+    }
     const queue = [...todo];
     let failed = null;
     // On a failure the others finish the table they are on (each is its own transaction) and take no more.
