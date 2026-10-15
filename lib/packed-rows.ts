@@ -67,7 +67,10 @@ function share(values: unknown[]) {
   let rawLength = 0, dictLength = 0, indexLength = 0;
   for (const v of values) {
     // Text, the common case, is keyed without JSON (a calendar packs 56,000 rows); its length is counted as keyOf's.
-    const text = typeof v === 'string', map = text ? texts : seen, key = text ? v : v === undefined ? 'u' : keyOf(v);
+    // Numbers, booleans and null print as JSON would, without calling it (it was a quarter of packing Pipeline).
+    const text = typeof v === 'string', map = text ? texts : seen;
+    const key = text ? v : v === undefined ? 'u' : v === null ? 'objectnull'
+      : typeof v === 'number' || typeof v === 'boolean' ? `${typeof v}${v}` : keyOf(v);
     const length = text ? v.length + 8 : key.length;
     rawLength += length;
     let index = map.get(key);
@@ -107,17 +110,22 @@ const cut = (v: string) => Math.max(v.lastIndexOf('='), v.lastIndexOf(':'), v.la
  * Text split after its last `=`, `:` or `/`, when shared heads and plain tails are at least 5% shorter; else null. A tail equal
  * to the same row's tail of an earlier text column (`earlier`) is sent as 0, naming that column once.
  */
-function split(values: unknown[], rawLength: number, earlier: Array<[string, string[]]>) {
+/** An earlier text column; its tails are cut only when a later column is split and compares against them. */
+interface TextColumn { k: string; values: string[]; tails?: string[] }
+const tailsOf = (col: TextColumn) => (col.tails ??= col.values.map((v) => v.slice(cut(v))));
+
+function split(values: unknown[], rawLength: number, earlier: TextColumn[]) {
   if (!values.length || !values.every((v) => typeof v === 'string')) return null;
   const heads: string[] = [], t: Array<string | 0> = [];
   for (const v of values as string[]) { const at = cut(v); heads.push(v.slice(0, at)); t.push(v.slice(at)); }
   let r: string | undefined, best = 0;
-  for (const [k, tails] of earlier) {
+  for (const col of earlier) {
+    const k = col.k, tails = tailsOf(col);
     let saved = 0;
     for (let row = 0; row < t.length; row++) if (t[row] && tails[row] === t[row]) saved += (t[row] as string).length;
     if (saved > best) { best = saved; r = k; }
   }
-  if (r) { const tails = earlier.find(([k]) => k === r)![1]; t.forEach((x, row) => { if (x && tails[row] === x) t[row] = 0; }); }
+  if (r) { const tails = tailsOf(earlier.find((col) => col.k === r)!); t.forEach((x, row) => { if (x && tails[row] === x) t[row] = 0; }); }
   const { d, i, rawLength: headRaw, dictLength } = share(heads);
   const length = Math.min(headRaw, dictLength) + t.reduce<number>((n, x) => n + (x === 0 ? 2 : x.length + 3), 0);
   return length < rawLength * 0.95 ? { h: { d, i }, t, ...(r ? { r } : {}) } : null;
@@ -138,15 +146,28 @@ function affix(values: string[], earlier: Array<[string, unknown[]]>) {
 }
 
 export function packRows<T extends object>(rows: readonly T[]): PackedRows {
-  const columns = new Set<string>();
-  for (const row of rows) for (const k of Object.keys(row)) columns.add(k);
+  // Every column in one pass over the rows, in the order keys first appear; a row without a key reads `undefined`,
+  // which stands for missing (one lookup per row per column was a fifth of packing Pipeline, 15 Oct 2026).
+  const byColumn = new Map<string, unknown[]>();
+  // Rows mostly share one shape: the previous row's keys and their columns are reused when this row's keys match.
+  let shape: string[] = [], lists: unknown[][] = [];
+  rows.forEach((row, r) => {
+    const keys = Object.keys(row);
+    if (keys.length !== shape.length || keys.some((k, i) => k !== shape[i])) {
+      shape = keys;
+      lists = keys.map((k) => {
+        let list = byColumn.get(k);
+        if (!list) { list = new Array<unknown>(rows.length).fill(undefined); byColumn.set(k, list); }
+        return list;
+      });
+    }
+    for (let i = 0; i < keys.length; i++) lists[i]![r] = (row as Record<string, unknown>)[keys[i]!];
+  });
   const c: PackedRows['c'] = {};
   const plainColumns: Array<[string, unknown[]]> = [];
   // Each text column's tails, which a later column may refer to; never a column that itself refers or copies.
-  const textTails: Array<[string, string[]]> = [];
-  for (const k of columns) {
-    // A row without the key reads back without it: `undefined` stands for missing.
-    const values = rows.map((row) => (Object.prototype.hasOwnProperty.call(row, k) ? (row as Record<string, unknown>)[k] : undefined));
+  const textTails: TextColumn[] = [];
+  for (const [k, values] of byColumn) {
     if (values.length && values.every((v) => Array.isArray(v) && v.every(record)) && values.some((v) => (v as unknown[]).length)) {
       const lists = values as object[][];
       c[k] = { l: packRows(lists.flat()), k: lists.map((list) => list.length) };
@@ -169,7 +190,7 @@ export function packRows<T extends object>(rows: readonly T[]): PackedRows {
     const { d, i, rawLength, dictLength } = share(values);
     const col = dictLength < rawLength ? { d, i } : split(values, rawLength, textTails) ?? { v: values };
     c[k] = !('d' in col) && !('r' in col) && values.every((v) => typeof v === 'string' && UUID.test(v)) ? { u: uuidsOut(values as string[]) } : col;
-    if (!('r' in col) && values.every((v) => typeof v === 'string')) textTails.push([k, (values as string[]).map((v) => v.slice(cut(v)))]);
+    if (!('r' in col) && values.every((v) => typeof v === 'string')) textTails.push({ k, values: values as string[] });
   }
   ending(c, plainColumns);
   return { n: rows.length, c };
