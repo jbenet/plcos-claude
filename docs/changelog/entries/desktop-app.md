@@ -37,3 +37,5 @@ On a vehicle's plan, "LPs by next action" no longer sends every row's basis with
 real data): a row's angle, plan and score inputs load when you open it, from the plan the page was built from.
 Lists send ids in 22 characters instead of 38, and a floor item's key (its LP's id and the vehicle) as a reference to
 the id: on an invented 1,000-LP fixture Pipeline sends 25% less and the visualizations' items 35% less.
+The import progress every open page polls answers "unchanged" with no body (it sent about 80 KB of the day's job
+results every 5 seconds).
