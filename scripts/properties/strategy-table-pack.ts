@@ -17,18 +17,12 @@ export function strategyTablePackProperties(check: Check) {
     spv: i % 3 === 0 ? { stance: 'does', minDeals: i % 2 ? i : null, basis: 'research', why: `Research: does SPVs (2026-09-${10 + (i % 9)})`, short: `research, 2026-09-${10 + (i % 9)}`, conflict: i % 9 === 0 }
       : i % 3 === 1 ? { stance: 'does-not', minDeals: null, basis: 'person', why: 'Set by Invented Person 2026-09-27', short: 'set by Invented Person, 2026-09-27', conflict: false }
       : { stance: 'unknown', minDeals: null, basis: 'none', why: null, short: null, conflict: false },
-    basis: {
-      angle: i % 4 ? null : `An invented angle ${i}`, capacity: 'No supported capacity estimate.', likelihood: null,
-      route: i % 6 ? null : `A → B · tier B · ${i} found`, decision: null, conversion: [i % 3, i % 5, 1.25],
-      work: [['Research missing', 5], ['Strategy missing', 5]], due: null, proposed: i % 3 ? null : 'Someone · next week',
-      strategy: null, plan: i % 4 ? [] : [['Invented move', 'Invented reason']],
-    },
   });
   const rows = Array.from({ length: 400 }, (_, i) => row(i));
   const packed = packRows(rows, views, base);
   const back = unpackRows(JSON.parse(JSON.stringify(packed)));
   check('0082 LP table rows survive packing exactly', isDeepStrictEqual(back, rows),
-    `${rows.length} invented rows, with nulls, repeated risks, views and plans, round-trip through JSON unchanged`);
+    `${rows.length} invented rows, with nulls, repeated risks and views, round-trip through JSON unchanged`);
   const saved = 1 - JSON.stringify(packed).length / JSON.stringify(rows).length;
   check('0082 packing sends repeated text once', packed.strings.length < rows.length && saved > 0.2,
     `${packed.strings.length} distinct strings for ${rows.length} rows; ${Math.round(saved * 100)}% smaller`);

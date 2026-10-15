@@ -143,19 +143,6 @@ async function VehicleStrategyPage({ params, searchParams }: {
       priority: effort.priority, expected: effort.expected, evidencePriority: r.workPriority,
       capacity: r.capacity, likelihood: r.likelihood, route: r.routeWeight, days: r.days, views: viewIds.get(r.pursuit.pursuitId)!,
       risks: r.risks, held: r.held, spv: spv.get(r.pursuit.entityId)!,
-      basis: {
-        angle: r.suggestion?.data.angle ?? r.pursuit.headline ?? null,
-        capacity: `${r.capacityBasis}${r.capacityBand ? ` ${r.capacityBand}` : ''}`,
-        likelihood: r.propensity?.basis ?? null,
-        route: r.route ? `${r.route.path || 'No path recorded'} · tier ${r.route.tier ?? 'unknown'} · ${r.route.count} found ${date(r.route.at)}${r.route.current ? '' : ' · needs refresh'}` : null,
-        decision: r.decision?.basis ?? null,
-        conversion: [r.conversion.forward, r.conversion.observed, Number(r.conversion.factor.toFixed(2))],
-        work: r.workFactors.map(f => [f.label, f.points] as [string, number]),
-        due: r.pursuit.nextStepOn ? date(r.pursuit.nextStepOn) : null,
-        proposed: r.suggestion?.data.next?.who || r.suggestion?.data.next?.when ? `${r.suggestion?.data.next?.who ?? 'someone'} · ${r.suggestion?.data.next?.when ?? 'no date'}` : null,
-        strategy: r.suggestion ? `${r.suggestion.status} · ${r.suggestion.made_by} · ${date(new Date(r.suggestion.made_at))} · confidence ${r.suggestion.data.confidence ?? 'unknown'}` : null,
-        plan: r.pursuit.plan.map(p => [p.move, p.because] as [string, string]),
-      },
     };
   });
   const moveRows: MoveTableRow[] = moves.map(m => { const u = moveUtility.get(m.id)!; return { ...m, rank: ranks.get(m.id) ?? null,
@@ -309,7 +296,7 @@ async function VehicleStrategyPage({ params, searchParams }: {
 
     <section className="card" id="actions" aria-labelledby="actions-h">
       <div className="chead"><h2 id="actions-h">LPs by next action</h2><span className="lbl">{count(rows.length)} LPs · search with /</span></div>
-      <StrategyTable table={packRows(tableRows, views.map(v => v.id), `/${slug}/pipeline/`)} asOf={now.toISOString()} initialFilters={query} views={views.map(v => ({ id: v.id, label: v.label }))}
+      <StrategyTable table={packRows(tableRows, views.map(v => v.id), `/${slug}/pipeline/`)} basisUrl={`/${slug}/strategy/basis`} asOf={now.toISOString()} initialFilters={query} views={views.map(v => ({ id: v.id, label: v.label }))}
         rules={{ hours: config.strategyRanking.actionTeamHours, share: config.strategyRanking.actionValueFraction, prior: config.strategyRanking.conversionPriorWeight }}
         spvVehicle={vehicle.kind === 'spv'} />
     </section>
