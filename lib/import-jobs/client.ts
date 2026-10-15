@@ -21,20 +21,28 @@ const listeners = new Set<() => void>();
 const finished = new Set<() => void>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let previous = new Map<string, string>();
+/** The last answer's version: an unchanged poll comes back 304 with no body. */
+let etag: string | null = null;
 
 const emit = () => { for (const l of listeners) l(); };
 async function poll() {
   timer = null;
   try {
-    const response = await fetch('/api/import-jobs', { cache: 'no-store' });
+    const response = await fetch('/api/import-jobs', { cache: 'no-store', headers: etag ? { 'if-none-match': etag } : {} });
+    if (response.status === 304 && state.loaded && !state.error) {
+      if (listeners.size) timer = setTimeout(poll, state.jobs.some(active) ? BUSY_MS : IDLE_MS);
+      return;
+    }
     if (!response.ok) throw new Error();
     const data = await response.json() as { jobs: JobStatus[] };
+    etag = response.headers.get('etag');
     const done = data.jobs.some((j) => previous.has(j.id) && previous.get(j.id) !== j.status && ['completed', 'failed'].includes(j.status));
     previous = new Map(data.jobs.map((j) => [j.id, j.status]));
     state = { jobs: data.jobs, error: null, loaded: true };
     emit();
     if (done) for (const f of finished) f();
   } catch {
+    etag = null;
     state = { ...state, error: 'Import progress is unavailable. Retrying; no import has been restarted.', loaded: true };
     emit();
   }
