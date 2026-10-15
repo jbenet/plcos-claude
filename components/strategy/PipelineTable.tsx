@@ -6,7 +6,7 @@ import { BulkLpActions } from './BulkLpActions';
 import { EMPTY, rankRows, unitShown, unitsFrom, unitsOn, lead, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { CapacityTag, LpWho, units } from './LpWho';
 import { UnitIcon } from './UnitIcon';
-import { useIsCursor, useRowCursor, type CursorStore } from './row-cursor';
+import { FIRST_ROWS, useGrowOnScroll, useIsCursor, useRowCursor, type CursorStore } from './row-cursor';
 import { MoveButton, UndoToast, useMove } from './MoveToSelected';
 import { cx, Flags, fmtShort, FilterLine, Icon, InPane, Ladder, n, ScoreMark, useLpView, usdM, type StatusInfo } from './lp-view';
 import { unpackRows, type PackedRows } from '@/lib/packed-rows';
@@ -49,9 +49,10 @@ export function PipelineTable({ packed, statuses, rungNames, initialStatus, init
   const rows = mv.rows;
   const view = useLpView({ rows, statuses, asOf, initialFilters, mode: 'pipeline', initialStatus });
   const { enabled, setEnabled, counts, active, shown, sort, sortBy, picked, pick, pickedRows, now } = view;
-  const [limit, setLimit] = useState(PAGE);
+  const [limit, setLimit] = useState(FIRST_ROWS);
+  const moreRef = useGrowOnScroll(() => setLimit((x) => x + PAGE), limit);
   const shownIds = useMemo(() => new Set(shown.map((r) => r.id)), [shown]);
-  useEffect(() => setLimit(PAGE), [enabled, view.f, sort]);
+  useEffect(() => setLimit(FIRST_ROWS), [enabled, view.f, sort]);
 
   const all = enabled.length === statuses.length;
   const one = enabled.length === 1 ? statuses.find((x) => x.id === enabled[0]) ?? null : null;
@@ -228,7 +229,7 @@ export function PipelineTable({ packed, statuses, rungNames, initialStatus, init
               </thead>
               <tbody>
                 {rowEls}
-                {ranked.length > visible.length && <tr className={u.moreRow}><td colSpan={span}>
+                {ranked.length > visible.length && <tr className={u.moreRow} ref={moreRef}><td colSpan={span}>
                   <button type="button" className="btn" onClick={() => setLimit((x) => x + PAGE)}>Show {n(Math.min(PAGE, ranked.length - visible.length))} more</button>
                   {n(visible.length)} of {n(ranked.length)} shown. Search and filters cover all of them.
                 </td></tr>}
