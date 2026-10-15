@@ -246,7 +246,7 @@ export async function deriveSpvStance(db: Db): Promise<SpvDeriveReport> {
               coalesce((n.data->'researched'->>'at')::date, n.created_at::date) at
          from research.note n
         where n.kind = 'public_profile' and identity.canonical_entity_id(n.entity_id) = any($1::uuid[])
-          and (n.body ~* $2 or (n.data->'profile')::text ~* $2)`, [lps, TEXT_FILTER]);
+          and (n.body ~* $2 or n.profile_text ~* $2)`, [lps, TEXT_FILTER]);
     const quoted = new Set<string>();
     const text = (id: string, said: string, source: string, url: string | null, at: Date | string, what: string) => {
       const r = readSpvText(said);

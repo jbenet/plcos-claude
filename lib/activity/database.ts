@@ -19,11 +19,7 @@ export async function databaseActivity(db: Db, log: Logged): Promise<Evidence> {
     select id::text, coalesce(finished_at,started_at)::text as at, kind, records
     from sources.sync_run where source='affinity'
       and ($1::timestamptz is null or started_at < $1::timestamptz)`, [cutoff]);
-  // A 5% block sample: the full mean read all 430K payloads (1 s of database time after every data change, 15 Oct 2026).
-  // A table too small to sample falls back to the full mean.
-  const average = await db.one<{bytes:number|null}>(`select coalesce(
-      (select avg(octet_length(payload::text)) from sources.raw_record tablesample system (5) repeatable (1) where source='affinity'),
-      (select avg(octet_length(payload::text)) from sources.raw_record where source='affinity'))::float8 as bytes`);
+  const average = await payloadMean(db);
   for (const r of runs) {
     const day = utcDay(new Date(r.at).toISOString()); if (!day || covered(log,'affinity',r.at,r.id)) continue;
     points.push({day,source:'affinity',segment:segment('affinity',r.kind),requests:0,bytesIn:quantity(average?.bytes) === null ? null : Math.round(Number(r.records) * average!.bytes!),bytesOut:null,records:quantity(r.records),estimated:true,
@@ -43,6 +39,23 @@ export async function databaseActivity(db: Db, log: Logged): Promise<Evidence> {
       basis:'Import audit count: mapped findings, added prospects, portfolio rows or initialized people; total entries and byte counts may be incomplete.'});
   }
   return {points,origins:[]};
+}
+
+/**
+ * The mean stored Affinity payload, from a 5% block sample (the full mean read all 430K payloads, 1 s; the sample
+ * still 0.2–0.3 s), worked out again only when raw records were added: this evidence is rebuilt after every write
+ * (15 Oct 2026). A table too small to sample falls back to the full mean.
+ */
+const payloadMemo = new WeakMap<Db, { key: string; bytes: number | null }>();
+async function payloadMean(db: Db): Promise<{ bytes: number | null }> {
+  const key = (await db.one<{ k: string }>(`select coalesce(max(id),0)::text k from sources.raw_record`))!.k;
+  const memo = payloadMemo.get(db);
+  if (memo?.key === key) return { bytes: memo.bytes };
+  const row = await db.one<{bytes:number|null}>(`select coalesce(
+      (select avg(octet_length(payload::text)) from sources.raw_record tablesample system (5) repeatable (1) where source='affinity'),
+      (select avg(octet_length(payload::text)) from sources.raw_record where source='affinity'))::float8 as bytes`);
+  payloadMemo.set(db, { key, bytes: row?.bytes ?? null });
+  return { bytes: row?.bytes ?? null };
 }
 
 /** Fixed metadata aggregates; these tables do not participate in network.read_revision. */

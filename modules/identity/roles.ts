@@ -1,4 +1,5 @@
 import { getDb } from '@/lib/db';
+import { buildCache, liveRevisions } from '@/lib/build-cache';
 
 export type RelationshipRole = 'lp' | 'co_funder' | 'connector' | 'funder' | 'prospect' | 'team';
 export const ROLE_LABEL: Record<RelationshipRole, string> = {
@@ -71,9 +72,29 @@ export function namePattern(q?: string | null): string | null {
   return words.length ? `%${words.join('%')}%` : null;
 }
 
+/**
+ * The org lists and their counts are kept per read and live revision (15 Oct 2026: about 120 ms of every Everyone /
+ * LPs / Co-funders page went to building the facts of all 117K records). Asks and grant funders move neither
+ * revision, so a fingerprint of those two (small) tables is part of the key. Rows are shared: never change one.
+ */
+async function otherFacts(): Promise<string> {
+  return (await (await getDb()).one<{ k: string }>(`select
+    (select count(*)::text || '.' || coalesce(sum(hashtext(ask_id::text || coalesce(made_at::text, '') || coalesce(connector_id::text, ''))), 0)::text from coordination.ask)
+    || ':' || (select count(*)::text || '.' || coalesce(sum(hashtext(entity_id::text)), 0)::text from grants.funder) k`))!.k;
+}
+const listAt = buildCache((group: string, offset: string, q: string, _facts: string) =>
+  loadRoles(undefined, group as RelationshipGroup, Number(offset), q || null), 32, liveRevisions);
+const countsAt = buildCache((_facts: string) => loadCounts(), 4, liveRevisions);
+const matchAt = buildCache(async (group: string, q: string, _facts: string) => loadMatchCount(group as RelationshipGroup, q), 32, liveRevisions);
+
 /** All list reads have a SQL limit; detail callers pass just the requested identity. */
 export async function relationshipRoles(ids?: string[], group: RelationshipGroup = 'all', offset = 0, q?: string | null): Promise<RelationshipRow[]> {
   if (ids?.length === 0) return [];
+  if (!ids) return [...await listAt(group, String(Math.max(0, Math.floor(offset))), q ?? '', await otherFacts())];
+  return loadRoles(ids, group, offset, q);
+}
+
+async function loadRoles(ids: string[] | undefined, group: RelationshipGroup, offset: number, q?: string | null): Promise<RelationshipRow[]> {
   const db = await getDb();
   // A detail read (ids) builds only its own rows, not all 117K (one org page, 15 Oct 2026: 107 → 20 ms), and
   // rung and status come from the shown records' own pursuits, found through their aliases, not from every pursuit.
@@ -93,6 +114,11 @@ export async function relationshipRoles(ids?: string[], group: RelationshipGroup
 }
 /** How many records in a group match a name filter (issue 0134). */
 export async function relationshipMatchCount(group: RelationshipGroup, q: string): Promise<number> {
+  if (!namePattern(q)) return 0;
+  return matchAt(group, q, await otherFacts());
+}
+
+async function loadMatchCount(group: RelationshipGroup, q: string): Promise<number> {
   const pattern = namePattern(q);
   if (!pattern) return 0;
   const db = await getDb();
@@ -100,6 +126,10 @@ export async function relationshipMatchCount(group: RelationshipGroup, q: string
 }
 
 export async function relationshipCounts() {
+  return { ...await countsAt(await otherFacts()) };
+}
+
+async function loadCounts() {
   const db = await getDb();
   // Counted as base streams by, not after holding all 117K rows (15 Oct 2026: 105 → 66 ms, on every org list page).
   return (await db.one<Record<RelationshipGroup | RelationshipRole, number>>(`${facts('true', false)}
