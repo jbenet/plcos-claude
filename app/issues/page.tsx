@@ -1,12 +1,16 @@
 import { coalescePage } from '@/lib/page-render';
 import { IssueVelocity } from '@/components/issues/IssueVelocity';
-import { IssueList } from '@/components/issues/IssueList';
+import { IssueList, type IssueRow } from '@/components/issues/IssueList';
+import type { Issue } from '@/lib/issues';
 import { Page } from '@/components/shell/Page';
 import { config } from '@/config/deployment';
 import { SECTION } from '@/lib/nav';
 import { issues as issueSink, PRIORITY, type IssuePriority } from '@/lib/issues';
 
 export const dynamic = 'force-dynamic';
+
+const issueRow = ({ id, title, page, reporter, kind, priority, status, fixedIn, created }: Issue): IssueRow =>
+  ({ id, title, page, reporter, kind, priority, status, fixedIn, created });
 
 const ORDER: IssuePriority[] = ['P0', 'P1', 'P2', 'P3'];
 
@@ -94,7 +98,7 @@ async function Issues() {
           </div>
         </div>
       ) : (
-        <IssueList issues={all} />
+        <IssueList issues={all.map(issueRow)} />
       )}
 
     </Page>
