@@ -1,6 +1,6 @@
 # 33 — Outreach conversion, one page per vehicle
 
-**Status:** proposed 14 Oct 2026; charts 1–6 built the same day (`/<vehicle>/conversion`), 7–10 wait on DocSend. Juan: "need a tool to understand how outreach is converting per
+**Status:** proposed 14 Oct 2026; charts 1–6 built the same day (`/<vehicle>/conversion`); 7–10 on 15 Oct, from DocSend visits (docs/32). Juan: "need a tool to understand how outreach is converting per
 vehicle. Include progression in pipeline, and views in the datarooms (need docsend api). Start by
 scoping this out as a page per vehicle. Figure out what good graphs can show us what's working / not
 working." First vehicles: PLC Neurotech I and the Netholabs SPV.

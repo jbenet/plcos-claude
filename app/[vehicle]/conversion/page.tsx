@@ -11,6 +11,9 @@ import {
 } from '@/lib/conversion/model';
 import { formatDate } from '@/lib/time';
 import { CohortTable, FunnelChart, MoneyLine, SegmentCard, WaitingCard, WeekBars } from './parts';
+import { EngagementCard, NoFollowUpCard, PageDropChart, ReadFunnelChart } from './dataroom';
+import { engagement, pageDrop, readFunnel, readNoFollowUp, readers } from '@/lib/conversion/dataroom';
+import { visitsFor } from '@/modules/docsend';
 import s from './conversion.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -30,7 +33,7 @@ async function Conversion({ params }: { params: Promise<{ vehicle: string }> }) 
   const vehicle = all.find((v) => v.slug === slug);
   if (!vehicle) notFound();
 
-  const data = await conversionData(vehicle.id);
+  const [data, room] = await Promise.all([conversionData(vehicle.id), visitsFor(vehicle.id)]);
   const now = new Date();
   const rows: Row[] = data.pursuits.map((p) => ({ p, m: milestonesOf(p) }));
   const steps = funnel(rows);
@@ -39,6 +42,9 @@ async function Conversion({ params }: { params: Promise<{ vehicle: string }> }) 
   const met = reached.filter((r) => r.m.dates.met).length;
   const committed = rows.filter((r) => r.m.dates.committed).length;
   const wait = waiting(rows, now);
+  const rd = readers(rows, room.visits, new Map(Object.entries(data.entities)));
+  const drops = pageDrop(room.visits);
+  const day = (d: Date) => formatDate(d, { day: 'numeric', month: 'short', timeZone: 'UTC' });
   const noReply = wait.noReply.reduce((t, b) => t + b.rows.length, 0);
   const weeks = throughput(rows, now);
   const money = moneyOverTime(rows);
@@ -137,13 +143,34 @@ async function Conversion({ params }: { params: Promise<{ vehicle: string }> }) 
           </div>
 
           <div className="card">
-            <div className="chead"><h2>Dataroom views</h2><span className="lbl">DocSend</span></div>
-            <div className="cbody"><div className="empty">
-              <span className="stat unavailable"><i />Source unavailable</span>
-              <h3>DocSend is not connected yet.</h3>
-              <p>Once it is, this shows who opened the dataroom, how far they read, whether reading went with a meeting, and who read it
-                recently with no follow-up from us. Views are curiosity, not commitment.</p>
-            </div></div>
+            <div className="chead">
+              <h2>Dataroom views</h2>
+              <span className="lbl">
+                DocSend{room.asOf ? ` · read ${day(room.asOf)}` : ''}{' '}
+                <Info label="About dataroom views">
+                  <span className="ip">Visits are matched to LPs by the viewer’s email; our own team’s visits are left out. A view is
+                  curiosity, not commitment, and a link forwarded inside a firm reads as whoever opened it.</span>
+                </Info>
+              </span>
+            </div>
+            {room.visits.length === 0 ? (
+              <div className="cbody"><div className="empty">
+                <span className="stat unavailable"><i />Source unavailable</span>
+                <h3>No DocSend visits for {vehicle.name} yet.</h3>
+                <p>They appear once DocSend is connected in Settings → Connections and this vehicle’s dataroom is mapped to it.</p>
+              </div></div>
+            ) : (
+              <div className="cbody">
+                <ReadFunnelChart f={readFunnel(rows, rd.readers)} unmatched={rd.unmatched} />
+                <div className={s.grid} style={{ marginTop: 14 }}>
+                  <NoFollowUpCard rows={readNoFollowUp(rows, rd.readers, now)} href={href} />
+                  <EngagementCard bands={engagement(rows, rd.readers)} />
+                </div>
+                {drops.length > 0 ? (
+                  <div className={s.smalls}>{drops.map((d) => <PageDropChart key={d.documentTitle} doc={d} />)}</div>
+                ) : <p className={s.muted}>No visit has page-by-page times yet, so where readers drop off can’t be drawn.</p>}
+              </div>
+            )}
           </div>
         </>
       )}

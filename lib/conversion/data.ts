@@ -19,6 +19,8 @@ export interface ConversionData {
   pursuits: PursuitFacts[];
   /** Each pursuit's segments as a reader without licensed (R3) fields sees them, by pursuit id. */
   redacted: Record<string, Record<string, string>>;
+  /** Entity id (the pursuit's own, and its canonical one) -> pursuit id, to join DocSend visits by the LP they matched. */
+  entities: Record<string, string>;
   target: number | null;
   /** Segment keys the LP stats facts supply, in LP stats' order, with their labels. */
   dims: Array<{ key: string; title: string; order: readonly string[]; labels: Record<string, string> }>;
@@ -82,10 +84,13 @@ export const conversionData = buildCache(async (vehicleId: string): Promise<Conv
   for (const f of stats.facts) for (const p of f.pursuits) factOf.set(p.id, f);
   const now = new Date();
   const redacted: Record<string, Record<string, string>> = {};
+  const entities: Record<string, string> = {};
   const dims = SEGMENT_KEYS.map((key) => DIMENSIONS.find((d) => d.key === key)!).filter(Boolean);
 
   const out: PursuitFacts[] = pursuits.map((p) => {
     const fact = factOf.get(p.pursuitId);
+    entities[p.entityId] = p.pursuitId;
+    if (fact) entities[fact.entityId] = p.pursuitId;
     const segments: Record<string, string> = {};
     if (fact) for (const d of dims) segments[d.key] = d.of(fact, now);
     if (fact) {
@@ -114,6 +119,7 @@ export const conversionData = buildCache(async (vehicleId: string): Promise<Conv
   return {
     pursuits: out,
     redacted,
+    entities,
     target: totals.find((t) => t.vehicleId === vehicleId)?.target ?? null,
     dims: dims.map((d) => ({ key: d.key, title: d.title, order: d.order, labels: labels(d) })),
     asOf: now.toISOString(),

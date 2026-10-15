@@ -59,3 +59,7 @@
   .frow { grid-template-columns: 90px minmax(0, 1fr) 70px; }
   .frow > :nth-child(4), .wide { display: none; }
 }
+
+/* Dataroom views (charts 7–10). */
+.purpleBar { background: var(--purple); }
+.plain { margin: 0; padding-left: 16px; font-size: 12.5px; line-height: 1.7; }
