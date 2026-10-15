@@ -39,8 +39,12 @@ const SEED_STAND_IN = {
 const SLOW_TABLES = ['network.route_cache'];
 const SLOW_TABLE_MS = 20_000;
 const TABLES_AT_ONCE = Number(env.PLCOS_DESKTOP_TABLES_AT_ONCE || 4);
-/** Reads go to the live server for this long after a write: Postgres's change counters usually lag about a second (docs/31). */
-const WRITE_SETTLE_MS = Number(env.PLCOS_DESKTOP_SETTLE_MS || 3_000);
+/**
+ * Reads go to the live server for this long after a write (docs/31). Postgres's change counters lagged up to 10 s until
+ * every write asked its backend to flush them at once (lib/db/postgres.ts, 15 Oct 2026): now the sync that starts right
+ * after the write sees it.
+ */
+const WRITE_SETTLE_MS = Number(env.PLCOS_DESKTOP_SETTLE_MS || 1_000);
 // GUESS — the pages rebuilt after a sync that changed something, and the most time that may take before reads resume.
 const RECENT_PAGES = 3;
 const WARM_RECENT_MS = 15_000;
@@ -80,7 +84,7 @@ class LocalCopy {
     this.background = new Set();         // those syncing in the background now
     this.lastSyncStartedAt = 0;
     this.lastSyncFinishedAt = 0;
-    this.settledFor = 0;              // the write (lastWriteAt) the copy has caught up with and warmed after
+    this.settledFor = 0;              // the write (lastWriteAt) the copy has caught up with
     this.recent = [];                 // the last pages this person opened, newest first, to rebuild after a change
     this.lastSync = null;             // { at, ms, tables, rows, deleted }
     this.serverCommit = null;
@@ -109,7 +113,7 @@ class LocalCopy {
     };
   }
 
-  /** After a write, until a sync that started once the write had settled has finished and rebuilt the pages just opened. */
+  /** After a write, until a sync that started once the write had settled has finished (the pages are rebuilt after). */
   settling() { return this.lastWriteAt > 0 && this.settledFor !== this.lastWriteAt; }
 
   canServe(url, req) {
@@ -190,9 +194,11 @@ class LocalCopy {
     const catchesUp = write > 0 && syncStarted >= write + WRITE_SETTLE_MS - 1000;
     const t0 = Date.now();
     const r = await this.sync(st);
+    // Caught up before the pages are rebuilt, so a click during the rebuild joins it here (~0.3 s) rather than going to
+    // the live server, cold after the same write (15 Oct 2026).
+    if (catchesUp && this.settledFor < write) this.settledFor = write;
     if ((r.rows || r.deleted) && this.phase === 'ready') await this.warmRecent();
     this.lastSyncFinishedAt = Date.now();
-    if (catchesUp && this.settledFor < write) this.settledFor = write;
     if (r.rows || r.deleted) this.log(`synced ${r.tables} table(s), ${r.rows} row(s), ${r.deleted} deleted in ${Date.now() - t0} ms`);
     this.lastSync = { at: new Date().toISOString(), ms: Date.now() - t0, ...r };
     // The local server starts once the copy is whole, so it never renders (or warms) pages from a half-filled database.

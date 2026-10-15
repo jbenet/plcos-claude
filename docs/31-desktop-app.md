@@ -104,9 +104,11 @@ a job or a connector (the preview rules), and never holds a key.
   same choice. A launch key (cookie, `SameSite=Strict`) keeps other browsers and sites off the port.
 - **No change to the server's write path.** Change counters and `xmin` horizons instead of triggers or a change
   table. The cost is a filtered scan of a table whose counters moved, only while the app is open.
-- **Reads after a write go to the server** until a sync that started at least two seconds after the write has
-  finished and rebuilt the last three pages the person opened (`WRITE_SETTLE_MS`, 3 s, less a second; 5 s until
-  15 Oct 2026). Postgres flushes its counters about a second after a transaction.
+- **Reads after a write go to the server** until a sync that started after the write has finished
+  (`WRITE_SETTLE_MS`, 1 s, less a second; 3 s and 5 s earlier on 15 Oct 2026); the last three pages opened are rebuilt
+  after that, and a click meanwhile joins the rebuild. Postgres passes a write's counters to other sessions only when
+  its backend flushes them, which took up to 10 s; every write now asks for that flush at once
+  (`pg_stat_force_next_flush()`, lib/db/postgres.ts).
 - **After any sync that brings changes, the copy rebuilds the last three pages opened** (at most 15 s), since a
   change empties its page caches and the next click used to pay for that (a strategy page took 1 s cold on the real
   data, 15 Oct 2026). The server's own warm-up also rebuilds each vehicle's strategy and stats pages now.
