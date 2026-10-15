@@ -27,3 +27,9 @@ allowlist, and pairing caps unanswered requests per address.
 prefetched and gzipped, shows its progress, no longer fails on big tables, no longer starts over on a deploy, and a
 fresh copy starts from the database already on the Mac, downloading only what differs. Spotlight leaves the app's
 files alone.
+
+**Faster pages, 15 Oct 2026** (Juan: "still slow… time all the pages"): every page was timed on the Mac against the
+real data. The copy now analyzes its tables, rebuilds the pages you just opened after each sync that brings changes,
+and hands reads back to the Mac sooner after a write. The research corpus page shows 200 documents at a time (it sent
+17 MB), an LP's fit page sends only the documents its dimensions cite, and the server warms each vehicle's strategy and
+stats pages after a change.

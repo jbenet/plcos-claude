@@ -20,6 +20,16 @@ export async function listSourceDocs(ids?: string[]): Promise<SourceDoc[]> {
     ${ids ? 'where doc_id = any($1::text[])' : ''} order by doc_id`, ids ? [ids] : [])).map(toDoc);
 }
 
+/** One page of the corpus in doc order, and how many documents there are in all (optionally without one origin). */
+export async function sourceDocPage(offset: number, limit: number, withoutOrigin: string | null = null): Promise<{ docs: SourceDoc[]; total: number }> {
+  const db = await getDb();
+  const rows = await db.query<DocRow & { total: string }>(`select *, count(*) over () as total from research.source_doc
+    where $3::text is null or origin <> $3 order by doc_id offset $1 limit $2`, [offset, limit, withoutOrigin]);
+  const total = rows[0] ? Number(rows[0].total) : offset > 0
+    ? Number((await db.one<{ n: string }>(`select count(*) n from research.source_doc where $1::text is null or origin <> $1`, [withoutOrigin]))!.n) : 0;
+  return { docs: rows.map(toDoc), total };
+}
+
 export async function getSourceDoc(docId: string): Promise<SourceDoc | null> {
   const db = await getDb();
   const row = await db.one<DocRow>('select * from research.source_doc where doc_id = $1', [docId]);

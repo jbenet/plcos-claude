@@ -298,7 +298,7 @@ async function FunderVehicleFit({
           </span>
         </div>
         <div className="cbody" style={{ paddingBottom: 0 }}>
-          <FitDimensions rows={dims} docs={docMap} />
+          <FitDimensions rows={dims} docs={Object.fromEntries(dims.flatMap((r) => (r.source && docMap[r.source] ? [[r.source, docMap[r.source]]] : [])))} />
         </div>
         <p className="cover">
           <b>How the weighting works:</b> each reading counts for grade × importance-to-us ×

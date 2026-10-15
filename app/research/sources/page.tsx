@@ -2,13 +2,28 @@ import { coalescePage } from '@/lib/page-render';
 import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
-import { corpusCoverage, listSourceDocs, snapshotCount } from '@/lib/authz/read/research';
+import { corpusCoverage, snapshotCount, sourceDocPage } from '@/lib/authz/read/research';
 import { shortDate } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
-async function Sources() {
-  const [docs, coverage, snapshots] = await Promise.all([listSourceDocs(), corpusCoverage(), snapshotCount()]);
+// The real corpus holds thousands of documents (17 MB of HTML on one page, 15 Oct 2026), so it is read a page at a time.
+const PER_PAGE = 200;
+
+async function Sources({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
+  const asked = Math.floor(Number((await searchParams).page ?? 1));
+  const page = Number.isFinite(asked) && asked > 1 ? asked : 1;
+  const [{ docs, total }, coverage, snapshots] = await Promise.all([sourceDocPage((page - 1) * PER_PAGE, PER_PAGE), corpusCoverage(), snapshotCount()]);
+  const first = (page - 1) * PER_PAGE;
+  const pager = total > PER_PAGE && (
+    <div className="lbl" style={{ margin: '12px 0', display: 'flex', gap: 16 }}>
+      {page > 1 ? <Link href={page === 2 ? '/research/sources' : `/research/sources?page=${page - 1}`}>← Previous {PER_PAGE}</Link> : null}
+      <span>
+        {docs.length ? `${(first + 1).toLocaleString('en-US')}–${(first + docs.length).toLocaleString('en-US')}` : 'None'} of {total.toLocaleString('en-US')}
+      </span>
+      {first + docs.length < total ? <Link href={`/research/sources?page=${page + 1}`}>Next {PER_PAGE} →</Link> : null}
+    </div>
+  );
 
   return (
     <Page
@@ -58,13 +73,14 @@ async function Sources() {
       </div>
       <h1 style={{ marginTop: 8 }}>The corpus</h1>
       <p className="sublede">
-        Eleven documents of deliberately varying evidentiary strength, covering{' '}
+        {total === 11 ? 'Eleven' : total.toLocaleString('en-US')} documents of deliberately varying evidentiary strength, covering{' '}
         {coverage.from ? shortDate(coverage.from) : '—'} to {coverage.to ? shortDate(coverage.to) : '—'}. Each
         one states what it can support. Two of them exist specifically to be misread — a
         co-attendance list and a CSV of unknown provenance — because a corpus with no weak
         evidence in it does not test anything.
       </p>
 
+      {pager}
       {docs.map((d) => (
         <div className="card" key={d.docId}>
           <div className="chead">
@@ -98,6 +114,7 @@ async function Sources() {
           </div>
         </div>
       ))}
+      {pager}
     </Page>
   );
 }
