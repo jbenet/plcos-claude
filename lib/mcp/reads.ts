@@ -16,6 +16,7 @@ import { suggestionsFor } from '@/modules/strategy';
 import { listVehicles, type AppUser, type Vehicle } from '@/modules/platform';
 import type { RouteSearch } from '@/modules/network';
 import { ADDRESSES_WITHHELD, bestAddresses } from '@/lib/outreach/addresses';
+import { linksFor, relationsFor, sendToFor } from '@/lib/outreach/entity-reads';
 import { strategyBrief, type Strategy } from '@/lib/enrich/strategy';
 import { oneLine, type Answer } from './output';
 
@@ -67,13 +68,16 @@ export async function search(user: AppUser, a: { query: string; kind?: 'any' | '
   ]);
   const vname = new Map(vehicles.map((v) => [v.id, v]));
   const barred = new Set(restricted.map((r) => r.entity));
+  // What each is to us (docs/27 §5c): lp, portfolio-company, prospect-company, service-provider, other or null; a person's team and assistant links.
+  const [relations, links] = await Promise.all([relationsFor(ids, db), linksFor(ids, db)]);
   let outsideScope = 0;
   const rows = found.flatMap((e) => {
     const mine = pursuits.filter((p) => p.entity === e.entityId);
     const visible = mine.filter((p) => can(user, 'read', { vehicle: p.vehicleId }));
     if (!visible.length && !globalReader(user)) { if (mine.length) outsideScope++; return []; }
     return [{
-      entityId: e.entityId, name: e.displayName, type: e.entityType, doNotApproach: barred.has(e.entityId),
+      entityId: e.entityId, name: e.displayName, type: e.entityType, relation: relations.get(e.entityId) ?? null,
+      ...(e.entityType === 'person' ? { links: links.get(e.entityId) ?? [] } : {}), doNotApproach: barred.has(e.entityId),
       pursuits: visible.map((p) => ({ pursuitId: p.id, vehicle: vname.get(p.vehicleId)?.slug, vehicleName: vname.get(p.vehicleId)?.name, status: p.status, owner: p.owner })),
       // Cross-vehicle presence stays visible for coordination (rule 5), without status.
       alsoOn: mine.filter((p) => !visible.includes(p)).map((p) => ({ vehicleName: vname.get(p.vehicleId)?.name, owner: p.owner })),
@@ -172,6 +176,8 @@ export async function lpSummary(user: AppUser, a: { pursuitId: string; routes?: 
       evidenceRung: p.rung ? RUNG_LABEL[p.rung] : 'Nothing on file',
       source: p.source === 'us' ? 'set here' : `read from ${p.source}${p.sourceAsOf ? `, as of ${day(p.sourceAsOf)}` : ''}`,
       ...(w ? { headline: p.headline, statusReason: oneLine(p.statusReason), nextStep: p.nextStep, nextStepOn: day(p.nextStepOn) } : { words: 'Withheld: your access does not include the words on this vehicle.' }),
+      // Where mail to this LP goes To, its main contact cc'd (docs/27 §5c): an address, so only where words are readable.
+      sendTo: w ? (await sendToFor([p.entityId], db)).get(p.entityId) ?? null : null,
       contact: touch && {
         meetingsHeld: touch.meetingDates.length, lastTouch: day(touch.lastTouch), lastFromThem: day(touch.lastFromThem),
         waitingOnThemSince: day(touch.awaitingSince), nextMeeting: day(touch.nextMeeting), records: touch.total,

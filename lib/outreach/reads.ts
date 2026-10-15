@@ -4,6 +4,7 @@ import { can } from '@/lib/authz';
 import { pipelineData } from '@/lib/authz/read/pipeline';
 import { getDb } from '@/lib/db';
 import { addressesFor, detailsFor } from './addresses';
+import { sendToFor } from './entity-reads';
 import { redactHealth } from '@/lib/redact-health';
 import { SPV_STAGE_LABEL, spvRooms, workingDaysUntil, type SpvStage } from '@/modules/close';
 import { INSUFFICIENT_FOR_506C } from '@/modules/compliance';
@@ -308,7 +309,8 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
   const contactsBy = new Map(orgContacts);
   const people = [...new Set([...page.map((b) => b.r.entityId), ...orgContacts.flatMap(([, m]) => [...m.values()].flat().map((c) => c.entityId))])];
   // Addresses only where words are readable (R2), as before: the same reader as the route hops' contacts.
-  const emails = await addressesFor(page.some((b) => words(user, b.v.id)) ? people : []);
+  const [emails, sendTo] = await Promise.all([addressesFor(page.some((b) => words(user, b.v.id)) ? people : []),
+    sendToFor(page.filter((b) => words(user, b.v.id)).map((b) => b.r.entityId))]);
   const metaOf = new Map(meta.map((m) => [m.id, m]));
   const strategyOf = new Map(strategies.map((s) => [s.pursuit_id, s]));
   const rules = new Map<string, Awaited<ReturnType<typeof checkWrap>>>();
@@ -403,7 +405,7 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
       : { name: o.name, status: null });
     return {
       pursuitId: r.id, vehicle: v.slug,
-      entity: { id: r.entityId, name: r.name, kind: isPerson ? 'person' : 'org', contacts },
+      entity: { id: r.entityId, name: r.name, kind: isPerson ? 'person' : 'org', contacts, sendTo: w ? sendTo.get(r.entityId) ?? null : null },
       owner: r.owner,
       status: { value: r.status, label: STATUS_LABEL[r.status], setAt: day(m?.set_at), setBy: m?.source === 'us' ? m.set_by : m?.source ?? null },
       // The pipeline page's Score, Capacity, Routes and Evidence columns, from the same row (feedback 0158).
@@ -516,7 +518,8 @@ export async function outreachContacts(user: AppUser, a: ContactsArgs, fit: Queu
   const kindOf = new Map(kinds.map((k) => [k.id, k.type === 'person' ? 'person' as const : 'org' as const]));
   const contactsBy = new Map(orgContacts);
   const people = [...new Set([...chosen.filter((b) => contactsBy.has(b.v.id)).map((b) => b.r.entityId), ...orgContacts.flatMap(([, m]) => [...m.values()].flat().map((c) => c.entityId))])];
-  const [emails, details] = await Promise.all([addressesFor(people), a.details ? detailsFor(people) : Promise.resolve(null)]);
+  const [emails, details, sendTo] = await Promise.all([addressesFor(people), a.details ? detailsFor(people) : Promise.resolve(null),
+    sendToFor([...new Set(chosen.filter((b) => contactsBy.has(b.v.id)).map((b) => b.r.entityId))])]);
   const addressOf = (entityId: string) => (emails.get(entityId) ?? []).slice(0, 3);
   const detailOf = (entityId: string) => (details ? { details: details.get(entityId) ?? {} } : {});
   const rows = chosen.map(({ r, v }) => {
@@ -526,7 +529,8 @@ export async function outreachContacts(user: AppUser, a: ContactsArgs, fit: Queu
       ? addressOf(r.entityId).map((x) => ({ name: r.name, ...x, ...detailOf(r.entityId) }))
       : (contactsBy.get(v.id)?.get(r.entityId) ?? []).flatMap((c) => addressOf(c.entityId).map((x) => ({ name: c.name, ...x, ...detailOf(c.entityId) })));
     return {
-      pursuitId: r.id, vehicle: v.slug, entity: { id: r.entityId, name: r.name, kind },
+      // sendTo (docs/27 §5c): the address mail goes To, its main contact cc'd; an address, so only where words are readable.
+      pursuitId: r.id, vehicle: v.slug, entity: { id: r.entityId, name: r.name, kind, sendTo: w ? sendTo.get(r.entityId) ?? null : null },
       status: { value: r.status, label: STATUS_LABEL[r.status] }, passed: r.status === 'passed', contacts,
       ...(w ? {} : { withheld: 'Addresses are withheld at your access: they are words (R2) on this vehicle.' }),
     };

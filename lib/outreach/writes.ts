@@ -267,11 +267,13 @@ export const contactInput = z.object({
   confirmedBy: z.string().min(1).max(254).optional(), confirmedAt: isoTime.optional(),
   seenOn: isoDay.optional().describe('The date of the message it was read from (gmail-signature): the claim is as of then.'),
   messageId: z.string().min(3).max(400).optional().describe('The message it was read from, kept with the claim.'),
+  role: z.enum(['send-to', 'none']).optional().describe('send-to: mail to this LP goes To this address, its main contact cc\'d; one per entity, a new one replaces the old. none: if this address is the send-to, it no longer is. Omitted: unchanged.'),
   idempotencyKey: key.optional(),
 }).strict()
   .refine((a) => !!a.entityId !== !!a.pursuitId, 'Give entityId or pursuitId, one of the two.')
   .refine((a) => a.email || CONTACT_FIELDS.some((f) => a[f]), 'Give at least one of email, phone, title, organization, postalAddress, linkedin.')
-  .refine((a) => a.source !== 'gmail' || !!a.confirmedBy, 'source gmail is a confirmed address: give confirmedBy (the token\'s owner). Read from a signature and not confirmed: source gmail-signature.');
+  .refine((a) => a.source !== 'gmail' || !!a.confirmedBy, 'source gmail is a confirmed address: give confirmedBy (the token\'s owner). Read from a signature and not confirmed: source gmail-signature.')
+  .refine((a) => !a.role || !!a.email, 'role is the role of an address: give email.');
 
 /** The vehicles an entity is on: its own pursuits, or an organisation's whose contact it is. */
 export async function entityVehicles(entityId: string, q: Queryable): Promise<string[]> {
@@ -350,6 +352,15 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
           kept: r.disagree.filter((e) => sourceOf(e) !== 'licensed').map((e) => ({ email: e.value, source: sourceOf(e) })),
           keptLicensed: r.disagree.filter((e) => sourceOf(e) === 'licensed').length,
         };
+        // The send-to role (JuanMail 0173, 15 Oct 2026): where mail to this LP goes To.
+        if (a.role === 'send-to') {
+          const { setSendTo } = await import('./entities');
+          const { replaced } = await setSendTo(tx, { entityId: entity, email: a.email, claimId: r.claim, ownerId: owner.id, tokenId: ctx.env.tokenId, source: a.source });
+          emailAnswer.sendTo = { email: a.email, setBy: owner.handle, setAt: new Date().toISOString(), replaced };
+        } else if (a.role === 'none') {
+          const { clearSendTo } = await import('./entities');
+          emailAnswer.sendToCleared = await clearSendTo(tx, { entityId: entity, email: a.email, ownerId: owner.id, tokenId: ctx.env.tokenId });
+        }
       }
       for (const f of CONTACT_FIELDS) {
         const v = a[f];
