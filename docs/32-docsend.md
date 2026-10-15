@@ -35,8 +35,20 @@ ask. Nothing in this doc writes to DocSend, creates links, or downloads document
 - Its tools, as the help page lists them: read and analyze documents or pages; list the Spaces you can
   access; show a Space's documents and folders; **search contacts who visited your documents; show the
   documents a contact visited**; and update a Space group's members and download settings (a write).
-- Server URL: `https://docsend.com/mcp` (Juan, 15 Oct 2026). Not yet known: the exact tool names and arguments, and whether a visit comes back with
-  duration, pages or time per page. These decide how much of §3 the MCP can fill.
+- Server URL: `https://docsend.com/mcp` (Juan, 15 Oct 2026). Confirmed 15 Oct 2026 by connecting it to a
+  Claude thread with Juan's sign-in. Its published tool schemas:
+  - `list_spaces` lists the Spaces the user owns or collaborates on (`all_company: true` for company admins).
+  - `list_visits(space_id | document_id | contact_id, cursor, limit ≤ 50)` returns visit history, newest
+    first: `visit_created_at`, `time_spent_viewing_ms`, `link_name`, `document_name`, `document_id`,
+    `contact_email`, `contact_name`, `space_id`, `space_name`, `page_views[{page_number, time_on_page}]`,
+    `percentage_viewed`, `unique_pages_viewed`, `total_pages_count`. No visit id, no link id.
+  - Other read tools: `list_space_content`, `list_space_permissions`, `list_space_events`,
+    `search_contacts`, `list_content_library`, `read_document`, `search_documents`.
+  - Write tools PLC OS never calls: `create_space`, `create_space_folder`, `create_space_group`,
+    `create_space_link`, `update_space`, `update_space_group`, `update_space_link`,
+    `set_space_permission_visibility`, `rename_space_content`, `move_space_content`,
+    `request_space_upload`, `upload_file_to_space`.
+  - The tool descriptions ask clients never to show `*_id` values to people; PLC OS keeps them for joins only.
 - There is still no REST API or developer portal. Third-party pages describing `api.docsend.com/v1` cite no
   DocSend documentation; treat them as unconfirmed.
 
@@ -44,13 +56,12 @@ So the "token" is an OAuth sign-in to DocSend's MCP server, not an API key:
 
 | Access | Where it comes from | What it gives |
 | --- | --- | --- |
-| DocSend MCP sign-in | Juan signs in once (OAuth) from Settings → Connections in PLC OS. | Spaces, documents, and who visited what, with history (route E). |
+| DocSend MCP sign-in | Juan signs in once (OAuth) from Settings → Connections in PLC OS. | Every visit with history, duration and time per page (route E). |
 | A webhook secret we mint | Settings → Connections. Pasted into a Zapier step that forwards each DocSend visit. | Every new visit, forward-only (route B). Only if E lacks durations. |
 | None | — | Affinity's notes (route A) and Space analytics CSV exports (route D). |
 
-**Recommendation:** route A now (no sign-in), route E as the main source once we have seen its tool
-schemas, D once per data room for history if E does not give duration and pages, and B only if E turns
-out not to cover new visits well enough.
+**Recommendation:** route E is the source: it has history, duration and time per page, so B (Zapier) and
+D (CSV) are not needed. Route A stays as a fallback for documents shared outside a Space.
 
 ## 3. The data we want
 
@@ -79,6 +90,11 @@ docsend.visit
   raw             jsonb               -- the payload as it arrived, for replay
   received_at     timestamptz
 ```
+
+From the MCP: `visit_id` = hash of (space_id, document_id, contact_email, visit_created_at), since visits
+carry no id; `started_at` = `visit_created_at`; `duration_sec` = `time_spent_viewing_ms / 1000`;
+`pages_viewed` = `unique_pages_viewed`; `page_count` = `total_pages_count`; `page_seconds` = `page_views`;
+`link_id` null, `link_name` kept in `raw`.
 
 `docsend.vehicle_map(kind 'link'|'document'|'space', key, vehicle_id, set_by, set_at)` holds the mapping.
 `docsend.sync_state(source, last_synced_at, last_error)` gives each source's as-of time.
@@ -158,20 +174,13 @@ docsend: {
 
 ## 8. Build order
 
-1. Schema, route A, the mapping rules and `visitsFor`. Gives views per vehicle from history we already
-   hold. No sign-in, no new outside calls.
-2. Inspect the DocSend MCP's real tool list and a sample response (needs a DocSend sign-in; see §9), then
-   build route E behind `docsend.mcp`, with the read-only allowlist.
-3. Route D upload, if E lacks duration and pages.
-4. Route B, only if E misses new visits.
+1. Schema, route E (OAuth client, read-tool allowlist, background sync from a per-Space watermark),
+   the mapping rules and `visitsFor`.
+2. Route A as a fallback for visits outside a Space.
+3. B and D only if E proves insufficient.
 
 ## 9. Questions for Juan
 
-1. Is your DocSend on Advanced Data Rooms, and does your DocSend org allow third-party AI connections?
-   The MCP needs both.
-2. Fastest way to see the real tools: add DocSend's MCP as a custom connector in claude.ai (Settings →
-   Connectors, server URL `https://docsend.com/mcp`) and enable it in this thread. I list its tools,
-   read one visit, and build E against what it actually returns. The PLC OS server then gets its own
-   sign-in.
-3. Which data rooms and documents belong to which vehicle? (Or let the Materials page mapping do it.)
-4. Is the DocSend → Affinity integration on for all of the team's DocSend accounts, or just yours?
+1. Which Space belongs to which vehicle? (Asked in the thread; the mapping is editable.)
+2. Whose DocSend sign-in should the server use? A company admin's, with `all_company`, also covers Spaces
+   other people create later.
