@@ -29,7 +29,10 @@ const storedRoutes = buildCache(async (kind: string) => {
        c.input_revision::text, c.revision
       from network.route_cache c
       where c.vehicle_kind = $1`, [kind]);
-  return new Map(rows.map(r => [r.target_id, r]));
+  // Routes are built once per routes revision here, not again for every vehicle on every rebuild (15 Oct 2026:
+  // about 30 ms of each vehicle's plan after a write went to re-mapping the same 7,700 searches).
+  return new Map(rows.map(r => [r.target_id, { ...r, routes: (r.routes ?? []).map(([fromEntity, fromName, weakestTier, viaContact, ids, names]) =>
+    ({ fromEntity, fromName, weakestTier, viaContact, hops: ids.map((toEntity, i) => ({ toEntity, toName: names[i]! })) }) as unknown as Route) }]));
 }, 4, routesRevisions);
 
 export async function strategyRouteSummaries(ids: string[], kind: string): Promise<Map<string, RecordedRoute>> {
@@ -40,12 +43,9 @@ export async function strategyRouteSummaries(ids: string[], kind: string): Promi
   const versioned = revisionFor(db);
   versioned.catch(() => undefined); // awaited below
   const contacts = await lpContactsFor(ids);
-  const all = [...new Set([...ids, ...[...contacts.values()].flatMap(cs => cs.map(c => c.entityId))])];
   const [stored, version] = await Promise.all([storedRoutes(kind), versioned]);
-  const flat = [...new Set(all)].flatMap(id => { const r = stored.get(id); return r ? [r] : []; });
-  const rows = flat.map(r => ({ ...r, current: r.input_revision === version.revision && r.revision === version.generation, routes: (r.routes ?? []).map(([fromEntity, fromName, weakestTier, viaContact, ids, names]) =>
-    ({ fromEntity, fromName, weakestTier, viaContact, hops: ids.map((toEntity, i) => ({ toEntity, toName: names[i]! })) }) as unknown as Route) }));
-  const byTarget = new Map(rows.map(r => [r.target_id, r]));
+  const byTarget = stored;
+  const isCurrent = (r: { input_revision: string; revision: string }) => r.input_revision === version.revision && r.revision === version.generation;
   const result = new Map<string, RecordedRoute>();
   for (const id of ids) {
     const endpointContacts = new Map((contacts.get(id) ?? []).map(c => [c.entityId, c]));
@@ -58,7 +58,7 @@ export async function strategyRouteSummaries(ids: string[], kind: string): Promi
       const route = routes[0];
       if (own) result.set(id, { entityId: id, count: routes.length, at: new Date(own.computed_at), tier: route?.weakestTier ?? null,
         path: [route?.fromName, ...(route?.hops ?? []).map(h => h.toName)].filter(Boolean).join(' → '),
-        basis: 'Stored graph search; first recorded candidate. Live route ranking and action guards are checked on the route page.', current: own.current });
+        basis: 'Stored graph search; first recorded candidate. Live route ranking and action guards are checked on the route page.', current: isCurrent(own) });
       continue;
     }
     for (const endpoint of [id, ...endpointContacts.keys()]) {
@@ -69,7 +69,7 @@ export async function strategyRouteSummaries(ids: string[], kind: string): Promi
         const route = contact ? { ...original, viaContact: contact } : original;
         const key = [route.fromEntity, ...route.hops.map(h => h.toEntity)].join('|');
         const prior = chains.get(key);
-        if (!prior || route.weakestTier < prior.route.weakestTier) chains.set(key, { route, at: new Date(row!.computed_at), current: row!.current });
+        if (!prior || route.weakestTier < prior.route.weakestTier) chains.set(key, { route, at: new Date(row!.computed_at), current: isCurrent(row!) });
       }
     }
     const best = [...chains.values()].sort((a, b) => a.route.weakestTier.localeCompare(b.route.weakestTier))[0];
@@ -78,7 +78,7 @@ export async function strategyRouteSummaries(ids: string[], kind: string): Promi
     result.set(id, { entityId: id, count: chains.size, at: best?.at ?? new Date(own!.computed_at), tier: route?.weakestTier ?? null,
       path: route ? [route.fromName, ...route.hops.map(h => h.toName)].filter(Boolean).join(' → ') + (route.viaContact ? ` · via ${route.viaContact.role}` : '') : '',
       basis: 'Stored graph searches, including the LP unit’s contacts. Live route ranking and action guards are checked on the route page.',
-      current: best?.current ?? own!.current });
+      current: best?.current ?? isCurrent(own!) });
   }
   return result;
 }
