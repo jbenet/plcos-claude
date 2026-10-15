@@ -47,6 +47,8 @@ const DAKOTA = ['marketplace-as-a-service.herokuapp.com'];
 // Linear (docs/24-linear.md): only its connector names the host or the key's variable; its client sends queries only.
 const LINEAR = ['api.linear.app', 'LINEAR_API_KEY'];
 const LINEAR_PROPERTIES = new Set(['scripts/properties/linear.ts']);
+// DocSend (docs/32-docsend.md): only its connector names its MCP server; its client calls read tools only.
+const DOCSEND = ['docsend.com/mcp'];
 // Email drafts (docs/25 §12): Gmail only through mailguard. Nothing names Google's mail or OAuth hosts;
 // only the mailguard connector names its token's and address's variables.
 const GOOGLE = ['gmail.googleapis.com', 'GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET'];
@@ -110,6 +112,12 @@ async function main() {
     if (!rel.startsWith(join('lib', 'connectors', 'linear')) && rel !== 'scripts/boundaries.ts' && !LINEAR_PROPERTIES.has(rel)) {
       for (const needle of LINEAR) {
         if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — only lib/connectors/linear/ talks to Linear`);
+      }
+    }
+
+    if (!rel.startsWith(join('lib', 'connectors', 'docsend')) && rel !== 'scripts/boundaries.ts' && rel !== 'scripts/properties/docsend.ts') {
+      for (const needle of DOCSEND) {
+        if (text.includes(needle)) violations.push(`${rel}: mentions ${needle} — only lib/connectors/docsend/ talks to DocSend`);
       }
     }
 

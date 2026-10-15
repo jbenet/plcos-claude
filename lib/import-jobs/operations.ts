@@ -160,6 +160,11 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
       const { syncCalendars } = await import('@/lib/calendar-sync');
       return {...await syncCalendars(db,actor,{progress})};
     }
+    case 'docsend': {
+      // Read-only: list_spaces and list_visits through DocSend's MCP server (lib/connectors/docsend), then matching.
+      const { syncDocsend } = await import('@/lib/connectors/docsend/sync');
+      return {...await syncDocsend(db,{progress})};
+    }
     case 'linear-rebuild': {
       const { rebuildLinear } = await import('@/lib/connectors/linear/sync');
       return {...await rebuildLinear(db,actor,{progress})};

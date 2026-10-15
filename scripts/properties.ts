@@ -68,6 +68,7 @@ async function main() {
   await step('calendar-feeds', async () => (await import('./properties/calendar-feeds')).calendarFeedProperties(check));
   await step('cloud-sourcing', async () => (await import('./properties/cloud-sourcing')).cloudSourcingProperties(check));
   await step('daily-timer', async () => (await import('./properties/daily-timer')).dailyTimerProperties(check));
+  await step('docsend', async () => (await import('./properties/docsend')).docsendProperties(check));
   await step('cache-retries', async () => (await import('./properties/cache-retries')).cacheRetryProperties(check));
   await step('commit-revisions', async () => (await import('./properties/commit-revisions')).commitRevisionProperties(check));
   await step('suite', async () => (await import('./properties/suite')).runProperties(check));

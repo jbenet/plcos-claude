@@ -151,7 +151,7 @@ export async function firmsByDomain(domains: string[], lps: Set<string> | null, 
 export const NOT_A_PERSON = /(@resource\.calendar\.google\.com|@group\.calendar\.google\.com|@group\.v\.calendar\.google\.com|@import\.calendar\.google\.com)$/;
 
 /** The people on record behind addresses (email claims, never Dakota's licensed ones) and each one's current firms. */
-async function partiesOf(addresses: string[], q: Queryable): Promise<Map<string, { person: string; firms: string[] }>> {
+export async function partiesOf(addresses: string[], q: Queryable): Promise<Map<string, { person: string; firms: string[] }>> {
   const out = new Map<string, { person: string; firms: string[] }>();
   if (!addresses.length) return out;
   // A claim first (rank 0), then the address Affinity holds for a person (rank 1).

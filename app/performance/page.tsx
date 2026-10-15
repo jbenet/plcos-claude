@@ -49,8 +49,8 @@ async function Performance() {
             </p>
           </div>
           <div className="note">
-            DocSend is forward-only through a Zapier webhook: no backfill, no guarantees, no
-            signature. History will have to be a manual CSV, and will be marked as such.
+            DocSend is read nightly through its own MCP server once an Admin connects it on Settings →
+            Connections: every data-room visit with its history, time and pages (docs/32).
           </div>
         </>
       }

@@ -2,6 +2,9 @@ import type { Action } from './index';
 export const routeRules = {
   'app/api/connection-feedback/route.ts#POST': 'feedback',
   'app/api/connection-feedback/route.ts#GET': 'feedback',
+  // Connect DocSend (docs/32-docsend.md): an Admin signs in to DocSend; each handler checks its signed state cookie.
+  'app/api/connectors/docsend/connect/route.ts#GET': 'admin',
+  'app/api/connectors/docsend/callback/route.ts#GET': 'admin',
   'app/api/dakota/status/route.ts#GET': 'admin',
   // Email drafts (docs/25). Each handler also checks the draft is the caller's own.
   'app/api/email/attachment/route.ts#POST': 'mutate',
