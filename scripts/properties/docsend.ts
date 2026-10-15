@@ -10,7 +10,7 @@
  */
 import { migrate } from '../../lib/db/migrate';
 import { docsendClient, NotSignedIn, parseAnswer, type McpTransport } from '../../lib/connectors/docsend/mcp';
-import { allowedUrl, discover, DocsendSignInError, type OAuthTransport } from '../../lib/connectors/docsend/oauth';
+import { allowedUrl, discover, DocsendSignInError, register, type OAuthTransport } from '../../lib/connectors/docsend/oauth';
 import { normalizeVisit, syncDocsend, visitKey } from '../../lib/connectors/docsend/sync';
 import { DocsendRefused, READ_TOOLS } from '../../lib/connectors/docsend/tools';
 import { setSpaceVehicle, visitsFor } from '../../modules/docsend';
@@ -150,6 +150,21 @@ export async function docsendProperties(check: Check) {
       meta?.registrationEndpoint === asMeta.registration_endpoint && /404/.test(said) && followed && away && /ENOTFOUND/.test(down)
         && !hops.some((h) => h.includes('elsewhere')),
       `meta ${meta ? 'found' : 'missing'}; "${said}"; "${down}"`);
+
+    const bodies: Array<Record<string, unknown>> = [];
+    const picky = (acceptMinimal: boolean): OAuthTransport => async (_url, init) => {
+      const b = JSON.parse(init.body ?? '{}') as Record<string, unknown>;
+      bodies.push(b);
+      if (b.grant_types || !acceptMinimal) return { status: 400, text: async () => JSON.stringify({ error: 'invalid_client_metadata', error_description: 'grant_types not allowed' }) };
+      return { status: 201, text: async () => JSON.stringify({ client_id: 'invented-client' }) };
+    };
+    const regMeta = { ...meta!, scopes: [] };
+    const retried = await register(picky(true), regMeta, 'https://app.example/cb').catch(() => null);
+    let refusedWhy = '';
+    try { await register(picky(false), regMeta, 'https://app.example/cb'); } catch (e) { refusedWhy = e instanceof Error ? e.message : ''; }
+    check('DOCSEND a refused registration is tried once with only the required fields, and the refusal says why',
+      retried === 'invented-client' && bodies.length === 4 && /invalid_client_metadata: grant_types not allowed/.test(refusedWhy),
+      `${bodies.length} registrations; "${refusedWhy}"`);
   }
 
   // ── The sync ────────────────────────────────────────────────────────────────────────────────────────
