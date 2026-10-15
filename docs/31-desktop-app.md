@@ -121,6 +121,9 @@ a job or a connector (the preview rules), and never holds a key.
   the same Keychain item), or `seed` in settings.json. People's secrets are never taken. Each seeded table is then
   checked against the server's digest (`op=digest`: runs of 5,000 rows in key order with their md5) and only the
   runs that differ are downloaded.
+- **Slow tables catch up in the background** once the copy is whole: `network.route_cache` (a derived cache of
+  about 10,000 large searches, rewritten daily; 13.7 minutes to copy on 15 Oct) and any table whose sync took over
+  20 s. A write's settle waits only for the ordinary tables, so reads come back to the Mac in seconds.
 - **Spotlight is kept off** the app's folders (`.metadata_never_index`): it was indexing the copy's build,
   dependencies and database as they arrived.
 - **The first read of a table replaces it whole**, in one transaction, so rows the build's migrations made locally
