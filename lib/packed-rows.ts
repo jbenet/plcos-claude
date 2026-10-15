@@ -219,32 +219,46 @@ function ending(c: PackedRows['c'], plainColumns: Array<[string, unknown[]]>) {
 }
 
 export function unpackRows<T>(packed: PackedRows): T[] {
-  const rows: Record<string, unknown>[] = Array.from({ length: packed.n }, () => ({}));
+  // Each column's values first (`undefined` is a missing key), then each row in one go: filling rows a column at a
+  // time was twice as slow, every row's properties growing across the whole pass (Pipeline, 15 Oct 2026).
+  const n = packed.n;
+  const values = new Map<string, unknown[]>();
+  const column = (f: (r: number) => unknown) => { const out = new Array<unknown>(n); for (let r = 0; r < n; r++) out[r] = f(r); return out; };
   for (const [k, col] of Object.entries(packed.c)) {
     if ('l' in col) {
       const items = unpackRows<unknown>(col.l);
-      let at = 0;
-      col.k.forEach((count, r) => { rows[r]![k] = items.slice(at, at + count); at += count; });
+      let from = 0;
+      values.set(k, col.k.map((count) => items.slice(from, (from += count))));
     } else if ('e' in col) {
       const e = col.e;
-      for (let r = 0; r < packed.n; r++) { const ms = 'v' in e ? e.v[r] : e.d[at(e.i, r)]; rows[r]![k] = ms === null ? null : new Date(ms as number); }
-    } else if ('u' in col) uuidsIn(col.u, packed.n).forEach((v, r) => { rows[r]![k] = v; });
-    else if ('v' in col) col.v.forEach((v, r) => { if (v !== undefined) rows[r]![k] = v; });
-    else if ('h' in col && !col.r) col.t.forEach((tail, r) => { rows[r]![k] = (col.h.d[at(col.h.i, r)] as string) + tail; });
-    else if ('d' in col) for (let r = 0; r < packed.n; r++) { const v = col.d[at(col.i, r)]; if (v !== undefined) rows[r]![k] = v; }
+      values.set(k, column((r) => { const ms = 'v' in e ? e.v[r] : e.d[at(e.i, r)]; return ms === null ? null : new Date(ms as number); }));
+    } else if ('u' in col) values.set(k, uuidsIn(col.u, n));
+    else if ('v' in col) values.set(k, col.v);
+    else if ('h' in col && !col.r) values.set(k, col.t.map((tail, r) => (col.h.d[at(col.h.i, r)] as string) + tail));
+    else if ('d' in col) values.set(k, column((r) => col.d[at(col.i, r)]));
   }
   // A copied column reads its source's values; sources are always earlier, plain, and never copies.
   for (const [k, col] of Object.entries(packed.c)) {
-    if ('a' in col && 'x' in col) { const x = col.x; rows.forEach((row, r) => { row[k] = (row[col.a] as string) + (x.d[at(x.i, r)] as string); }); }
-    else if ('a' in col) rows.forEach((row) => { const v = row[col.a]; if (v !== undefined) row[k] = col.p || col.s ? `${col.p ?? ''}${v as string}${col.s ?? ''}` : v; });
+    if ('a' in col && 'x' in col) { const x = col.x, source = values.get(col.a)!; values.set(k, column((r) => (source[r] as string) + (x.d[at(x.i, r)] as string))); }
+    else if ('a' in col) {
+      const source = values.get(col.a)!;
+      values.set(k, column((r) => { const v = source[r]; return v === undefined || !(col.p || col.s) ? v : `${col.p ?? ''}${v as string}${col.s ?? ''}`; }));
+    }
     // A tail sent as 0 is the same row's tail of the column `r` names, which is never itself a reference.
     if ('h' in col && col.r) {
-      const from = col.r;
-      col.t.forEach((tail, r) => {
-        const source = rows[r]![from] as string;
-        rows[r]![k] = (col.h.d[at(col.h.i, r)] as string) + (tail === 0 ? source.slice(cut(source)) : tail);
-      });
+      const source = values.get(col.r)!;
+      values.set(k, col.t.map((tail, r) => {
+        const from = source[r] as string;
+        return (col.h.d[at(col.h.i, r)] as string) + (tail === 0 ? from.slice(cut(from)) : tail);
+      }));
     }
+  }
+  const keys = [...values.keys()], lists = [...values.values()];
+  const rows = new Array<Record<string, unknown>>(n);
+  for (let r = 0; r < n; r++) {
+    const row: Record<string, unknown> = {};
+    for (let j = 0; j < keys.length; j++) { const v = lists[j]![r]; if (v !== undefined) row[keys[j]!] = v; }
+    rows[r] = row;
   }
   return rows as T[];
 }
