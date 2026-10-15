@@ -351,10 +351,9 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
        from (
        select n.fetched_at, n.payload from sources.raw_record n
      where n.source = $1 and n.kind = 'note'
-       and (exists (select 1 from jsonb_array_elements($2::jsonb) p
-                    where (n.payload->'personsPreview'->'data') @> jsonb_build_array(p))
-        or exists (select 1 from jsonb_array_elements($3::jsonb) c
-                    where (n.payload->'companiesPreview'->'data') @> jsonb_build_array(c)))
+       -- Each id as its own containment, so the attachment indexes answer it (sources 007).
+       and ((n.payload->'personsPreview'->'data') @> any($2::jsonb[])
+        or (n.payload->'companiesPreview'->'data') @> any($3::jsonb[]))
        and not exists (
          select 1 from sources.raw_record newer
           where newer.source = n.source and newer.kind = n.kind and newer.source_id = n.source_id
@@ -364,7 +363,7 @@ export async function notesAbout(entityId: string): Promise<NoteView[]> {
        left join meetings.note_reading nr on nr.source = 'affinity' and nr.note_id = (n.payload->>'id')
        left join platform.app_user cu on cu.id = nr.confirmed_by
      order by (n.payload->>'createdAt') desc`,
-    [SOURCE, JSON.stringify(persons), JSON.stringify(companies)],
+    [SOURCE, persons.map((p) => JSON.stringify([p])), companies.map((c) => JSON.stringify([c]))],
   );
   const mine = new Set(own);
   const orgName = new Map(orgs.map((o) => [o.source_id, o.name]));
