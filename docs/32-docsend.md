@@ -1,6 +1,6 @@
 # 32 — DocSend: dataroom and document views
 
-**Status: scope for Juan's review (14 Oct 2026). Nothing here is built yet.**
+**Status: scope for Juan's review (14 Oct 2026). Nothing here is built yet.** Updated 15 Oct 2026: DocSend has an MCP server (§2).
 Juan, 14 Oct 2026: "Are you connected to Docsend yet? if not … add API support, i'll try to get a token
 later today. scope it out for now and get it for my review." The thread "Outreach conversion per vehicle"
 consumes what this produces (§6).
@@ -24,25 +24,33 @@ ask. Nothing in this doc writes to DocSend, creates links, or downloads document
 
 ## 2. Does DocSend have an API?
 
-**As far as can be verified, no public one.** Checked 14 Oct 2026:
+**No REST API, but an official MCP server (Juan, 15 Oct 2026: "i think they have an MCP").** Checked 15 Oct
+2026 through search results (docsend.com and help.dropbox.com are not reachable from the cloud container):
 
-- DocSend publishes no developer portal or API reference, and it is not on the Dropbox developer platform.
-  Its own help center offers Zapier (and IFTTT) as the programmatic route. docs/09 §0.4 found the same in
-  September.
-- Third-party pages that describe `api.docsend.com/v1` with bearer tokens cite no DocSend documentation and
-  are years old. Treat them as unconfirmed. (docsend.com itself is not reachable from the cloud container,
-  so this was checked through search results, not by calling the host.)
+- Dropbox DocSend runs a **remote MCP server**, in open beta for **Advanced Data Rooms** plans, signed into
+  with **OAuth** as the DocSend user, and limited to what that user's account and plan can already see. The
+  organization must allow third-party AI connections. Sources: [Dropbox help, "How to connect the Dropbox
+  DocSend remote MCP server"](https://help.dropbox.com/integrations/connect-docsend-mcp-server) and
+  [DocSend's announcement](https://www.docsend.com/blog/introducing-mcp-for-docsend/).
+- Its tools, as the help page lists them: read and analyze documents or pages; list the Spaces you can
+  access; show a Space's documents and folders; **search contacts who visited your documents; show the
+  documents a contact visited**; and update a Space group's members and download settings (a write).
+- Not yet known: the server URL, the exact tool names and arguments, and whether a visit comes back with
+  duration, pages or time per page. These decide how much of §3 the MCP can fill.
+- There is still no REST API or developer portal. Third-party pages describing `api.docsend.com/v1` cite no
+  DocSend documentation; treat them as unconfirmed.
 
-So "a token" can mean one of three things, and the design takes all three:
+So the "token" is an OAuth sign-in to DocSend's MCP server, not an API key:
 
-| Token | Where it comes from | What it gives |
+| Access | Where it comes from | What it gives |
 | --- | --- | --- |
-| A DocSend API key | Only if DocSend support says his plan has API access. Worth one email to ask. | Polling with backfill (§4 route C). |
-| A webhook secret we mint | Settings → Connections in PLC OS. Pasted into a Zapier (or IFTTT/Make) step that forwards each DocSend visit. | Every new visit, forward-only (route B). |
+| DocSend MCP sign-in | Juan signs in once (OAuth) from Settings → Connections in PLC OS. | Spaces, documents, and who visited what, with history (route E). |
+| A webhook secret we mint | Settings → Connections. Pasted into a Zapier step that forwards each DocSend visit. | Every new visit, forward-only (route B). Only if E lacks durations. |
 | None | — | Affinity's notes (route A) and Space analytics CSV exports (route D). |
 
-**Recommendation:** start with A now (no token), add B as soon as Juan connects DocSend in Zapier, use D
-once per data room for history, and switch to C only if DocSend confirms an API.
+**Recommendation:** route A now (no sign-in), route E as the main source once we have seen its tool
+schemas, D once per data room for history if E does not give duration and pages, and B only if E turns
+out not to cover new visits well enough.
 
 ## 3. The data we want
 
@@ -53,7 +61,7 @@ viewed, percent complete) when the source says. A visit is evidence of attention
 ```
 docsend.visit
   visit_id        text primary key    -- source + source id; idempotent re-delivery (types.ts seam 4)
-  source          text                -- 'affinity_note' | 'webhook' | 'csv' | 'api'
+  source          text                -- 'affinity_note' | 'mcp' | 'webhook' | 'csv'
   started_at      timestamptz
   duration_sec    integer null
   pages_viewed    integer null
@@ -93,14 +101,21 @@ dropped. Off unless `config.docsend.webhook` is on and a secret is set. Zapier g
 retries we can rely on, so the UI marks DocSend numbers partial (docs/09). Webhooks by Zapier is on Zapier's
 paid plans (inferred from Zapier's plan pages; check when connecting).
 
-**C. API poll (only if DocSend confirms an API).** `lib/connectors/docsend/` with a GET-only, allowlisted
-client like Dakota's, polled by a background job from a watermark, one request a second, stop on 429. The
-key is stored encrypted in Settings like the mailguard key, never printed. Built only once we have the
-actual reference, since every endpoint name today would be a guess.
+**C. REST API poll.** Dropped: no REST API exists (§2).
 
 **D. CSV import (history).** DocSend's Space Analytics page exports a CSV of all visits to a data room
 (Advanced Data Rooms plan). An Admin uploads it on Developer → Data (a new upload there); it lands as `source = 'csv'`. This
 is the only way to get duration and pages for visits before B is switched on.
+
+**E. DocSend MCP (main source).** The PLC OS server is the MCP client: `lib/connectors/docsend/` speaks
+MCP over HTTP to DocSend's remote server, signed in by OAuth (dynamic client registration and PKCE, the
+way any remote MCP client signs in). Juan clicks "Connect DocSend" in Settings → Connections once; the
+refresh token is stored encrypted like the mailguard key, never printed. A background job (night schedule
+plus the daily timer) walks Spaces → documents → visiting contacts → their visits, upserts
+`docsend.visit` with `source = 'mcp'`, and records `docsend.sync_state`. The client calls only an
+allowlist of read tools; the Space-group update tool and any other write tool throw in the client (a
+property test checks this, as for Affinity). One call a second, stop on a rate-limit error. If the
+sign-in lapses, the sync stops and Settings says so; nothing falls back to another connector.
 
 Only `lib/connectors/docsend/` reads DocSend payloads (`npm run boundaries`). DocSend view data is real data:
 it stays in our database and `data/real/`, never in git, screenshots or prompts (real-data rules).
@@ -136,21 +151,27 @@ the "Outreach conversion per vehicle" thread (14 Oct 2026); the shape changes on
 ```ts
 docsend: {
   affinityNotes: true,   // route A; reads what the replica already holds
+  mcp: false,            // route E; also needs the DocSend sign-in in Settings → Connections
   webhook: false,        // route B; also needs a secret in Settings → Connections
-  api: false,            // route C; needs a DocSend-confirmed API and key
 }
 ```
 
 ## 8. Build order
 
-1. Schema, route A, the mapping rules and the precomputed tables. Gives views per vehicle from history
-   we already hold. No token, no new outside calls.
-2. Route B endpoint and the Settings secret, off by default. Switched on when Juan connects the Zap.
-3. Route D upload.
-4. Route C, only after DocSend confirms an API and we have its reference.
+1. Schema, route A, the mapping rules and `visitsFor`. Gives views per vehicle from history we already
+   hold. No sign-in, no new outside calls.
+2. Inspect the DocSend MCP's real tool list and a sample response (needs a DocSend sign-in; see §9), then
+   build route E behind `docsend.mcp`, with the read-only allowlist.
+3. Route D upload, if E lacks duration and pages.
+4. Route B, only if E misses new visits.
 
 ## 9. Questions for Juan
 
-1. Which data rooms and documents belong to which vehicle? (Or let the Materials page mapping do it.)
-2. Can you ask DocSend support whether your plan includes API access? If not, is Zapier OK for route B?
-3. Is the DocSend → Affinity integration on for all of the team's DocSend accounts, or just yours?
+1. Is your DocSend on Advanced Data Rooms, and does your DocSend org allow third-party AI connections?
+   The MCP needs both.
+2. Fastest way to see the real tools: add DocSend's MCP as a custom connector in claude.ai (Settings →
+   Connectors, server URL from the Dropbox help page above) and enable it in this thread. I list its tools,
+   read one visit, and build E against what it actually returns. The PLC OS server then gets its own
+   sign-in.
+3. Which data rooms and documents belong to which vehicle? (Or let the Materials page mapping do it.)
+4. Is the DocSend → Affinity integration on for all of the team's DocSend accounts, or just yours?
