@@ -104,8 +104,14 @@ a job or a connector (the preview rules), and never holds a key.
   same choice. A launch key (cookie, `SameSite=Strict`) keeps other browsers and sites off the port.
 - **No change to the server's write path.** Change counters and `xmin` horizons instead of triggers or a change
   table. The cost is a filtered scan of a table whose counters moved, only while the app is open.
-- **Reads after a write go to the server for about five seconds** and until a sync that started after the write has
-  finished (`WRITE_SETTLE_MS`). Postgres flushes its counters about a second after a transaction.
+- **Reads after a write go to the server** until a sync that started at least two seconds after the write has
+  finished and rebuilt the last three pages the person opened (`WRITE_SETTLE_MS`, 3 s, less a second; 5 s until
+  15 Oct 2026). Postgres flushes its counters about a second after a transaction.
+- **After any sync that brings changes, the copy rebuilds the last three pages opened** (at most 15 s), since a
+  change empties its page caches and the next click used to pay for that (a strategy page took 1 s cold on the real
+  data, 15 Oct 2026). The server's own warm-up also rebuilds each vehicle's strategy and stats pages now.
+- **Tables are analyzed after they change a lot** (over 1,000 rows, the first copy, a seed) and, once, every table
+  never analyzed: the bulk copy left 96 of 148 tables without planner statistics.
 - **Remote-only paths**: `/api/*`, sign-in, `/desktop/*` and the Developer pages (they show server state such as
   jobs and Astra runs).
 - **The first copy runs four tables at once, biggest first**, each table's next page downloading while the last one

@@ -71,8 +71,9 @@ export async function pageSpeedProperties(check: Check) {
     && warmDecision(s({ seen: 'b', warmed: 'a', lastWarmAt: at - 31_000 }), { revision: 'b', importActive: false }, at, 30_000) === 'warm', '');
   check('page-speed warm: a revision still changing waits', warmDecision(s({ seen: 'a', warmed: 'a' }), { revision: 'b', importActive: false }, at) === 'wait', '');
   const paths = warmPaths(['neurotech', 'spv-x'], '/neurotech/pipeline/p1');
-  check('page-speed warm: Today, each vehicle\'s pipeline and routes, then the LP page at start',
-    JSON.stringify(paths) === JSON.stringify(['/today', '/neurotech/pipeline', '/neurotech/routes', '/spv-x/pipeline', '/spv-x/routes', '/neurotech/pipeline/p1']), paths.join(' '));
+  check('page-speed warm: Today, each vehicle\'s pipeline and routes, then strategy and stats, then the LP page at start',
+    JSON.stringify(paths) === JSON.stringify(['/today', '/neurotech/pipeline', '/neurotech/routes', '/spv-x/pipeline', '/spv-x/routes',
+      '/neurotech/strategy', '/neurotech/stats', '/spv-x/strategy', '/spv-x/stats', '/neurotech/pipeline/p1']), paths.join(' '));
   const pageWarm = readFileSync('lib/page-warm.ts', 'utf8');
   check('page-speed warm: the warm-up only reads (GET requests, no write statements)',
     !/\b(insert|update|delete)\s+(into\s+)?[a-z_]+\./i.test(pageWarm) && !/method:\s*'(POST|PUT|PATCH|DELETE)'/.test(pageWarm), 'lib/page-warm.ts');

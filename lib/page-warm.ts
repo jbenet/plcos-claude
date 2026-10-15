@@ -58,9 +58,12 @@ export function warmDecision(state: WarmState, seen: WarmObservation, now: numbe
   return 'warm';
 }
 
-/** The pages whose loads the others share: each active vehicle's pipeline and routes, and Today. */
+/** The pages whose loads the others share: each active vehicle's pipeline and routes, and Today. Then each
+ * vehicle's strategy and stats, which built their own caches on the first click after a write (1.0 s and 0.8 s cold on
+ * the Mac's copy of the real data, 15 Oct 2026). */
 export function warmPaths(slugs: string[], lpPath: string | null): string[] {
-  return ['/today', ...slugs.flatMap((s) => [`/${s}/pipeline`, `/${s}/routes`]), ...(lpPath ? [lpPath] : [])];
+  return ['/today', ...slugs.flatMap((s) => [`/${s}/pipeline`, `/${s}/routes`]), ...slugs.flatMap((s) => [`/${s}/strategy`, `/${s}/stats`]),
+    ...(lpPath ? [lpPath] : [])];
 }
 
 async function observe(): Promise<WarmObservation> {

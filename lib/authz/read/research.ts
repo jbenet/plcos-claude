@@ -14,6 +14,10 @@ export async function listSourceDocs(...args: Parameters<typeof raw.listSourceDo
   const [user, docs] = await Promise.all([currentUser(), raw.listSourceDocs(...args)]);
   return licensedAccess(user) ? docs : docs.filter(d => d.origin !== 'dakota');
 }
+export async function sourceDocPage(offset: number, limit: number) {
+  const user = await currentUser();
+  return raw.sourceDocPage(offset, limit, licensedAccess(user) ? null : 'dakota');
+}
 export async function getSourceDoc(...args: Parameters<typeof raw.getSourceDoc>) {
   const [user, doc] = await Promise.all([currentUser(), raw.getSourceDoc(...args)]);
   return !licensedAccess(user) && doc?.origin === 'dakota' ? null : doc;

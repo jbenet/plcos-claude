@@ -40,7 +40,10 @@ const SLOW_TABLES = ['network.route_cache'];
 const SLOW_TABLE_MS = 20_000;
 const TABLES_AT_ONCE = Number(env.PLCOS_DESKTOP_TABLES_AT_ONCE || 4);
 /** Reads go to the live server for this long after a write: Postgres's change counters usually lag about a second (docs/31). */
-const WRITE_SETTLE_MS = Number(env.PLCOS_DESKTOP_SETTLE_MS || 5_000);
+const WRITE_SETTLE_MS = Number(env.PLCOS_DESKTOP_SETTLE_MS || 3_000);
+// GUESS — the pages rebuilt after a sync that changed something, and the most time that may take before reads resume.
+const RECENT_PAGES = 3;
+const WARM_RECENT_MS = 15_000;
 const IDLE_SYNC_MS = 15_000;
 const BUSY_SYNC_MS = 2_000;
 /** Paths the live server always answers: sign-in, the app's own pages, server state (jobs, Astra, imports). */
@@ -76,6 +79,8 @@ class LocalCopy {
     this.background = new Set();         // those syncing in the background now
     this.lastSyncStartedAt = 0;
     this.lastSyncFinishedAt = 0;
+    this.settledFor = 0;              // the write (lastWriteAt) the copy has caught up with and warmed after
+    this.recent = [];                 // the last pages this person opened, newest first, to rebuild after a change
     this.lastSync = null;             // { at, ms, tables, rows, deleted }
     this.serverCommit = null;
     this.wake = null;
@@ -90,7 +95,7 @@ class LocalCopy {
       cookiePrefix: this.cookiePrefix,
       secret: this.secret,
       ready: () => this.phase === 'ready',
-      canServe: (url) => this.canServe(url),
+      canServe: (url, req) => this.canServe(url, req),
       onWrite: () => { this.lastWriteAt = Date.now(); this.poke(); },
       onSignedIn: () => this.poke(),
       onSignedOut: () => { this.phase = 'waiting'; this.detail = 'Waiting for sign-in'; },
@@ -103,13 +108,43 @@ class LocalCopy {
     };
   }
 
-  settling() { return this.lastWriteAt > 0 && (Date.now() - this.lastWriteAt < WRITE_SETTLE_MS || this.lastSyncStartedAt < this.lastWriteAt + WRITE_SETTLE_MS - 1000 || this.lastSyncFinishedAt < this.lastSyncStartedAt); }
+  /** After a write, until a sync that started once the write had settled has finished and rebuilt the pages just opened. */
+  settling() { return this.lastWriteAt > 0 && this.settledFor !== this.lastWriteAt; }
 
-  canServe(url) {
+  canServe(url, req) {
+    if (req?.method === 'GET') this.remember(url);
     if (this.phase !== 'ready') return false;
     if (this.serverCommit && this.build?.commit !== this.serverCommit) return false;
     if (this.settling()) return false;
     return !REMOTE_ONLY.some((r) => r.test(url.pathname));
+  }
+
+  /** A page (or its in-app navigation, `_rsc`) the person opened; files, Next's own assets and the API are not pages. */
+  remember(url) {
+    const p = url.pathname;
+    if (p.startsWith('/_next/') || p.startsWith('/api/') || p.startsWith('/__desktop') || /\.[a-z0-9]+$/i.test(p)) return;
+    const q = new URLSearchParams(url.search);
+    q.delete('_rsc');
+    const page = q.size ? `${p}?${q}` : p;
+    this.recent = [page, ...this.recent.filter((x) => x !== page)].slice(0, RECENT_PAGES);
+  }
+
+  /**
+   * Rebuild the pages this person opened last, right after a sync brought changes. A change empties the copy's page
+   * caches, and the next click paid for the rebuild (1 s on a strategy page, 15 Oct 2026); now this does, one page at
+   * a time, and a click meanwhile joins the same work. The server's own warm-up (lib/page-warm.ts) still covers the
+   * main pages once the data has stopped changing.
+   */
+  async warmRecent() {
+    const until = Date.now() + WARM_RECENT_MS;
+    for (const page of this.recent) {
+      const left = until - Date.now();
+      if (left <= 0 || this.stopped) return;
+      try {
+        const res = await fetch(`${this.origin}${page}`, { headers: { 'x-plcos-desktop': this.secret }, redirect: 'manual', signal: AbortSignal.timeout(left) });
+        await res.arrayBuffer();
+      } catch { /* a click still builds it */ }
+    }
   }
 
   poke() { const w = this.wake; this.wake = null; w?.(); }
@@ -149,9 +184,14 @@ class LocalCopy {
       return;
     }
     this.lastSyncStartedAt = syncStarted;
+    // The write this sync catches up with: one made at least a settle (less a second) before it started.
+    const write = this.lastWriteAt;
+    const catchesUp = write > 0 && syncStarted >= write + WRITE_SETTLE_MS - 1000;
     const t0 = Date.now();
     const r = await this.sync(st);
+    if ((r.rows || r.deleted) && this.phase === 'ready') await this.warmRecent();
     this.lastSyncFinishedAt = Date.now();
+    if (catchesUp && this.settledFor < write) this.settledFor = write;
     if (r.rows || r.deleted) this.log(`synced ${r.tables} table(s), ${r.rows} row(s), ${r.deleted} deleted in ${Date.now() - t0} ms`);
     this.lastSync = { at: new Date().toISOString(), ms: Date.now() - t0, ...r };
     // The local server starts once the copy is whole, so it never renders (or warms) pages from a half-filled database.
@@ -215,6 +255,10 @@ class LocalCopy {
     // when there is one (docs/31 §3): the sync then checks each against the server's digest and downloads only what
     // differs.
     if ([...(await this.localTables()).keys()].some((t) => !this.meta.has(t) && !SEED_SKIP.has(t))) await this.seed().catch((e) => this.log('seeding from this Mac skipped:', String(e?.message ?? e).slice(0, 300)));
+    // A copy made before the sync analyzed what it wrote: every table never analyzed gets its statistics once.
+    const { rows: blind } = await this.pg.query(`select schemaname || '.' || relname as t from pg_stat_user_tables
+      where schemaname <> '_desktop' and last_analyze is null and last_autoanalyze is null`);
+    for (const { t } of blind) this.analyzeLater(t);
     this.phase = this.phase === 'ready' ? 'ready' : 'syncing';
     this.detail = 'Copying the data down';
   }
@@ -291,6 +335,7 @@ class LocalCopy {
     const queue = [...todo];
     await Promise.all(Array.from({ length: TABLES_AT_ONCE }, async () => { for (let m = queue.shift(); m; m = queue.shift()) await one(m); }));
     this.log(`seeded ${done} table(s) in ${Date.now() - t0} ms${failed ? `, ${failed} left for the server` : ''}`);
+    for (const m of todo) this.analyzeLater(m.t);
   }
 
   async installDeps(dir) {
@@ -432,6 +477,7 @@ class LocalCopy {
       this.meta.set(info.t, m);
       await this.pg.query('insert into _desktop.sync_meta (t, counter, since) values ($1, $2, $3) on conflict (t) do update set counter = excluded.counter, since = excluded.since', [info.t, m.counter, m.since]);
       if (Date.now() - t0 > SLOW_TABLE_MS) this.slow.add(info.t);
+      if (first || r.rows + r.deleted > 1_000) this.analyzeLater(info.t);
       if (first && (r.rows > 10_000 || Date.now() - t0 > 2_000)) this.log(`copied ${info.t}: ${r.rows} row(s) in ${Date.now() - t0} ms (${tables}/${total})`);
       showProgress();
     };
@@ -454,6 +500,22 @@ class LocalCopy {
     this.progress = new Map();
     if (failed) throw failed;
     return { tables, rows, deleted };
+  }
+
+  /**
+   * Planner statistics for a table that just changed a lot. Rows written under the replica role in bulk left most tables
+   * with none at all (96 of 148 after the first copy, 15 Oct 2026), so pages planned their queries blind. One table at a
+   * time, behind the sync: a page read never waits on it.
+   */
+  analyzeLater(t) {
+    (this.toAnalyze ??= new Set()).add(t);
+    if (this.analyzing) return;
+    this.analyzing = (async () => {
+      for (let next = this.toAnalyze.values().next(); !next.done; next = this.toAnalyze.values().next()) {
+        this.toAnalyze.delete(next.value);
+        await this.pg.query(`analyze ${quoteTable(next.value)}`).catch((e) => this.log(`analyze ${next.value}:`, String(e?.message ?? e).slice(0, 200)));
+      }
+    })().finally(() => { this.analyzing = null; });
   }
 
   async pullTable(info, mine, since, onRows = () => {}) {
