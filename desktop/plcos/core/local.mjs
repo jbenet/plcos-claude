@@ -24,6 +24,17 @@ const PG_PORT = Number(env.PLCOS_DESKTOP_PG_PORT || 57435);
 const DB_NAME = 'plcos_desktop';
 /** Rows per request (the server caps it at 20,000), and tables copied at once. */
 const PAGE = Number(env.PLCOS_DESKTOP_PAGE || 10_000);
+/** Rows per run when checking a table that is already here against the server's digest. */
+const DIGEST_RUN = 5000;
+const quoteIdent = (s) => `"${String(s).replace(/"/g, '""')}"`;
+const quoteTable = (t) => t.split('.').map(quoteIdent).join('.');
+/** Never seeded from this Mac: what the server's sync never sends either (people's secrets, migration bookkeeping). */
+const SEED_SKIP = new Set(['platform.migration', 'platform.person_secret']);
+/** The server's stand-ins (lib/desktop/sync.ts), so a seeded row hashes like the server's. */
+const SEED_STAND_IN = {
+  'platform.setting': { value: `case when "secret" then 'withheld' else "value" end` },
+  'platform.mcp_token': { token_hash: `encode(sha256(convert_to('withheld:' || "token_id"::text, 'UTF8')), 'hex')` },
+};
 const TABLES_AT_ONCE = Number(env.PLCOS_DESKTOP_TABLES_AT_ONCE || 4);
 /** Reads go to the live server for this long after a write: Postgres's change counters usually lag about a second (docs/31). */
 const WRITE_SETTLE_MS = Number(env.PLCOS_DESKTOP_SETTLE_MS || 5_000);
@@ -45,8 +56,8 @@ export async function startLocal(ctx) {
 }
 
 class LocalCopy {
-  constructor({ state, log, refreshInfo, remoteFetch, DATA_DIR }) {
-    Object.assign(this, { state, log, refreshInfo, remoteFetch, dir: DATA_DIR });
+  constructor({ state, log, refreshInfo, remoteFetch, DATA_DIR, settings = {} }) {
+    Object.assign(this, { state, log, refreshInfo, remoteFetch, dir: DATA_DIR, settings });
     this.phase = 'waiting';           // waiting | preparing | syncing | ready | off | error
     this.detail = 'Waiting for sign-in';
     this.build = null;                // { commit, dir }
@@ -191,10 +202,90 @@ class LocalCopy {
     await this.openPool(dir);
     this.build = { commit: commitHere, dir };
     this.pruneBuilds(builds, commitHere);
-    // A schema change can add tables or columns: read every table once more.
-    this.meta = await this.loadMeta(true);
+    // Counters are kept across builds: a migration that changes rows moves the server's counters, and a new table has
+    // no entry yet, so only those are read again. (Re-reading every table on each deploy scanned the big ones for
+    // minutes, several times a day.)
+    this.meta = await this.loadMeta(false);
+    // Tables not copied yet (all of them, on a fresh copy) start from this Mac's own copy of the server's database
+    // when there is one (docs/31 §3): the sync then checks each against the server's digest and downloads only what
+    // differs.
+    if ([...(await this.localTables()).keys()].some((t) => !this.meta.has(t) && !SEED_SKIP.has(t))) await this.seed().catch((e) => this.log('seeding from this Mac skipped:', String(e?.message ?? e).slice(0, 300)));
     this.phase = this.phase === 'ready' ? 'ready' : 'syncing';
     this.detail = 'Copying the data down';
+  }
+
+  /** Where to seed from: settings.json "seed", PLCOS_DESKTOP_SEED_URL, else the cloud copy scripts/cloud-pull.sh keeps. */
+  async seedSource() {
+    if (env.PLCOS_DESKTOP_NO_SEED) return null;
+    const url = env.PLCOS_DESKTOP_SEED_URL || this.settings.seed || 'postgres://plcos@127.0.0.1:57434/plcos_copy';
+    const u = new URL(url);
+    if (!['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname)) throw new Error('the seed must be a database on this Mac');
+    // The cloud copy's password is the one cloud-pull.sh keeps in the Keychain (plcos-railway / copy); never logged.
+    let password = env.PLCOS_DESKTOP_SEED_PASSWORD ?? decodeURIComponent(u.password || '');
+    if (!password && process.platform === 'darwin') password = (await sh('/usr/bin/security', ['find-generic-password', '-s', 'plcos-railway', '-a', 'copy', '-w'], { timeout: 10_000 }).catch(() => '')).trim();
+    u.password = '';
+    return { url: u.toString(), password };
+  }
+
+  /**
+   * Fill an empty copy from a Postgres on this Mac that holds (an older copy of) the same database: every table both
+   * have, the columns both have, by COPY between two psql processes. People's secrets are never taken (the same
+   * tables and stand-ins as the server's sync); anything that does not fit is left empty for the server to fill.
+   */
+  async seed() {
+    const src = await this.seedSource();
+    if (!src) return;
+    const bin = this.pgBin();
+    const srcEnv = { ...env, PGPASSWORD: src.password, PGCONNECT_TIMEOUT: '5' };
+    const ping = await sh(path.join(bin, 'psql'), [src.url, '-Atc', 'select 1'], { env: srcEnv, timeout: 15_000 }).catch((e) => { throw new Error(`cannot reach ${new URL(src.url).port}: ${String(e.message).split('\n').pop()}`); });
+    if (ping.trim() !== '1') return;
+    const listSql = `select n.nspname || '.' || c.relname as t, array(select a.attname::text from pg_attribute a where a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped and a.attgenerated = '' order by a.attnum) as cols
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace where c.relkind = 'r' and n.nspname not in ('information_schema', '_desktop') and n.nspname !~ '^pg_'`;
+    const theirs = new Map((await sh(path.join(bin, 'psql'), [src.url, '-AtF', '\t', '-c', listSql], { env: srcEnv, timeout: 60_000 }))
+      .trim().split('\n').filter(Boolean).map((line) => { const [t, cols] = line.split('\t'); return [t, new Set(cols.replace(/^\{|\}$/g, '').split(',').map((c) => c.replace(/^"|"$/g, '')))]; }));
+    const local = await this.localTables();
+    const todo = [...local.values()].filter((m) => theirs.has(m.t) && !SEED_SKIP.has(m.t) && !this.meta.has(m.t));
+    if (!todo.length) return;
+    this.log(`seeding ${todo.length} table(s) from this Mac's copy of the database`);
+    const t0 = Date.now();
+    let done = 0, failed = 0;
+    const localUrl = this.dbUrl;
+    const one = async (m) => {
+      const cols = m.cols.filter((c) => theirs.get(m.t).has(c));
+      if (!cols.length) return;
+      const q = cols.map(quoteIdent);
+      const sel = q.map((c) => SEED_STAND_IN[m.t]?.[c.slice(1, -1)] ?? c).join(', ');
+      const table = quoteTable(m.t);
+      this.detail = `Seeding from this Mac: ${done} of ${todo.length} tables`;
+      try {
+        await new Promise((resolve, reject) => {
+          const out = spawn(path.join(bin, 'psql'), [src.url, '-v', 'ON_ERROR_STOP=1', '-c', `\\copy (select ${sel} from ${table}) to stdout`], { env: srcEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+          const into = spawn(path.join(bin, 'psql'), [localUrl, '-v', 'ON_ERROR_STOP=1', '-c', "set session_replication_role = 'replica'", '-c', `delete from ${table}`, '-c', `\\copy ${table} (${q.join(', ')}) from stdin`], { env: { ...env, PGCONNECT_TIMEOUT: '5' }, stdio: ['pipe', 'ignore', 'pipe'] });
+          // If either side stops early the other is stopped too; a broken pipe is that failure, not a crash.
+          into.stdin.on('error', () => undefined);
+          out.stdout.on('error', () => undefined);
+          into.on('close', (code) => { if (code) out.kill(); });
+          out.stdout.pipe(into.stdin);
+          let err = '';
+          out.stderr.on('data', (d) => { err += d; });
+          into.stderr.on('data', (d) => { err += d; });
+          let codes = 0, bad = false;
+          const end = (code) => { if (code) bad = true; if (++codes === 2) (bad ? reject(new Error(err.slice(0, 300))) : resolve()); };
+          out.on('close', end);
+          into.on('close', end);
+        });
+        done++;
+      } catch (e) {
+        failed++;
+        // Left empty (rows the migrations made included): the server's copy replaces it whole.
+        const c = await this.pg.connect();
+        try { await c.query("set session_replication_role = 'replica'"); await c.query(`delete from ${table}`); } catch { /* the sync replaces it */ } finally { await c.query('reset session_replication_role').catch(() => undefined); c.release(); }
+        if (failed <= 5) this.log(`seed: ${m.t} left for the server (${String(e.message).split('\n')[0]})`);
+      }
+    };
+    const queue = [...todo];
+    await Promise.all(Array.from({ length: TABLES_AT_ONCE }, async () => { for (let m = queue.shift(); m; m = queue.shift()) await one(m); }));
+    this.log(`seeded ${done} table(s) in ${Date.now() - t0} ms${failed ? `, ${failed} left for the server` : ''}`);
   }
 
   async installDeps(dir) {
@@ -289,7 +380,9 @@ class LocalCopy {
              array(select a.attname::text from pg_attribute a where a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped and a.attgenerated = '' order by a.attnum) as cols,
              exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attnum > 0 and a.attidentity = 'a') as ident_always,
              (select array_agg(a.attname::text order by k.ord) from pg_index i cross join lateral unnest(i.indkey) with ordinality k(attnum, ord)
-                join pg_attribute a on a.attrelid = c.oid and a.attnum = k.attnum where i.indrelid = c.oid and i.indisprimary) as pk
+                join pg_attribute a on a.attrelid = c.oid and a.attnum = k.attnum where i.indrelid = c.oid and i.indisprimary) as pk,
+             (select array_agg(format_type(a.atttypid, a.atttypmod) order by k.ord) from pg_index i cross join lateral unnest(i.indkey) with ordinality k(attnum, ord)
+                join pg_attribute a on a.attrelid = c.oid and a.attnum = k.attnum where i.indrelid = c.oid and i.indisprimary) as pktypes
         from pg_class c join pg_namespace n on n.oid = c.relnamespace
        where c.relkind = 'r' and n.nspname not in ('information_schema', '_desktop') and n.nspname !~ '^pg_'`);
     return new Map(rows.map((r) => [r.t, r]));
@@ -317,8 +410,13 @@ class LocalCopy {
       const t0 = Date.now();
       this.progress.set(info.t, 0);
       showProgress();
-      let r = await this.pullTable(info, mine, prev?.since ?? null, (n) => { this.progress.set(info.t, n); showProgress(); });
-      if (r.redo) r = await this.pullTable(info, mine, null, (n) => { this.progress.set(info.t, n); showProgress(); });
+      const onRows = (n) => { this.progress.set(info.t, n); showProgress(); };
+      // A table read for the first time that already holds rows (seeded from this Mac's own database, or a copy cut
+      // short) is checked run by run against the server's digest, and only the runs that differ are downloaded.
+      let r = !prev?.since && info.pk?.length && mine.pk?.length && await this.hasRows(info.t)
+        ? await this.verifyTable(info, mine, onRows)
+        : await this.pullTable(info, mine, prev?.since ?? null, onRows);
+      if (r.redo) r = await this.pullTable(info, mine, null, onRows);
       this.progress.delete(info.t);
       tables++; rows += r.rows; deleted += r.deleted;
       const m = { counter: info.counter, since: r.since };
@@ -396,6 +494,77 @@ class LocalCopy {
       throw e;
     } finally {
       await client.query('reset session_replication_role').catch(() => undefined);
+      client.release();
+    }
+  }
+
+  async hasRows(t) {
+    const { rows } = await this.pg.query(`select exists (select 1 from ${quoteTable(t)}) as has`);
+    return rows[0].has;
+  }
+
+  /**
+   * Check a table that already holds rows against the server's digest (GET /api/desktop/sync?op=digest): runs of
+   * rows in key order, each with its last key, count and md5. A run whose hash matches here is kept; one that differs
+   * is replaced by the server's rows for that key range. Everything happens in one transaction.
+   */
+  async verifyTable(info, mine, onRows = () => {}) {
+    const table = quoteTable(info.t);
+    const d = await this.remoteJson(`/api/desktop/sync?${new URLSearchParams({ op: 'digest', t: info.t, chunk: String(DIGEST_RUN) })}`);
+    const pk = mine.pk.map(quoteIdent);
+    const order = pk.map((c) => `t.${c}`).join(', ');
+    const cond = (params, bound, op) => {
+      const casts = mine.pktypes.map((ty, i) => { params.push(bound[i]); return `$${params.length}::text::${ty}`; });
+      return `(${order}) ${op} (${casts.join(', ')})`;
+    };
+    const range = (prevHi, hi) => {
+      const params = [];
+      const where = [prevHi && cond(params, prevHi, '>'), hi && cond(params, hi, '<=')].filter(Boolean);
+      return { params, where: where.length ? `where ${where.join(' and ')}` : '' };
+    };
+    let n = 0, kept = 0, total = 0;
+    const client = await this.pg.connect();
+    try {
+      await client.query("set session_replication_role = 'replica'");
+      await client.query("set timezone = 'UTC'");
+      await client.query('begin');
+      if (!d.runs.length) {
+        const { rowCount } = await client.query(`delete from ${table}`);
+        await client.query('commit');
+        return { rows: 0, deleted: rowCount ?? 0, since: d.horizon };
+      }
+      let prevHi = null;
+      for (const run of d.runs) {
+        total += run.n;
+        const { params, where } = range(prevHi, run.hi);
+        const { rows: [mineRun] } = await client.query(
+          `select count(*)::int as n, md5(string_agg(md5(to_jsonb(t)::text), '' order by ${order})) as md5 from ${table} t ${where}`, params);
+        if (mineRun.n === run.n && mineRun.md5 === run.md5) { kept += run.n; prevHi = run.hi; continue; }
+        await client.query(`delete from ${table} t ${where}`, params);
+        let after = prevHi;
+        for (;;) {
+          const qs = new URLSearchParams({ op: 'rows', t: info.t, limit: String(PAGE) });
+          if (after) qs.set('after', JSON.stringify(after));
+          if (run.hi) qs.set('upto', JSON.stringify(run.hi));
+          const page = await this.remoteJson(`/api/desktop/sync?${qs}`);
+          if (page.rows.length) { await this.apply(client, table, mine, page.rows, true); n += page.rows.length; onRows(n); }
+          if (!page.next) break;
+          after = page.next;
+        }
+        prevHi = run.hi;
+      }
+      // Fewer rows here than the server counted: a run's range was read differently (text keys sort by collation).
+      const { rows: [{ c }] } = await client.query(`select count(*)::int as c from ${table}`);
+      if (c < total) { await client.query('rollback'); return { redo: true }; }
+      await client.query('commit');
+      if (kept) this.log(`checked ${info.t}: kept ${kept} row(s) already here, downloaded ${n}`);
+      return { rows: n, deleted: 0, since: d.horizon };
+    } catch (e) {
+      await client.query('rollback').catch(() => undefined);
+      throw e;
+    } finally {
+      await client.query('reset session_replication_role').catch(() => undefined);
+      await client.query('reset timezone').catch(() => undefined);
       client.release();
     }
   }

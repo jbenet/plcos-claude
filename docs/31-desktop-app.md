@@ -111,6 +111,16 @@ a job or a connector (the preview rules), and never holds a key.
 - **The first copy runs four tables at once, biggest first**, each table's next page downloading while the last one
   is written, 10,000 rows a page. Sync Status shows which tables are copying and how far. The local server starts
   only once the copy is whole. (15 Oct 2026, after Juan found the first copy slow on the real data.)
+- **Rows travel gzipped.** Next does not compress route handlers, so the sync gzips its own answers (level 1,
+  about a tenth of the size). A page stops at about 16 MB, runs under a 5-minute statement limit (the web's 20 s
+  limit made big tables fail with an empty 500), and shrinks when the server is slow.
+- **A deploy no longer re-reads every table.** Counters are kept across builds; only tables whose counters moved,
+  or that are new, are read.
+- **A fresh copy is seeded from the Mac** (Juan, 15 Oct 2026: "a lot of the db started local, so we should be able
+  to get a lot of it there"): from the cloud copy `scripts/cloud-pull.sh` keeps on port 57434 (its password from
+  the same Keychain item), or `seed` in settings.json. People's secrets are never taken. Each seeded table is then
+  checked against the server's digest (`op=digest`: runs of 5,000 rows in key order with their md5) and only the
+  runs that differ are downloaded.
 - **Spotlight is kept off** the app's folders (`.metadata_never_index`): it was indexing the copy's build,
   dependencies and database as they arrived.
 - **The first read of a table replaces it whole**, in one transaction, so rows the build's migrations made locally
