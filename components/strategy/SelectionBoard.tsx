@@ -10,7 +10,7 @@ import { MoveButton, statusMix, statusWord, UndoToast, useMove } from './MoveToS
 import { PEOPLE_SHOWN, peopleCount, rankRows, unitShown, unitsFrom, unitsOn, EMPTY, lead, second, spvFlagged, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { CapacityTag, LpWho, units } from './LpWho';
 import { UnitIcon } from './UnitIcon';
-import { useIsCursor, useRowCursor, type CursorStore } from './row-cursor';
+import { FIRST_ROWS, useGrowOnScroll, useIsCursor, useRowCursor, type CursorStore } from './row-cursor';
 import { cx, Disclose, fmt, fmtShort, FilterLine, Icon, Ladder, n, scoreTone, useLpView, usdM, type StatusInfo } from './lp-view';
 import { unpackRows, type PackedRows } from '@/lib/packed-rows';
 import s from './lp-tables.module.css';
@@ -55,9 +55,10 @@ export function SelectionBoard({ packed, statuses, rungNames, initialFilters, sh
   const rows = mv.rows;
   const view = useLpView({ rows, statuses, asOf, initialFilters, mode: 'selection' });
   const { enabled, setEnabled, counts, active, shown, sort, picked, pick, pickedRows, now } = view;
-  const [limit, setLimit] = useState(PAGE);
+  const [limit, setLimit] = useState(FIRST_ROWS);
+  const moreRef = useGrowOnScroll(() => setLimit((x) => x + PAGE), limit);
   const shownIds = useMemo(() => new Set(shown.map((r) => r.id)), [shown]);
-  useEffect(() => setLimit(PAGE), [enabled, view.f, sort]);
+  useEffect(() => setLimit(FIRST_ROWS), [enabled, view.f, sort]);
   // One list, organisations and individuals ranked together (issue 0113).
   const ranked = useMemo(() => rankRows(shown, sort.key, sort.dir), [shown, sort]);
   const visible = useMemo(() => ranked.slice(0, limit), [ranked, limit]);
@@ -291,7 +292,7 @@ export function SelectionBoard({ packed, statuses, rungNames, initialFilters, sh
                   {inlineAt < 0 ? rowEls : [...rowEls.slice(0, inlineAt + 1),
                     <tr key="inline-detail" className={s.inlineRow}><td colSpan={11}><div className={m.inline}>{moveBar}</div><div className="card" style={{ marginBottom: 0 }}>{detail}</div></td></tr>,
                     ...rowEls.slice(inlineAt + 1)]}
-                  {ranked.length > visible.length && <tr className={u.moreRow}><td colSpan={11}>
+                  {ranked.length > visible.length && <tr className={u.moreRow} ref={moreRef}><td colSpan={11}>
                     <button type="button" className="btn" onClick={() => setLimit((x) => x + PAGE)}>Show {n(Math.min(PAGE, ranked.length - visible.length))} more</button>
                     {n(visible.length)} of {n(ranked.length)} shown. Search covers all of them.
                   </td></tr>}

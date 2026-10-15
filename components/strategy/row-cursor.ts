@@ -174,3 +174,22 @@ export function keepInView(el: Element, edge = CURSOR_EDGE) {
   if (box) box.scrollTop += dy;
   else window.scrollBy({ top: dy, behavior: 'instant' });
 }
+
+/**
+ * Rows drawn as the list is scrolled (Juan, 15 Oct 2026, chose "draw only the rows on screen"): a list starts with
+ * about a screen of rows, and the "more" row adds the next page as it comes within a screen of view, so nobody has to
+ * press Show more. Every row is still in the browser: search, filters and sorting cover them all.
+ */
+export const FIRST_ROWS = 30;
+export function useGrowOnScroll(grow: () => void, shown: number) {
+  const live = useRef(grow);
+  live.current = grow;
+  return useCallback((el: HTMLElement | null) => {
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const seen = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) live.current(); }, { rootMargin: '800px 0px' });
+    seen.observe(el);
+    return () => seen.disconnect();
+    // A new observer each time rows are added: it reports at once whether the more row is still near, so a tall screen
+    // keeps filling instead of waiting for a scroll that leaves and re-enters.
+  }, [shown]);
+}
