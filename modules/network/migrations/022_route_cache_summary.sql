@@ -5,6 +5,9 @@
 -- real data, about 650 ms of every cold LP or plan page. The summary is kept beside the search by a trigger, in
 -- the shape the reader built (network/strategy-summary.ts, Flat), so any write of `search` keeps it current and
 -- the read touches a few KB per target. '[]' is a search without routes; null is a row not yet summarized.
+
+-- It rewrites or indexes a large table, so it may take longer than the web's 20 s statement limit at boot.
+set local statement_timeout = 0;
 alter table network.route_cache add column summary jsonb;
 
 create function network.route_cache_summary() returns trigger language plpgsql as $$
