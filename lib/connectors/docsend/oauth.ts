@@ -26,16 +26,48 @@ export function allowedUrl(raw: unknown): string {
   return u.toString();
 }
 
-export interface HttpAnswer { status: number; text(): Promise<string> }
+export interface HttpAnswer { status: number; text(): Promise<string>; headers?: { get(name: string): string | null } }
 export type OAuthTransport = (url: string, init: { method: 'GET' | 'POST'; headers: Record<string, string>; body?: string }) => Promise<HttpAnswer>;
 
-export const httpsOAuth: OAuthTransport = (url, init) =>
-  fetch(allowedUrl(url), { ...init, redirect: 'error', signal: AbortSignal.timeout(15_000) });
+/** Why a fetch failed, in words safe to log: the host and the network's error code, never a header or a body. */
+function unreachable(url: string, e: unknown): DocsendSignInError {
+  const cause = (e as { cause?: { code?: string; message?: string } })?.cause;
+  const why = cause?.code ?? (e instanceof Error && e.name === 'TimeoutError' ? 'timed out' : cause?.message ?? (e instanceof Error ? e.message : 'error'));
+  return new DocsendSignInError(`DocSend sign-in: ${new URL(url).hostname} could not be reached (${String(why).slice(0, 80)})`);
+}
 
-async function json(t: OAuthTransport, url: string, init: Parameters<OAuthTransport>[1]): Promise<Record<string, unknown> | null> {
+/**
+ * Fetches with redirects followed by hand, at most three, each one checked against OAUTH_HOSTS (a GET follows any
+ * redirect; a POST only a 307 or 308, which keep the method and body).
+ */
+export const httpsOAuth: OAuthTransport = async (url, init) => {
+  let at = allowedUrl(url);
+  for (let hop = 0; ; hop++) {
+    let res: Response;
+    try { res = await fetch(at, { ...init, redirect: 'manual', signal: AbortSignal.timeout(15_000) }); } catch (e) { throw unreachable(at, e); }
+    const to = res.headers.get('location');
+    const follow = res.status >= 300 && res.status < 400 && to && (init.method === 'GET' || res.status === 307 || res.status === 308);
+    if (!follow) return res;
+    if (hop >= 2) throw new DocsendSignInError(`DocSend sign-in: too many redirects from ${new URL(at).hostname}`);
+    at = allowedUrl(new URL(to, at).toString());
+  }
+};
+
+async function json(t: OAuthTransport, url: string, init: Parameters<OAuthTransport>[1], seen?: string[]): Promise<Record<string, unknown> | null> {
   const res = await t(allowedUrl(url), init);
-  if (res.status >= 400) return null;
-  try { return JSON.parse(await res.text()) as Record<string, unknown>; } catch { return null; }
+  const say = (what: string) => seen?.push(`${new URL(url).pathname} ${what}`);
+  if (res.status >= 400) { say(String(res.status)); return null; }
+  try { return JSON.parse(await res.text()) as Record<string, unknown>; } catch { say(`${res.status}, not JSON`); return null; }
+}
+
+/** Where an MCP server says its metadata is: the resource_metadata of the WWW-Authenticate on a request with no token. */
+async function metadataFromChallenge(t: OAuthTransport, server: string): Promise<string | null> {
+  const res = await t(allowedUrl(server), {
+    method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'plcos', version: '1' } } }),
+  });
+  const m = /resource_metadata="([^"]+)"/i.exec(res.headers?.get('www-authenticate') ?? '');
+  return m ? m[1]! : null;
 }
 
 export interface ServerMeta {
@@ -50,14 +82,21 @@ export interface ServerMeta {
 export async function discover(t: OAuthTransport, server = DOCSEND_MCP_URL): Promise<ServerMeta> {
   const s = new URL(server);
   const get = { method: 'GET' as const, headers: { accept: 'application/json' } };
-  const prm = await json(t, `${s.origin}/.well-known/oauth-protected-resource${s.pathname}`, get)
-    ?? await json(t, `${s.origin}/.well-known/oauth-protected-resource`, get);
+  const seen: string[] = [];
+  let prm = await json(t, `${s.origin}/.well-known/oauth-protected-resource${s.pathname}`, get, seen)
+    ?? await json(t, `${s.origin}/.well-known/oauth-protected-resource`, get, seen);
+  if (!prm) {
+    const at = await metadataFromChallenge(t, server);
+    if (at) prm = await json(t, at, get, seen);
+  }
   const issuer = (prm?.authorization_servers as string[] | undefined)?.[0] ?? s.origin;
   const i = new URL(allowedUrl(issuer));
   const path = i.pathname === '/' ? '' : i.pathname;
-  const asm = await json(t, `${i.origin}/.well-known/oauth-authorization-server${path}`, get)
-    ?? await json(t, `${i.origin}/.well-known/openid-configuration${path}`, get);
-  if (!asm?.authorization_endpoint || !asm.token_endpoint) throw new DocsendSignInError('DocSend sign-in: the server published no authorization endpoints');
+  const asm = await json(t, `${i.origin}/.well-known/oauth-authorization-server${path}`, get, seen)
+    ?? await json(t, `${i.origin}/.well-known/openid-configuration${path}`, get, seen);
+  if (!asm?.authorization_endpoint || !asm.token_endpoint) {
+    throw new DocsendSignInError(`DocSend sign-in: ${i.hostname} published no authorization endpoints (${seen.join('; ').slice(0, 300) || 'no answer'})`);
+  }
   if (!asm.registration_endpoint) throw new DocsendSignInError('DocSend sign-in: the server does not let clients register themselves');
   const methods = asm.code_challenge_methods_supported as string[] | undefined;
   if (methods && !methods.includes('S256')) throw new DocsendSignInError('DocSend sign-in: the server does not support PKCE with S256');
@@ -72,15 +111,16 @@ export async function discover(t: OAuthTransport, server = DOCSEND_MCP_URL): Pro
 
 /** Register PLC OS as a public client for this redirect URI. Returns the client id. */
 export async function register(t: OAuthTransport, meta: ServerMeta, redirectUri: string): Promise<string> {
+  const seen: string[] = [];
   const body = await json(t, meta.registrationEndpoint, {
     method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify({
       client_name: 'PLC OS', redirect_uris: [redirectUri], grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'], token_endpoint_auth_method: 'none',
     }),
-  });
+  }, seen);
   const id = body?.client_id;
-  if (typeof id !== 'string' || !id) throw new DocsendSignInError('DocSend sign-in: registration was refused');
+  if (typeof id !== 'string' || !id) throw new DocsendSignInError(`DocSend sign-in: registration was refused (${seen.join('; ') || 'no client id'})`);
   return id;
 }
 

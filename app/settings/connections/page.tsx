@@ -13,7 +13,7 @@ import { publicUrl, setupOpen } from '@/lib/settings/setup';
 import { settingsReady, settingsView, type SettingView } from '@/lib/settings/store';
 import { ago } from '@/lib/time';
 import { docsendConnection, listSpaces } from '@/modules/docsend';
-import { appendAudit, listUsers, listVehicles } from '@/modules/platform';
+import { appendAudit, auditSince, listUsers, listVehicles } from '@/modules/platform';
 import { disconnectDocsendAction, mapDocsendSpaceAction, syncDocsendAction } from './actions';
 import { SettingRow, type RowView } from './SettingRow';
 import s from './connections.module.css';
@@ -36,8 +36,8 @@ const DOCSEND_OUTCOME: Record<string, string> = {
   connected: 'DocSend is connected. The first read takes the whole history; press Read now, or it runs tonight.',
   declined: 'DocSend sign-in was cancelled.',
   expired: 'The DocSend sign-in took too long or came from another browser. Connect again.',
-  failed: 'DocSend refused the sign-in. Connect again; the audit log says which step failed.',
-  unavailable: 'DocSend’s sign-in could not be reached from this server. The audit log has the reason.',
+  failed: 'DocSend refused the sign-in.',
+  unavailable: 'DocSend’s sign-in could not be reached from this server.',
 };
 
 export default async function ConnectionsPage({ searchParams }: { searchParams?: Promise<{ docsend?: string }> } = {}) {
@@ -59,7 +59,11 @@ export default async function ConnectionsPage({ searchParams }: { searchParams?:
   const storage = storageWarning();
   const people = (await listUsers()).filter((p) => p.email);
   const [docsend, spaces, vehicles] = await Promise.all([docsendConnection(), listSpaces(), listVehicles()]);
-  const docsendOutcome = DOCSEND_OUTCOME[(await searchParams)?.docsend ?? ''] ?? null;
+  const docsendParam = (await searchParams)?.docsend ?? '';
+  const docsendOutcome = DOCSEND_OUTCOME[docsendParam] ?? null;
+  // The reason the last sign-in failed, from the audit log, so nobody has to go and look it up.
+  const docsendWhy = docsendParam === 'failed' || docsendParam === 'unavailable'
+    ? String((await auditSince(['docsend.connect_failed'], new Date(Date.now() - 3_600_000)))[0]?.detail.why ?? '') || null : null;
 
   return (
     <Page
@@ -123,7 +127,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams?:
       <div className="card" id="docsend">
         <div className="chead"><h2>DocSend</h2><span className="lbl">read-only · data-room visits</span></div>
         <div className="cbody">
-          {docsendOutcome && <p className="note">{docsendOutcome}</p>}
+          {docsendOutcome && <p className="note">{docsendOutcome}{docsendWhy && <> The reason: {docsendWhy}</>}</p>}
           <p className={s.help}>
             Who opened each data room, for how long and how far, read nightly through DocSend&rsquo;s own MCP server (docs/32).
             Only its two read tools are called; nothing in DocSend is changed. It sees what the connected person&rsquo;s DocSend account sees.

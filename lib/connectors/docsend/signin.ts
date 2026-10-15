@@ -15,6 +15,8 @@ import { DocsendSignInError } from './oauth';
  * Every way back lands on Settings → Connections with a word for what happened, never a token or a code.
  */
 const cookieName = (secure: boolean) => `${secure ? '__Host-' : ''}${config.data.cookiePrefix}docsend`;
+/** What went wrong, for the audit log and Settings: our own errors say it in words; anything else gives its name and message. */
+const reason = (e: unknown) => e instanceof DocsendSignInError ? e.message : `${e instanceof Error ? `${e.name}: ${e.message}` : 'error'}`.slice(0, 300);
 const back = (base: string, outcome: string) => `${base}/settings/connections?docsend=${outcome}#docsend`;
 
 function redirect(to: string, cookies: string[] = []): Response {
@@ -29,7 +31,7 @@ export async function startDocsendConnect(user: AppUser, base: string): Promise<
     const { url, state, verifier } = await startConnect(user.id, base);
     return redirect(url, [cookieAttributes(cookieName(secure), stateCookie(state, verifier), config.auth.stateSeconds, secure)]);
   } catch (e) {
-    await appendAudit({ actorId: user.id, action: 'docsend.connect_failed', subjectType: 'connector', subjectId: 'docsend', detail: { step: 'start', why: e instanceof DocsendSignInError ? e.message : 'error' } }).catch(() => undefined);
+    await appendAudit({ actorId: user.id, action: 'docsend.connect_failed', subjectType: 'connector', subjectId: 'docsend', detail: { step: 'start', why: reason(e) } }).catch(() => undefined);
     return redirect(back(base, 'unavailable'));
   }
 }
@@ -50,7 +52,7 @@ export async function finishDocsendConnect(user: AppUser, base: string, request:
   try {
     await finishConnect(user.id, code, pending.verifier, await getDb());
   } catch (e) {
-    return fail('failed', e instanceof DocsendSignInError ? e.message : 'exchange');
+    return fail('failed', reason(e));
   }
   await appendAudit({ actorId: user.id, action: 'docsend.connected', subjectType: 'connector', subjectId: 'docsend', detail: {} }).catch(() => undefined);
   return redirect(back(base, 'connected'), [clear]);
