@@ -49,8 +49,14 @@ async function keyFor(tx: Queryable, table: string, row: Row): Promise<Row> {
 }
 export async function write(tx: Queryable, changes: Change[], table: string, before: Row, patch: Row) {
   const key = await keyFor(tx, table, before), name = tableSql(table);
+  // A generated column follows its source and cannot be set (strategy.suggestion's ask columns, strategy 012); a
+  // reversal writes back a whole journalled row, so they are left out here.
+  const generated = new Set((await tx.query<{ name: string }>(`select attname name from pg_attribute
+    where attrelid=$1::regclass and attnum>0 and not attisdropped and attgenerated <> ''`, [table])).map(r => r.name));
+  const columns = Object.keys(patch).filter(k => !generated.has(k));
+  if (!columns.length) throw new Error(`Nothing to write to ${table}: only generated columns were given`);
   const after = (await tx.one<{ row: Row }>(`update ${name} t set
-    ${Object.keys(patch).map(k => `${ident(k)}=v.${ident(k)}`).join(',')}
+    ${columns.map(k => `${ident(k)}=v.${ident(k)}`).join(',')}
     from jsonb_populate_record(null::${name},$1::jsonb) v,
       jsonb_populate_record(null::${name},$2::jsonb) k
     where ${keyPredicate(key)} returning to_jsonb(t) as row`, [JSON.stringify({ ...before, ...patch }), JSON.stringify(key)]))!.row;
