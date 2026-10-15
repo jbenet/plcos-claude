@@ -152,6 +152,14 @@ class LocalCopy {
     }
   }
 
+  async foreground() {
+    return (await this.pg.query('select foreground::text f from network.read_revision where singleton')).rows[0]?.f ?? null;
+  }
+
+  async holdForeground(value) {
+    await this.pg.query('update network.read_revision set foreground = $1::bigint where singleton and foreground <> $1::bigint', [value]);
+  }
+
   poke() { const w = this.wake; this.wake = null; w?.(); }
   sleep(ms) { return new Promise((r) => { const t = setTimeout(() => { this.wake = null; r(); }, ms); this.wake = () => { clearTimeout(t); r(); }; }); }
 
@@ -197,7 +205,15 @@ class LocalCopy {
     const write = this.lastWriteAt;
     const catchesUp = write > 0 && syncStarted >= write + WRITE_SETTLE_MS - 1000;
     const t0 = Date.now();
+    // Someone else's change (a colleague, an agent, an import on the server) arrives here as a new read revision and,
+    // through the server's own foreground revision, would rebuild the page caches before this person's next click
+    // (0.3–0.6 s on a vehicle's pages, 15 Oct 2026). Unless a write of this person's own is being caught up, the
+    // foreground stays where it was: the copy answers from its last build at once and rebuilds behind it, as the
+    // server does for its import workers (lib/build-cache.ts), and the change shows a rebuild later.
+    const own = write > 0 && this.settledFor < write;
+    const heldForeground = this.phase === 'ready' && !own ? await this.foreground().catch(() => null) : null;
     const r = await this.sync(st);
+    if (heldForeground !== null && (r.rows || r.deleted)) await this.holdForeground(heldForeground).catch((e) => this.log('foreground hold:', String(e?.message ?? e).slice(0, 200)));
     // Caught up before the pages are rebuilt, so a click during the rebuild joins it here (~0.3 s) rather than going to
     // the live server, cold after the same write (15 Oct 2026).
     if (catchesUp && this.settledFor < write) this.settledFor = write;
