@@ -71,7 +71,7 @@ export function namePattern(q?: string | null): string | null {
 export async function relationshipRoles(ids?: string[], group: RelationshipGroup = 'all', offset = 0, q?: string | null): Promise<RelationshipRow[]> {
   if (ids?.length === 0) return [];
   const db = await getDb();
-  // A detail read (ids) builds only its own rows, not all 117K (one org page, 15 Oct 2026: 108 ms → see below), and
+  // A detail read (ids) builds only its own rows, not all 117K (one org page, 15 Oct 2026: 107 → 20 ms), and
   // rung and status come from the shown records' own pursuits, found through their aliases, not from every pursuit.
   const rows = await db.query<Row>(`${ids ? facts('e.entity_id = any($1::uuid[])') : FACTS}, shown as materialized (
     select * from base where ${ids ? 'entity_id = any($1::uuid[]) and $3::text is null' : `not is_team and ${filters[group]} and $1::uuid[] is null and ($3::text is null or name ilike $3)`}
