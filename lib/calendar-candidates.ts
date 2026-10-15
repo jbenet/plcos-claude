@@ -148,7 +148,9 @@ export async function listCandidates(q: Queryable): Promise<CandidateRow[]> {
       from research.note n left join identity.entity e on e.entity_id = identity.canonical_entity_id(n.entity_id)
      where n.kind = 'calendar_candidate'
        and not exists (select 1 from research.note d where d.kind = 'calendar_not_lp' and d.data->>'key' = n.data->>'key')
-       and not (n.entity_id is not null and exists (select 1 from strategy.active_pursuit p where identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id(n.entity_id)))`);
+       -- The entity's aliases, then their pursuits by index: not canonical_entity_id() on every pursuit (15 Oct 2026: 55 → 5 ms).
+       and not (n.entity_id is not null and exists (select 1 from identity.alias_pairs(array[identity.canonical_entity_id(n.entity_id)]) a
+         join strategy.active_pursuit p on p.entity_id = a.entity_id))`);
   return rows.map((r) => ({ ...r.data, name: r.name, entityType: r.type }))
     .sort((a, b) => Number(b.reasons.some(strongReason)) - Number(a.reasons.some(strongReason)) || b.meetings.length - a.meetings.length || (b.meetings.at(-1)?.day ?? '').localeCompare(a.meetings.at(-1)?.day ?? '') || a.key.localeCompare(b.key));
 }
