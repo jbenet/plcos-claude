@@ -17,7 +17,10 @@ const KINDS: IssueKind[] = ['bug', 'request', 'question', 'chore'];
  * default hides `done`, because the open queue is the question people arrive with — and
  * the count says how many rows that hid rather than leaving you to wonder.
  */
-export function IssueList({ issues }: { issues: Issue[] }) {
+/** What a row shows: an issue's body, context and files stay on the server (they were most of /issues' size). */
+export type IssueRow = Pick<Issue, 'id' | 'title' | 'page' | 'reporter' | 'kind' | 'priority' | 'status' | 'fixedIn' | 'created'>;
+
+export function IssueList({ issues }: { issues: IssueRow[] }) {
   const [status, setStatus] = useState<IssueStatus | 'all' | 'not-done'>('not-done');
   const [priority, setPriority] = useState<IssuePriority | 'all'>('all');
   const [kind, setKind] = useState<IssueKind | 'all'>('all');

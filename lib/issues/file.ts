@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from '@/config/deployment';
 import { parseIssue, serializeIssue, slugify, type ParsedIssue } from './format';
@@ -28,6 +28,10 @@ function serially<T>(root: string, work: () => Promise<T>): Promise<T> {
   return result;
 }
 
+/** Parsed issue files by path, with the size and time they were parsed at; shared across module copies. */
+const parsed = ((globalThis as typeof globalThis & { __capitalOsIssueFiles?: Map<string, { mtimeMs: number; size: number; issue: ParsedIssue }> })
+  .__capitalOsIssueFiles ??= new Map());
+
 /**
  * Issues are files in the repo. The complaint and its fix travel in one pull request,
  * they survive `npm run db:reset`, and `git log issues/` is free triage history.
@@ -42,14 +46,18 @@ export function fileIssueSink(dir: string): IssueSink {
     } catch {
       return [];
     }
-    const out: Array<{ file: string; issue: ParsedIssue }> = [];
-    for (const name of names.sort()) {
-      const m = FILE.exec(name);
-      if (!m) continue;
-      const text = await readFile(join(root, name), 'utf8');
-      out.push({ file: name, issue: parseIssue(text, m[1]!) });
-    }
-    return out;
+    // Every page's rail counts the open issues, so a file is parsed again only when its size or time changed
+    // (performance pass, 15 Oct 2026: it read and parsed every issue file, one after another, on each page).
+    const files = names.sort().flatMap((name) => { const m = FILE.exec(name); return m ? [{ name, id: m[1]! }] : []; });
+    return Promise.all(files.map(async ({ name, id }) => {
+      const path = join(root, name);
+      const st = await stat(path);
+      const seen = parsed.get(path);
+      if (seen && seen.mtimeMs === st.mtimeMs && seen.size === st.size) return { file: name, issue: seen.issue };
+      const issue = parseIssue(await readFile(path, 'utf8'), id);
+      parsed.set(path, { mtimeMs: st.mtimeMs, size: st.size, issue });
+      return { file: name, issue };
+    }));
   };
 
   const toIssue = (file: string, p: ParsedIssue): Issue => ({
