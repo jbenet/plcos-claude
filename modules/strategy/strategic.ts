@@ -41,7 +41,7 @@ export async function strategicRecords(q: Queryable, entityIds: string[], words:
                   then n.data->'profile'->'interests' else '[]'::jsonb end) x)) text,
               coalesce((n.data->'researched'->>'at')::date, n.created_at::date) at
          from research.note n
-        where n.kind = 'public_profile' and (n.data->'profile')::text ~* $2
+        where n.kind = 'public_profile' and n.profile_text ~* $2
           and identity.canonical_entity_id(n.entity_id) = any($1::uuid[])
         order by n.created_at desc`, [ids, loose]) : Promise.resolve([]),
     q.query<{ id: string; vehicle: string; strategic: boolean | null; reason: string | null; status: string | null }>(
