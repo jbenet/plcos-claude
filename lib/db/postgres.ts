@@ -68,10 +68,25 @@ export async function openPostgres(url: string, options: PostgresOptions = {}): 
       async exec(sql: string) { await run(sql, []); },
     };
   };
+  // A write's table counters (pg_stat_user_tables) reach other sessions only when its backend next flushes them, which
+  // is up to 10 s later if it flushed in the last second: the desktop app's copy reads those counters to know what to
+  // fetch, so it could take a person's own change for absent (measured 10.0 s, 15 Oct 2026). After each write the
+  // backend is asked to flush when it goes idle, i.e. at once. A server that refuses the call stops asking.
+  let flushStats = true;
+  const flush = async (client: { query: (sql: string) => Promise<unknown> }) => {
+    if (!flushStats) return;
+    try { await client.query('select pg_stat_force_next_flush()'); } catch { flushStats = false; }
+  };
+  const writes = (sql: string) => /^\s*(insert|update|delete|merge)\b/i.test(sql) || (/^\s*with\b/i.test(sql) && /\b(insert\s+into|update\s+\S+\s+set|delete\s+from)\b/i.test(sql));
   let closing: Promise<void> | undefined;
   return {
     kind: 'postgres',
-    ...on((sql, params) => pool.query(sql, params)),
+    ...on(async (sql, params) => {
+      if (!flushStats || !writes(sql)) return pool.query(sql, params);
+      const client = await pool.connect();
+      try { const result = await client.query(sql, params); await flush(client); return result; }
+      finally { client.release(); }
+    }),
     async transaction<T>(fn: (tx: Queryable) => Promise<T>): Promise<T> {
       const client = await pool.connect();
       let discard = false;
@@ -79,6 +94,7 @@ export async function openPostgres(url: string, options: PostgresOptions = {}): 
         await client.query('begin');
         const result = await fn(on((sql, params) => client.query(sql, params), true));
         await client.query('commit');
+        await flush(client);
         return result;
       } catch (error) {
         try { await client.query('rollback'); } catch { discard = true; }
