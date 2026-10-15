@@ -96,7 +96,7 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
       `select distinct s.pursuit_id::text id from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id)
        join platform.vehicle v on v.id=p.vehicle_id
        where s.pursuit_id=any($1::uuid[]) and s.status in ('proposed','accepted')
-         and (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug)))`, [pursuitIds]),
+         and (s.ask_vehicle is null or s.ask_vehicle in (lower(v.name),lower(v.slug)))`, [pursuitIds]),
     // Rule 1: one row per track. Nothing here adds soft to hard, or one vehicle to another.
     db.query<{ id: string; vehicle: string; track: 'soft' | 'hard'; amount: string }>(
       `select identity.canonical_entity_id(x.entity_id)::text id, x.vehicle_id::text vehicle, x.track::text track, sum(x.amount)::text amount

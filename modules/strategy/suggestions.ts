@@ -40,8 +40,8 @@ export async function suggestionsFor(pursuitId: string): Promise<Suggestion[]> {
        join strategy.active_pursuit p on p.pursuit_id = s.pursuit_id
        join platform.vehicle v on v.id = p.vehicle_id
       where s.pursuit_id = $1 and s.status <> 'withdrawn'
-        and (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null
-          or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug)))
+        and (s.ask_vehicle is null
+          or s.ask_vehicle in (lower(v.name),lower(v.slug)))
       order by s.created_at desc, s.suggestion_id`,
     [pursuitId],
   );
@@ -61,8 +61,8 @@ export async function decideSuggestion(actorId: string, suggestionId: string, de
   await db.transaction(async (tx) => {
     const s = await tx.one<{ pursuit_id: string; body: string; status: string; scope_ok: boolean }>(
       `select s.pursuit_id::text, s.body, s.status,
-              (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null
-                or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug))) as scope_ok
+              (s.ask_vehicle is null
+                or s.ask_vehicle in (lower(v.name),lower(v.slug))) as scope_ok
          from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id)
          join platform.vehicle v on v.id=p.vehicle_id where s.suggestion_id = $1 for update of s`, [suggestionId]);
     if (!s) throw new SuggestionRefused('No such suggestion.');
@@ -97,8 +97,8 @@ export async function openSuggestions(): Promise<Array<Suggestion & { entityName
        join identity.entity e on e.entity_id = identity.canonical_entity_id(p.entity_id)
        join platform.vehicle v on v.id = p.vehicle_id
       where s.status in ('proposed', 'accepted', 'dismissed')
-        and (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null
-          or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug)))`,
+        and (s.ask_vehicle is null
+          or s.ask_vehicle in (lower(v.name),lower(v.slug)))`,
   );
   return rows.map((r) => ({
     suggestionId: r.suggestion_id, pursuitId: r.pursuit_id, body: r.body, data: r.data ?? {}, madeBy: r.made_by, madeAt: new Date(r.made_at),

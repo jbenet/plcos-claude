@@ -72,7 +72,9 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
       ) select s.pursuit_id, s.suggestion_id, s.data, s.body, s.made_at, s.made_by, s.status from pick join strategy.suggestion s using(suggestion_id)`, [vehicleId]),
     // Each LP's aliases first (identity.alias_pairs), so these are index probes rather than a
     // canonical_entity_id() call on every row of the table (performance pass, 8 Oct 2026).
-    db.query<ProfileRow>(`select distinct on (a.canonical_id) a.canonical_id entity_id, n.note_id, n.created_at as at, n.data
+    // Only the two parts read below, not the whole profile (about 2 KB a note, thousands per vehicle, every rebuild).
+    db.query<ProfileRow>(`select distinct on (a.canonical_id) a.canonical_id entity_id, n.note_id, n.created_at as at,
+        jsonb_build_object('researched', n.data->'researched', 'profile', jsonb_build_object('capacity', n.data->'profile'->'capacity')) data
       from identity.alias_pairs($1::uuid[]) a join research.note n on n.entity_id=a.entity_id where n.kind='public_profile'
       order by a.canonical_id,n.created_at desc,n.note_id`, [ids]),
     db.query<{ entity_id: string; n: string }>(`select a.canonical_id entity_id,count(*)::text n
