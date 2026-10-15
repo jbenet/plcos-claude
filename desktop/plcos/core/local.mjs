@@ -157,6 +157,7 @@ class LocalCopy {
 
   async loop() {
     while (!this.stopped) {
+      const syncedBefore = this.lastSyncStartedAt;
       try {
         await this.tick();
         this.failures = 0;
@@ -169,7 +170,10 @@ class LocalCopy {
         await this.sleep(Math.min(30 * 60_000, 30_000 * 2 ** Math.min(6, this.failures - 1)));
         continue;
       }
-      await this.sleep(this.settling() || this.phase !== 'ready' ? BUSY_SYNC_MS : IDLE_SYNC_MS);
+      // A write made while that sync ran is caught up by the next one, at once: the poke at the write found the loop busy,
+      // and waiting the usual two seconds kept reads on the live server that long (15 Oct 2026).
+      const behind = this.settling() && this.phase === 'ready' && this.lastSyncStartedAt !== syncedBefore && this.lastWriteAt >= this.lastSyncStartedAt;
+      await this.sleep(behind ? 0 : this.settling() || this.phase !== 'ready' ? BUSY_SYNC_MS : IDLE_SYNC_MS);
     }
   }
 
