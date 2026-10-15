@@ -14,6 +14,7 @@ import { auditRecent } from './audit';
 import { checkParties, partiesInput } from '@/lib/outreach/parties';
 import { affinityWritesStatus, proposeAffinityWrites, proposeInput as affinityWriteInput, statusInput as affinityWriteStatusInput } from '@/lib/affinity-writes';
 import { addResearch, researchInput, undoAddResearch, undoResearchInput } from '@/lib/outreach/research';
+import { addEntity, addEntityInput, undoAddEntity, undoAddEntityInput } from '@/lib/outreach/entities';
 import { insights, insightsInput, playbook, recordSignals, signalsFor, signalsInput, signalsReadInput } from '@/lib/outreach/signals';
 
 /**
@@ -70,7 +71,7 @@ const tool = <S extends z.ZodObject>(t: Tool<S>) => t as unknown as Tool;
 export const TOOLS: readonly Tool[] = [
   tool({
     name: 'search', title: 'Search LPs and people', policy: READ,
-    description: 'Find people and organisations by name, with the pursuits on your vehicles (status, owner) and whether a do-not-approach restriction is on file. Use the pursuitId with lp_summary.',
+    description: 'Find people and organisations by name, with the pursuits on your vehicles (status, owner), what each is to us (relation: lp, portfolio-company, prospect-company, service-provider, other, or null), a person\'s team and assistant links, and whether a do-not-approach restriction is on file. Use the pursuitId with lp_summary.',
     input: z.object({ query: z.string().min(2).max(100), kind: z.enum(['any', 'person', 'org']).optional(), limit: limit(50, 20) }).strict(),
     run: (env, a) => reads.search(env.principal, a),
   }),
@@ -182,7 +183,7 @@ export const TOOLS: readonly Tool[] = [
   }),
   tool({
     name: 'outreach_propose_contact', title: 'Outreach: an address confirmed in Gmail', policy: { risk: 'propose', scopes: [OUTREACH_WRITE], ticket: 'none', approval: true },
-    description: 'Record how to reach a person or firm, named by entityId or by pursuitId (one of the two): an email address, and/or phone, title, organization, postalAddress, linkedin. source gmail: the person confirmed it (give confirmedBy, the token\'s owner). source gmail-signature: read from the signature or text of a message they sent, not confirmed (seenOn: that message\'s date; messageId). Kept as dated claims with their source; a newer reading from the same source supersedes the older (for an address, only the same address). Another source\'s value (Affinity, research) is kept, never overwritten; the answer says what was kept.',
+    description: 'Record how to reach a person or firm, named by entityId or by pursuitId (one of the two): an email address, and/or phone, title, organization, postalAddress, linkedin. role send-to (with email): mail to this LP goes To this address, its main contact cc\'d; one per entity, a new one replaces the old (read back as entity.sendTo); role none clears it if it is this address. source gmail: the person confirmed it (give confirmedBy, the token\'s owner). source gmail-signature: read from the signature or text of a message they sent, not confirmed (seenOn: that message\'s date; messageId). Kept as dated claims with their source; a newer reading from the same source supersedes the older (for an address, only the same address). Another source\'s value (Affinity, research) is kept, never overwritten; the answer says what was kept.',
     input: contactInput,
     run: (env, a) => contacts({ env }, a),
   }),
@@ -223,6 +224,19 @@ export const TOOLS: readonly Tool[] = [
     description: `Take back an LP outreach_add_lp added: only one it created, by your own token's owner, within ${UNDO_HOURS} hours, and only while nothing else has happened on it (no update, status change, touchpoint, link, ticket or merge). Removes the pursuit, the address and the evidence it recorded, and retires the person if that call created them and nothing else refers to them. Otherwise 409 with why.`,
     input: undoAddLpInput,
     run: (env, a) => undoAddLp({ env }, a),
+  }),
+  // Who someone is when not an LP (docs/27 §5c; JuanMail 0174, Juan said yes 15 Oct 2026).
+  tool({
+    name: 'outreach_add_entity', title: 'Outreach: add a company or person who is not an LP', policy: { risk: 'write-guarded', scopes: [OUTREACH_WRITE], ticket: 'none', approval: false },
+    description: `Record from mail someone who is not an LP: a company with what it is to us (type portfolio-company, prospect-company, service-provider or other), or a person (type person), optionally linked with companyEntityId and role: team (on a company's team) or assistant (of an LP, a person or a firm). Matched first, never duplicated: an address on record, then (a company) its address's domain or one organisation of that name, (a person) someone of that name already linked to the company, then the resolver; refuses (409) when it cannot pick one. A company's earlier relation is replaced; already as asked, nothing changes. Evidence: Gmail ids and one sentence, never a body. Once per idempotencyKey; undo within ${UNDO_HOURS} hours with outreach_undo_add_entity. search returns each entity's relation and a person's links.`,
+    input: addEntityInput,
+    run: (env, a) => addEntity({ env }, a),
+  }),
+  tool({
+    name: 'outreach_undo_add_entity', title: 'Outreach: undo a company or person added from mail', policy: { risk: 'write-guarded', scopes: [OUTREACH_WRITE], ticket: 'none', approval: false },
+    description: `Take back the latest outreach_add_entity on this entity: by your own token's owner, within ${UNDO_HOURS} hours. Removes the link, the address and the note it recorded, puts back the relation it replaced, and retires the record if that call created it and nothing has referred to it since.`,
+    input: undoAddEntityInput,
+    run: (env, a) => undoAddEntity({ env }, a),
   }),
   // Research on no vehicle (docs/27 §5a): someone emailed who is not here and was not pitched.
   tool({

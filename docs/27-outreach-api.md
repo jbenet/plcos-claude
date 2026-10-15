@@ -802,6 +802,51 @@ saved first, then each item is written and saved as it lands, so a failure leave
 "<sender> emailed <name> (<address>); Affinity's mail sync did not capture these:" followed by a dated subject line per
 message. Only `lib/connectors/affinity/write.ts` writes, and only POST /persons and POST /notes (Affinity's v1 API).
 
+## 5c. Send-to addresses and entities that are not LPs (15 Oct 2026)
+
+JuanMail asked for both (its feedback 0173 and 0174); Juan said yes on 15 Oct 2026. JuanMail reads them back, and
+creates them only when Juan presses its button.
+
+**Send-to.** `POST /api/outreach/contacts` (`outreach_propose_contact`) takes an optional `role` with `email`:
+
+- `send-to`: mail to this LP goes To this address (an investments@ inbox, say), its main contact cc'd. One per entity:
+  a new one replaces the old. The address is also recorded as an email claim, as any address is. The answer adds
+  `sendTo: { email, setBy, setAt, replaced }`, where `replaced` is the address it replaced or null.
+- `none`: if this address is the send-to, it no longer is. The answer adds `sendToCleared: true | false`.
+- Omitted: the send-to is unchanged.
+
+Reads give `entity.sendTo: { email, setBy, setAt } | null` on each row of `GET /contacts` (`outreach_contacts`) and
+`GET /queue` (`outreach_queue`), and `sendTo` on `lp_summary`. It is an address, so it is null where your access does
+not read words (R2) on that vehicle. `setBy` is the handle of the token's owner. Stored in `identity.send_to`.
+
+**Entities that are not LPs.** `POST /api/outreach/entities` (MCP `outreach_add_entity`, outreach:write) takes
+`{ type, name, email?, companyEntityId?, role?, evidence: { gmailMessageIds, words }, idempotencyKey }`:
+
+- `type`: `person`, or what an organisation is to us: `portfolio-company`, `prospect-company`, `service-provider`,
+  `other`. The relation is kept in `identity.entity_relation`; a new one replaces the old, and the answer names the one it
+  replaced (`replacedRelation`).
+- `companyEntityId` and `role`, together and for a person only: `team` (on a company's team; the company must be an
+  organisation) or `assistant` (of an LP, a person or a firm; anyone without a pursuit is refused, 422). The link is an
+  `identity.affiliation` (kind `staff`, role `team` or `assistant`, source `mail_desk`), never primary, so it does not
+  make the person the LP's contact for outreach.
+- Matched first, never duplicated. A person: an address on record, then someone of that name already linked to the
+  company, then the resolver with the address's domain (and, for team, the company) as evidence. An organisation: an
+  address on record, then the address's domain, then one organisation of exactly that name. When it cannot pick one
+  (two with the address, two organisations of the name, or a name shared with no evidence that picks one) it refuses
+  with 409 and writes nothing.
+- The address, when given, is recorded as `outreach_add_lp` records one. The mail is kept in a note: Gmail ids and a
+  sentence, never a body. Already as asked: `created` all false and nothing changes.
+- The answer: `{ entityId, type: 'person' | 'org', relation, created: { entity, relation, link }, replacedRelation?,
+  link: { role, entityId, name } | null, next }`.
+- `DELETE /api/outreach/entities?entityId=` (`outreach_undo_add_entity`) takes back the latest add on that entity
+  within 24 hours, by the same person's token: the link, the address and the note go, the relation it replaced comes
+  back, and a record it created is retired if nothing has referred to it since.
+
+**Search.** `GET /search` (MCP `search`) now gives each row `relation`: `lp` (it has a pursuit), `portfolio-company`
+(set here, or in the portfolio import), `prospect-company`, `service-provider`, `other`, or null when nothing is known;
+a relation set here wins. Each person also has `links: [{ role, entityId, name }]`, their open team and assistant links.
+`type` stays the record's own type (`person`, `org`, `family`, `foundation`, `vehicle`).
+
 ## 6. Audit, and the later web client
 
 Every call — MCP or REST — is one `mcp.call` record (docs/26 §4): the user, the token and its name (client

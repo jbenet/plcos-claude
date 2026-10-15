@@ -51,6 +51,8 @@ const OPS: Record<string, Op> = {
   lps: { tool: 'outreach_add_lp', method: 'POST', del: { tool: 'outreach_undo_add_lp' } },
   // Someone to research, on no vehicle (docs/27 §5a); DELETE ?entityId= undoes it, within a day.
   research: { tool: 'outreach_add_research', method: 'POST', del: { tool: 'outreach_undo_add_research' } },
+  // Someone who is not an LP (docs/27 §5c): POST adds a company or person, DELETE ?entityId= undoes it, within a day.
+  entities: { tool: 'outreach_add_entity', method: 'POST', del: { tool: 'outreach_undo_add_entity' } },
   // Affinity writes (docs/27 §5b): POST proposes items for the open batch, GET reads where they stand.
   affinity: { tool: 'outreach_propose_affinity_writes', method: 'POST', get: { tool: 'outreach_affinity_writes' } },
   trace: { tool: 'comms_trace', method: 'GET' },
