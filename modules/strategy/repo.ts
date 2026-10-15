@@ -1,4 +1,5 @@
 import { getDb, type Queryable } from '@/lib/db';
+import { buildCache } from '@/lib/build-cache';
 import {
   RUNGS, rungIndex, type Implied, type LadderEvent, type LadderRung, type PassedBy, type PlanStep, type Pursuit,
   type PursuitStatus,
@@ -84,7 +85,22 @@ async function eventsFor(ids: string[], q?: Queryable): Promise<Map<string, Ladd
   return out;
 }
 
-export async function listPursuits(vehicleId?: string | null, opts: { status?: PursuitStatus; entityId?: string } = {}): Promise<Pursuit[]> {
+/**
+ * The pursuit lists pages read (all of them, a vehicle's, one status), kept per read revision: every table they
+ * join moves it (strategy.pursuit, ladder_event, identity.entity, platform.vehicle, app_user). The whole list was
+ * read again by each page that shows it: about 60 ms each on the real data (15 Oct 2026). Each caller gets its own
+ * array; the pursuits in it are shared, so never change one. `fresh` reads the database directly, for the code that
+ * writes from what it reads (reconciliation, enrichment, MCP).
+ */
+const cachedPursuits = buildCache((vehicleId: string, status: string) =>
+  queryPursuits(vehicleId || null, { status: (status || undefined) as PursuitStatus | undefined }));
+
+export async function listPursuits(vehicleId?: string | null, opts: { status?: PursuitStatus; entityId?: string; fresh?: boolean } = {}): Promise<Pursuit[]> {
+  if (!opts.fresh && !opts.entityId) return [...await cachedPursuits(vehicleId ?? '', opts.status ?? '')];
+  return queryPursuits(vehicleId, opts);
+}
+
+async function queryPursuits(vehicleId?: string | null, opts: { status?: PursuitStatus; entityId?: string } = {}): Promise<Pursuit[]> {
   const db = await getDb();
   const where: string[] = [];
   const params: unknown[] = [];

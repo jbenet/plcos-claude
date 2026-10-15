@@ -181,7 +181,7 @@ async function researchSnapshot() {
   // Juan, 27 Sep: names and entities may be searched, Dakota-sourced ones included. What stays out of
   // research files is Dakota's private or aggregated fields: none are read here (the affiliation read
   // below skips Dakota's, and nothing from dakota.* is exported).
-  const allPursuits = await listPursuits(null);
+  const allPursuits = await listPursuits(null, { fresh: true });
   const all = allPursuits.filter(inResearchSet);
   // Asked for with no vehicle (outreach_add_research, 14 Oct 2026): researched like an LP, in no pipeline.
   const requested = new Set((await db.query<{ id: string }>(`select distinct identity.canonical_entity_id(entity_id)::text as id from research.note where kind = 'research_request'`)).map(r => r.id));

@@ -367,7 +367,7 @@ async function propose(only?: string): Promise<ReconcileCounts> {
   const counts: ReconcileCounts = { pursuits: 0, recorded: 0, notLp: 0, proposed: 0, alreadyOpen: 0, rejectedBefore: 0, renewed: 0, withdrawn: 0, inStep: 0, skipped: 0 };
   const db = await getDb();
   const actor = await systemActor();
-  const pursuits = only ? [await getPursuit(only)].filter((p): p is Pursuit => Boolean(p)) : await listPursuits(null);
+  const pursuits = only ? [await getPursuit(only)].filter((p): p is Pursuit => Boolean(p)) : await listPursuits(null, { fresh: true });
   counts.pursuits = pursuits.length;
   // A passed LP's meetings still happened (N60): only a vehicle kept for its history is skipped.
   const live = pursuits.filter((p) => !p.historical);
