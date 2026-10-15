@@ -49,13 +49,15 @@ export async function lpHeadings(rows: Array<{ pursuitId: string; entityId: stri
         where n.kind = 'public_profile'
         order by p.canonical_id, n.created_at desc`, [entityIds]),
     db.query<{ pursuit_id: string; unit: string | null }>(
-      `select distinct on (s.pursuit_id) s.pursuit_id::text, s.data->'ask'->>'unit' as unit
+      // The ask's vehicle and unit are stored columns (strategy 012): no suggestion's jsonb is read here.
+      `with cand as materialized (
+         select s.pursuit_id, s.suggestion_id, s.created_at, p.vehicle_id, s.ask_unit as unit, s.ask_vehicle askv
          from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id)
-         join platform.vehicle v on v.id=p.vehicle_id
         where s.pursuit_id = any($1::uuid[]) and s.status in ('proposed', 'accepted')
-          and (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null
-            or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug)))
-        order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [pursuitIds]),
+       ) select distinct on (c.pursuit_id) c.pursuit_id::text, c.unit
+         from cand c join platform.vehicle v on v.id=c.vehicle_id
+        where c.askv is null or c.askv in (lower(v.name),lower(v.slug))
+        order by c.pursuit_id, c.created_at desc, c.suggestion_id`, [pursuitIds]),
   ]);
   const orgOf = new Map(affiliations.map((a) => [a.entity_id, a.org]));
   const orgIdOf = new Map(affiliations.map((a) => [a.entity_id, a.org_id]));

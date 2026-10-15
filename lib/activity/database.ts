@@ -19,11 +19,15 @@ export async function databaseActivity(db: Db, log: Logged): Promise<Evidence> {
     select id::text, coalesce(finished_at,started_at)::text as at, kind, records
     from sources.sync_run where source='affinity'
       and ($1::timestamptz is null or started_at < $1::timestamptz)`, [cutoff]);
-  const average = await db.one<{bytes:number|null}>(`select avg(octet_length(payload::text))::float8 as bytes from sources.raw_record where source='affinity'`);
+  // A 5% block sample: the full mean read all 430K payloads (1 s of database time after every data change, 15 Oct 2026).
+  // A table too small to sample falls back to the full mean.
+  const average = await db.one<{bytes:number|null}>(`select coalesce(
+      (select avg(octet_length(payload::text)) from sources.raw_record tablesample system (5) repeatable (1) where source='affinity'),
+      (select avg(octet_length(payload::text)) from sources.raw_record where source='affinity'))::float8 as bytes`);
   for (const r of runs) {
     const day = utcDay(new Date(r.at).toISOString()); if (!day || covered(log,'affinity',r.at,r.id)) continue;
     points.push({day,source:'affinity',segment:segment('affinity',r.kind),requests:0,bytesIn:quantity(average?.bytes) === null ? null : Math.round(Number(r.records) * average!.bytes!),bytesOut:null,records:quantity(r.records),estimated:true,
-      basis:'Sync record count × measured mean stored JSON payload bytes; repeat transfers, response envelopes and request bytes were not measured.'});
+      basis:'Sync record count × sampled mean stored JSON payload bytes; repeat transfers, response envelopes and request bytes were not measured.'});
   }
   const imports = await db.query<{at:string;action:string;records:number|null}>(`
     select to_char(at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as at, action,

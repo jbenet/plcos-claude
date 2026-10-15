@@ -18,7 +18,7 @@ const filters: Record<RelationshipGroup, string> = {
 };
 /** Resolve each fact once, rather than each fact once per entity. Materialized sets
  * keep the optimizer from inlining canonical lookups into a 94K-row nested loop. */
-const FACTS = `with money as materialized (
+const facts = (only = 'true') => `with money as materialized (
   select identity.canonical_entity_id(x.entity_id) entity_id,
     coalesce(sum(x.amount) filter(where x.track = 'hard'),0) hard,
     coalesce(sum(x.amount) filter(where x.track = 'soft'),0) soft,
@@ -44,8 +44,9 @@ const FACTS = `with money as materialized (
     f.entity_id is not null is_funder, c.entity_id is not null is_coinvestor
   from identity.entity e left join money m using(entity_id) left join asks a using(entity_id)
   left join team t using(entity_id) left join funders f using(entity_id) left join coinvestors c using(entity_id)
-  where e.merged_into is null and e.retired_at is null
+  where e.merged_into is null and e.retired_at is null and ${only}
 )`;
+const FACTS = facts();
 type Row = { entity_id: string; name: string; entity_type: string; hard: string; soft: string;
   vehicles: string[] | null; connector_asks: string; is_team: boolean; is_funder: boolean; is_coinvestor: boolean;
   rung: string | null; status: string | null };
@@ -70,11 +71,14 @@ export function namePattern(q?: string | null): string | null {
 export async function relationshipRoles(ids?: string[], group: RelationshipGroup = 'all', offset = 0, q?: string | null): Promise<RelationshipRow[]> {
   if (ids?.length === 0) return [];
   const db = await getDb();
-  const rows = await db.query<Row>(`${FACTS}, shown as materialized (
+  // A detail read (ids) builds only its own rows, not all 117K (one org page, 15 Oct 2026: 107 → 20 ms), and
+  // rung and status come from the shown records' own pursuits, found through their aliases, not from every pursuit.
+  const rows = await db.query<Row>(`${ids ? facts('e.entity_id = any($1::uuid[])') : FACTS}, shown as materialized (
     select * from base where ${ids ? 'entity_id = any($1::uuid[]) and $3::text is null' : `not is_team and ${filters[group]} and $1::uuid[] is null and ($3::text is null or name ilike $3)`}
     order by hard desc, name, entity_id limit ${RELATIONSHIP_PAGE_SIZE} offset $2
   ), pursuits as materialized (
-    select p.*, identity.canonical_entity_id(p.entity_id) canonical_id from strategy.active_pursuit p
+    select a.canonical_id, p.pursuit_id, p.status from identity.alias_pairs((select array_agg(entity_id) from shown)) a
+      join strategy.active_pursuit p on p.entity_id = a.entity_id
   ) select s.*,
     (select l.rung::text from pursuits p join strategy.ladder_event l using(pursuit_id)
       where p.canonical_id = s.entity_id order by l.occurred_at desc limit 1) rung,

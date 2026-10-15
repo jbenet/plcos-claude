@@ -61,11 +61,15 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
   if (!total) return null;
   const ids = [...new Set(pursuits.map(p => p.entityId))];
   const [suggestions, profiles, claims, restrictions, owners, history, touches, routes, contexts, dakota] = await Promise.all([
-    db.query<SuggestionRow>(`select distinct on (s.pursuit_id) s.pursuit_id, s.suggestion_id, s.data, s.body, s.made_at, s.made_by, s.status
-      from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id) join platform.vehicle v on v.id=p.vehicle_id
-      where p.vehicle_id=$1 and s.status in ('proposed','accepted')
-        and (nullif(trim(s.data#>>'{ask,vehicle}'),'') is null or lower(trim(s.data#>>'{ask,vehicle}')) in (lower(v.name),lower(v.slug)))
-      order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [vehicleId]),
+    // The latest per pursuit is chosen on keys and the ask's vehicle (strategy 012), then only the winners' data and bodies are
+    // read: sorting every candidate with its jsonb and body cost 3× (15 Oct 2026, Neurotech: 93 → 38 ms in SQL).
+    db.query<SuggestionRow>(`with cand as materialized (
+        select s.pursuit_id, s.suggestion_id, s.created_at, s.ask_vehicle askv
+        from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id) where p.vehicle_id=$1 and s.status in ('proposed','accepted')
+      ), pick as (
+        select distinct on (c.pursuit_id) c.suggestion_id from cand c join platform.vehicle v on v.id=$1
+        where c.askv is null or c.askv in (lower(v.name),lower(v.slug)) order by c.pursuit_id, c.created_at desc, c.suggestion_id
+      ) select s.pursuit_id, s.suggestion_id, s.data, s.body, s.made_at, s.made_by, s.status from pick join strategy.suggestion s using(suggestion_id)`, [vehicleId]),
     // Each LP's aliases first (identity.alias_pairs), so these are index probes rather than a
     // canonical_entity_id() call on every row of the table (performance pass, 8 Oct 2026).
     db.query<ProfileRow>(`select distinct on (a.canonical_id) a.canonical_id entity_id, n.note_id, n.created_at as at, n.data

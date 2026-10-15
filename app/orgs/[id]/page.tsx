@@ -52,7 +52,7 @@ async function OrgPage({ params }: { params: Promise<{ id: string }> }) {
     listSyncSources(),
     assessmentsForEntity(entity.entityId),
     listExposures(null),
-    listPursuits(null),
+    listPursuits(null, { entityId: entity.entityId }),
     listEdgesForEntities([entity.entityId]),
     restrictionsFor(entity.entityId),
     relationshipRoles([entity.entityId]),

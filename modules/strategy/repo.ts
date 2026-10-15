@@ -84,12 +84,14 @@ async function eventsFor(ids: string[], q?: Queryable): Promise<Map<string, Ladd
   return out;
 }
 
-export async function listPursuits(vehicleId?: string | null, opts: { status?: PursuitStatus } = {}): Promise<Pursuit[]> {
+export async function listPursuits(vehicleId?: string | null, opts: { status?: PursuitStatus; entityId?: string } = {}): Promise<Pursuit[]> {
   const db = await getDb();
   const where: string[] = [];
   const params: unknown[] = [];
   if (vehicleId) { params.push(vehicleId); where.push(`p.vehicle_id = $${params.length}`); }
   if (opts.status) { params.push(opts.status); where.push(`p.status = $${params.length}::strategy.pursuit_status`); }
+  // One record's pursuits, its merged aliases included: an org page read all 6,000 to keep a few (15 Oct 2026).
+  if (opts.entityId) { params.push(opts.entityId); where.push(`p.entity_id in (select entity_id from identity.alias_pairs(array[$${params.length}::uuid]))`); }
   const rows = await db.query<PursuitRow>(
     `${PURSUIT_SELECT}${where.length ? ` where ${where.join(' and ')}` : ''} order by p.opened_at`, params,
   );
