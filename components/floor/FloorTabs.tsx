@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useUrlParam } from '@/lib/url-state';
@@ -8,26 +9,28 @@ import type { FloorState } from '@/lib/floor-client';
 import type { Lenses } from '@/lib/lenses-client';
 import { filterProjection } from './projection';
 import { Console } from './Console';
-import { CoverageView } from './CoverageView';
 import { FilterBar } from './FilterBar';
 import { EMPTY_FILTER, FloorProvider, parseFloorFilter, type FloorFilter, type Selected } from './FloorContext';
-import { LeverageView } from './LeverageView';
-import { NetworkView } from './NetworkView';
-import { RadarView } from './RadarView';
-import { StripView } from './StripView';
-import { FlowView } from './FlowView';
 import { FloorList } from './FloorList';
 import { LineView } from './LineView';
-import { LoadView } from './LoadView';
-import { EconomyView } from './EconomyView';
-import { GridView } from './GridView';
-import { MapView } from './MapView';
-import { MovesView } from './MovesView';
-import { PlantView } from './PlantView';
-import { RoomView } from './RoomView';
 import { n } from './scale';
 import s from './floor.module.css';
 import { unpackRows, type PackedRows } from '@/lib/packed-rows';
+
+/** Line is the first drawing; the other thirteen are fetched when their tab is opened (15 Oct 2026). */
+const CoverageView = dynamic(() => import('./CoverageView').then((m) => m.CoverageView));
+const LeverageView = dynamic(() => import('./LeverageView').then((m) => m.LeverageView));
+const NetworkView = dynamic(() => import('./NetworkView').then((m) => m.NetworkView));
+const RadarView = dynamic(() => import('./RadarView').then((m) => m.RadarView));
+const StripView = dynamic(() => import('./StripView').then((m) => m.StripView));
+const FlowView = dynamic(() => import('./FlowView').then((m) => m.FlowView));
+const LoadView = dynamic(() => import('./LoadView').then((m) => m.LoadView));
+const EconomyView = dynamic(() => import('./EconomyView').then((m) => m.EconomyView));
+const GridView = dynamic(() => import('./GridView').then((m) => m.GridView));
+const MapView = dynamic(() => import('./MapView').then((m) => m.MapView));
+const MovesView = dynamic(() => import('./MovesView').then((m) => m.MovesView));
+const PlantView = dynamic(() => import('./PlantView').then((m) => m.PlantView));
+const RoomView = dynamic(() => import('./RoomView').then((m) => m.RoomView));
 
 /**
  * Fourteen drawings, three projections, one vocabulary.
