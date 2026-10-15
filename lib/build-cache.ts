@@ -8,11 +8,33 @@ export async function readRevision(db: Db): Promise<string> {
   return (await readRevisions(db)).revision;
 }
 
+interface RevisionRow { revision: string; foreground: string; touch: string; routes: string; live: string; today: string }
+interface Batch { row: Promise<RevisionRow> }
+const batches = new WeakMap<Db, Batch>();
+/**
+ * The revision row, read once for every caller that asks in the same turn of the event loop (performance pass,
+ * 15 Oct 2026: a page's caches asked it 67 times, one statement each). A read joins only a batch that has not yet
+ * been sent, so it never answers from a read that began before it was asked: a person's own write, committed before
+ * they asked, is always seen.
+ */
+function revisionRow(db: Db): Promise<RevisionRow> {
+  const open = batches.get(db);
+  if (open) return open.row;
+  const batch: Batch = { row: new Promise<RevisionRow>((resolve, reject) => setImmediate(() => {
+    if (batches.get(db) === batch) batches.delete(db);
+    // Never at maintenance priority: a person's read may join a batch a background job began (withSharedDb).
+    withSharedDb(() => db.one<RevisionRow>(`select revision::text as revision, foreground::text as foreground, touch::text as touch,
+      routes::text as routes, live::text as live, current_date::text as today from network.read_revision where singleton`))
+      .then((row) => resolve(row!), reject);
+  })) };
+  batches.set(db, batch);
+  return batch.row;
+}
+
 /** The read revision, and the part of it only people's writes move (network 017: not an import worker's). */
 async function readRevisions(db: Db): Promise<{ revision: string; foreground: string }> {
-  const row = await db.one<{ revision: string; foreground: string }>(`select revision::text || ':' || current_date::text as revision,
-    foreground::text || ':' || current_date::text as foreground from network.read_revision where singleton`);
-  return row!;
+  const r = await revisionRow(db);
+  return { revision: `${r.revision}:${r.today}`, foreground: `${r.foreground}:${r.today}` };
 }
 
 /**
@@ -21,9 +43,8 @@ async function readRevisions(db: Db): Promise<{ revision: string; foreground: st
  * from the last build and rebuild behind it while a person's own change rebuilds first.
  */
 export async function touchRevisions(db: Db): Promise<{ revision: string; foreground: string }> {
-  const row = await db.one<{ revision: string; foreground: string }>(`select 't' || touch::text || ':' || current_date::text as revision,
-    foreground::text || ':' || current_date::text as foreground from network.read_revision where singleton`);
-  return row!;
+  const r = await revisionRow(db);
+  return { revision: `t${r.touch}:${r.today}`, foreground: `${r.foreground}:${r.today}` };
 }
 /**
  * Moves only when a route computation writes network.route_cache (network 021). Its writes are never
@@ -31,9 +52,8 @@ export async function touchRevisions(db: Db): Promise<{ revision: string; foregr
  * is read fresh the moment it is written, as it was before this cache.
  */
 export async function routesRevisions(db: Db): Promise<{ revision: string; foreground: string }> {
-  const row = await db.one<{ revision: string; foreground: string }>(`select 'r' || routes::text as revision,
-    foreground::text || ':' || routes::text || ':' || current_date::text as foreground from network.read_revision where singleton`);
-  return row!;
+  const r = await revisionRow(db);
+  return { revision: `r${r.routes}`, foreground: `${r.foreground}:${r.routes}:${r.today}` };
 }
 /**
  * For a cache that also reads money, restrictions or research claims (network 024): the read revision and the live
@@ -42,9 +62,8 @@ export async function routesRevisions(db: Db): Promise<{ revision: string; foreg
  * read them, and so key on this.
  */
 export async function liveRevisions(db: Db): Promise<{ revision: string; foreground: string }> {
-  const row = await db.one<{ revision: string; foreground: string }>(`select revision::text || ':' || live::text || ':' || current_date::text as revision,
-    foreground::text || ':' || current_date::text as foreground from network.read_revision where singleton`);
-  return row!;
+  const r = await revisionRow(db);
+  return { revision: `${r.revision}:${r.live}:${r.today}`, foreground: `${r.foreground}:${r.today}` };
 }
 type Revisions = (db: Db) => Promise<{ revision: string; foreground: string }>;
 
