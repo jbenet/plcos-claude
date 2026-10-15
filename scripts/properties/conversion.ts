@@ -3,6 +3,7 @@ import {
   cohorts, funnel, milestonesOf, moneyOverTime, segmentPanel, throughput, waiting, weekOf, wilson,
   MIN_FOR_RATE, type PursuitFacts, type Row, type Touch,
 } from '../../lib/conversion/model';
+import { engagement, pageDrop, readFunnel, readNoFollowUp, readers, type Visit } from '../../lib/conversion/dataroom';
 import type { Check } from './harness';
 
 const D = (s: string) => new Date(`${s}T12:00:00Z`);
@@ -83,4 +84,45 @@ export function conversionProperties(check: Check) {
   const m = moneyOverTime(rows);
   const last = m.at(-1)!;
   check('conversion.money-apart', last.hard === 1_000_000 && last.soft === 750_000, JSON.stringify(last));
+}
+
+/** Dataroom views (docs/33 charts 7–10): visits join LPs by entity, depth and returns count once per LP, page drop-off is a share. */
+export function dataroomProperties(check: Check) {
+  const now = D('2026-10-14');
+  const mk = (i: number, touches: Touch[], status: PursuitFacts['status'] = 'connecting'): Row => {
+    const p = base({ pursuitId: `p${i}`, name: `Invented ${i}`, status, touches });
+    return { p, m: milestonesOf(p) };
+  };
+  const rows = [
+    mk(0, [t('2026-10-01', 'mail', 'ours')]),
+    mk(1, [t('2026-10-01', 'mail', 'ours'), t('2026-10-03', 'meeting', 'both')]),
+    mk(2, [t('2026-10-01', 'mail', 'ours'), t('2026-10-12', 'mail', 'ours')]),
+    mk(3, [], 'passed'),
+  ];
+  const v = (id: string, entity: string | null, at: string, sec: number, pct: number | null, pages: Record<string, number> | null = null): Visit => ({
+    visitId: id, startedAt: D(at), durationSec: sec, percentViewed: pct, pageCount: pages ? 3 : null, pageSeconds: pages,
+    entityId: entity, documentId: 'd1', documentTitle: 'Invented deck' });
+  const visits = [
+    v('a', 'e0', '2026-10-05', 60, 30, { '1': 20, '2': 10 }),
+    v('b', 'e0', '2026-10-09', 900, 80, { '1': 5, '2': 5, '3': 5 }),
+    v('c', 'e1', '2026-10-04', 100, null, { '1': 9 }),
+    v('d', 'e2', '2026-10-10', 30, 10),
+    v('e', null, '2026-10-10', 30, 10),
+    v('f', 'e3', '2026-10-11', 30, 10),
+  ];
+  const entities = new Map([['e0', 'p0'], ['e1', 'p1'], ['e2', 'p2'], ['e3', 'p3']]);
+  const rd = readers(rows, visits, entities);
+  const r0 = rd.readers.get('p0')!;
+  check('dataroom.readers', rd.unmatched === 1 && rd.readers.size === 4 && r0.visits === 2 && r0.days === 2 && r0.seconds === 960 && r0.furthest === 80,
+    JSON.stringify([...rd.readers.values()]));
+  const f = readFunnel(rows, rd.readers);
+  check('dataroom.funnel', f.opened === 4 && f.half === 1 && f.back === 1 && f.unknownDepth === 1 && f.reached === 4, JSON.stringify(f));
+  const bands = engagement(rows, rd.readers);
+  check('dataroom.engagement-adds-up', bands.reduce((n, b) => n + b.n, 0) === f.reached && bands.every((b) => b.rate === null), JSON.stringify(bands));
+  const drop = pageDrop(visits)[0]!;
+  check('dataroom.page-drop', drop.viewers === 3 && drop.pages.length === 3 && drop.pages[0]!.share === 1 && Math.abs(drop.pages[1]!.share - 2 / 3) < 1e-9
+    && Math.abs(drop.pages[2]!.share - 1 / 3) < 1e-9, JSON.stringify(drop));
+  // p0 read on 9 Oct after our last mail (1 Oct): follow up. p2 read 10 Oct, we wrote 12 Oct: done. p3 passed: not listed.
+  const nf = readNoFollowUp(rows, rd.readers, now);
+  check('dataroom.no-follow-up', nf.map((x) => x.pursuitId).sort().join() === 'p0,p1', JSON.stringify(nf));
 }

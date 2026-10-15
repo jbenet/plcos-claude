@@ -24,3 +24,17 @@ graphs can show us what's working / not working." The plan is [docs/33](../../33
 - **Dataroom views** show as "Source unavailable" until DocSend is connected. Juan was asked which route to use.
 - The numbers are computed in the background like LP stats (`lib/conversion/`, kept per data generation). Readers
   without licensed fields see segments that rest on Dakota as unknown.
+
+## Dataroom views · 15 Oct 2026
+
+Once DocSend is connected (docs/32, PR #152), the conversion page's last card fills in from DocSend's visits, matched to
+LPs by email, with our own team's visits left out:
+
+- **The dataroom funnel**: LPs reached, then those who opened the dataroom, read past half a document, and came back
+  on another day. Visits by people not on record are counted beside it.
+- **Read it, nothing from us since**: open LPs who read in the last 14 days with no mail, call or meeting from us after
+  their last visit. These are the ones to follow up today.
+- **Time in the dataroom**: LPs grouped by total reading time, with the share that met us. It shows what went with a
+  meeting, not what caused one.
+- **Where a deck loses people**: for each of the most-read documents, the share of visits that reached each page, with
+  the median seconds spent there.
