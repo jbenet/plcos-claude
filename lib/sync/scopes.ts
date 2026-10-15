@@ -25,7 +25,7 @@ export const SYNC_SCOPES = [SYNC_SNAPSHOT, SYNC_PUSH, SYNC_ADMIN] as const;
 export type SyncScopeName = (typeof SYNC_SCOPES)[number];
 
 export interface Endpoint { name: string; route: string; policy: Policy; grant: readonly ('admin' | 'team' | 'viewer')[] }
-export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles' | 'jobs' | 'feedback' | 'identity' | 'astra', Endpoint> = {
+export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles' | 'jobs' | 'feedback' | 'identity' | 'astra' | 'affinity', Endpoint> = {
   snapshot: { name: 'sync_snapshot', route: 'GET /api/sync/snapshot', grant: ['admin'],
     policy: { risk: 'read', scopes: [SYNC_SNAPSHOT], ticket: 'none', approval: false } },
   // It writes research files the normal import then maps, through the importer's own validators: guarded writes.
@@ -47,6 +47,10 @@ export const SYNC_ENDPOINTS: Record<'snapshot' | 'push' | 'vehicles' | 'jobs' | 
   // The Mac's Astra runner (lib/sync/astra.ts, docs/30): polls for the runs a person queued on Developer → Astra and reports counts.
   astra: { name: 'astra_runner', route: 'POST /api/sync/astra', grant: ['admin'],
     policy: { risk: 'write-guarded', scopes: [SYNC_ADMIN], ticket: 'none', approval: false } },
+  // The Affinity writes a person approves by batch (lib/sync/affinity-writes.ts): read the open batch, propose from our own
+  // sent mail. It never decides the batch or reaches Affinity; Approvals → Affinity writes does, by a person.
+  affinity: { name: 'affinity_writes', route: 'GET|POST /api/sync/affinity', grant: ['admin'],
+    policy: { risk: 'propose', scopes: [SYNC_ADMIN], ticket: 'none', approval: true } },
 };
 
 /** The scopes a token's entries carry: the Admin scope carries every sync scope. */
