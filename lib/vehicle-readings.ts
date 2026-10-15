@@ -7,12 +7,14 @@ import type { PursuitStatus } from '@/modules/strategy';
 /** Read the latest applicable proposal per pursuit, never the best score across vehicles.
  * No bodies, route enumeration or contact history are needed for this projection. */
 export async function vehicleReadings(vehicleId: string | null, entityId: string | null = null) {
-  return [...await readingsAt(vehicleId ?? '', entityId ?? '')];
+  return [...await (entityId ? oneLpAt : readingsAt)(vehicleId ?? '', entityId ?? '')];
 }
 
 /** Kept per read revision: suggestions, pursuits, entities, vehicles and users all move it. The fit table and LP
  * stats read all 6,000 again on every visit (15 Oct 2026: about 85 ms each). Rows are shared: never change one. */
 const readingsAt = buildCache((vehicle: string, entity: string) => loadReadings(vehicle || null, entity || null));
+/** One LP's readings (its fit and meeting pages), kept apart: a few LP visits must not push the whole lists out. */
+const oneLpAt = buildCache((vehicle: string, entity: string) => loadReadings(vehicle || null, entity || null), 64);
 
 async function loadReadings(vehicleId: string | null, entityId: string | null) {
   const db = await getDb();
