@@ -108,31 +108,40 @@ export const second = (r: PipelineRow) => (r.isOrg || !r.firms.length ? null
   : r.firms.slice(0, 2).map((f) => f.name).join(' · ') + (r.firms.length > 2 ? ` +${r.firms.length - 2}` : ''));
 export const theirRead = (r: PipelineRow) => (r.readSuperseded ? null : r.read);
 
-export function compareRows(a: PipelineRow, b: PipelineRow, key: SortKey, dir: 1 | -1): number {
-  const value = (r: PipelineRow): string | number | null => {
-    switch (key) {
-      case 'name': return lead(r);
-      case 'status': return STATUS_ORDER.indexOf(r.status);
-      // Money first, by how far it has got and how much; then a dated next step, soonest first.
-      case 'where': return r.money ? 1e13 * (MONEY_ORDER[r.money.state] ?? 1) + r.money.amount
-        : r.nextOn ? -Date.parse(r.nextOn) / 1e3 : r.next ? -1e10 : null;
-      case 'capacity': return r.capacitySort;
-      case 'touch': return r.lastTouch ? Date.parse(r.lastTouch) : null;
-      case 'meetings': return r.meetings || null;
-      case 'ladder': return r.rung;
-      case 'read': { const read = theirRead(r); return read ? READ_ORDER[read] ?? 0 : null; }
-      case 'spv': return spvOrder(r.spv);
-      // High first, more signals first within a level; ties fall to the score, so a strategic LP
-      // with a small check still sorts above the unscored.
-      case 'strategic': return strategicOrder(r.strategic) * 1000 + (r.score ?? -1);
-      default: return r[key];
-    }
-  };
-  const av = value(a), bv = value(b);
+/** What a row sorts by under `key`; null is missing evidence. */
+function sortValue(r: PipelineRow, key: SortKey): string | number | null {
+  switch (key) {
+    case 'name': return lead(r);
+    case 'status': return STATUS_ORDER.indexOf(r.status);
+    // Money first, by how far it has got and how much; then a dated next step, soonest first.
+    case 'where': return r.money ? 1e13 * (MONEY_ORDER[r.money.state] ?? 1) + r.money.amount
+      : r.nextOn ? -Date.parse(r.nextOn) / 1e3 : r.next ? -1e10 : null;
+    case 'capacity': return r.capacitySort;
+    case 'touch': return r.lastTouch ? Date.parse(r.lastTouch) : null;
+    case 'meetings': return r.meetings || null;
+    case 'ladder': return r.rung;
+    case 'read': { const read = theirRead(r); return read ? READ_ORDER[read] ?? 0 : null; }
+    case 'spv': return spvOrder(r.spv);
+    // High first, more signals first within a level; ties fall to the score, so a strategic LP
+    // with a small check still sorts above the unscored.
+    case 'strategic': return strategicOrder(r.strategic) * 1000 + (r.score ?? -1);
+    default: return r[key];
+  }
+}
+// The same order as String#localeCompare with no arguments, from one collator rather than one per call.
+const collate = new Intl.Collator().compare;
+interface Keyed { v: string | number | null; lead: string; id: string }
+function compareKeyed(a: Keyed, b: Keyed, dir: 1 | -1): number {
+  const av = a.v, bv = b.v;
   // Missing evidence stays at the bottom in either direction: unscored is not a zero.
-  if (av === null || bv === null) return av === bv ? lead(a).localeCompare(lead(b)) || a.id.localeCompare(b.id) : av === null ? 1 : -1;
-  const order = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
-  return order * dir || lead(a).localeCompare(lead(b)) || a.id.localeCompare(b.id);
+  if (av === null || bv === null) return av === bv ? collate(a.lead, b.lead) || collate(a.id, b.id) : av === null ? 1 : -1;
+  const order = typeof av === 'number' && typeof bv === 'number' ? av - bv : collate(String(av), String(bv));
+  return order * dir || collate(a.lead, b.lead) || collate(a.id, b.id);
+}
+const keyed = (r: PipelineRow, key: SortKey): Keyed => ({ v: sortValue(r, key), lead: lead(r), id: r.id });
+
+export function compareRows(a: PipelineRow, b: PipelineRow, key: SortKey, dir: 1 | -1): number {
+  return compareKeyed(keyed(a, key), keyed(b, key), dir);
 }
 
 /**
@@ -142,7 +151,10 @@ export function compareRows(a: PipelineRow, b: PipelineRow, key: SortKey, dir: 1
  * has an individual row of their own too, and the two link to each other.
  */
 export function rankRows(rows: PipelineRow[], key: SortKey, dir: 1 | -1): PipelineRow[] {
-  return [...rows].sort((a, b) => compareRows(a, b, key, dir));
+  // Each row's sort value worked out once, not twice per comparison (Pipeline's 6,000 rows, 15 Oct 2026).
+  const all = rows.map((r) => ({ r, k: keyed(r, key) }));
+  all.sort((a, b) => compareKeyed(a.k, b.k, dir));
+  return all.map((x) => x.r);
 }
 /** Which LP units the list shows (issue 0113): the Firms and Individuals toggles, both on to start. */
 export type Units = 'both' | 'firms' | 'individuals' | 'none';
