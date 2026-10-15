@@ -1,5 +1,6 @@
 import { getDb, type Db } from '@/lib/db';
 import { withSharedDb } from '@/lib/db/scheduling';
+import { buildCache } from '@/lib/build-cache';
 import { edgeGrade } from './warmth';
 import { graphSnapshot, pathsFromSnapshot, yieldRouteWork } from './path-search';
 import type { Edge, EdgeKind, EvidenceTier } from './types';
@@ -339,6 +340,14 @@ export async function edgesTouching(id: string, limit = 2000): Promise<{ edges: 
 
 export async function edgeCountsForEntities(ids: string[]): Promise<Map<string, number>> {
   if (!ids.length) return new Map();
+  return new Map(await edgeCountsAt([...new Set(ids)].sort().join(',')));
+}
+
+/** Kept per read revision (edges, entities and possible matches all move it), keyed by the sorted ids: the
+ * visualizations count the same names' edges on every visit (15 Oct 2026: about 35 ms on the perf4 fixture). */
+const edgeCountsAt = buildCache((ids: string) => countEdges(ids.split(',')));
+
+async function countEdges(ids: string[]): Promise<Map<string, number>> {
   // Each root's aliases through identity.alias_pairs; only a merged id walks its chain (performance pass, 8 Oct 2026).
   const rows = await (await getDb()).query<{ id: string; n: number }>(`with roots as (
     select distinct case when e.merged_into is null then e.entity_id else identity.canonical_entity_id(x) end root

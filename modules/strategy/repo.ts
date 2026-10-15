@@ -123,7 +123,15 @@ export type VisualizationPursuit = Pick<Pursuit,
     events: Array<Pick<LadderEvent, 'rung' | 'occurredAt'>>;
   };
 
+/** Kept per read revision, as listPursuits is: it reads only pursuits, entities, vehicles, users and the ladder, which
+ * all move it. The visualizations read it on every visit (15 Oct 2026: about 45 ms on the perf4 fixture). Rows are
+ * shared: never change one. */
+const cachedVisualizationPursuits = buildCache((vehicleId: string) => loadVisualizationPursuits(vehicleId || null));
 export async function visualizationPursuits(vehicleId: string | null): Promise<VisualizationPursuit[]> {
+  return [...await cachedVisualizationPursuits(vehicleId ?? '')];
+}
+
+async function loadVisualizationPursuits(vehicleId: string | null): Promise<VisualizationPursuit[]> {
   const db = await getDb();
   // Preserve the legacy arrival ordering, including equal opened_at timestamps: that order
   // breaks equal-money ties in the drawings and their top-N labels. Scope the event read
@@ -163,11 +171,11 @@ export async function openPursuitCounts(): Promise<Map<string, number>> {
   return new Map(rows.map((r) => [r.v, r.n]));
 }
 
-export async function pursuitCount(): Promise<number> {
+export const pursuitCount = buildCache(async (): Promise<number> => {
   const db = await getDb();
   const row = await db.one<{ n: number }>(`select count(*)::int as n from (${PURSUIT_SELECT}) p`);
   return row?.n ?? 0;
-}
+});
 
 /** How many pursuits sit at each status, per vehicle — the board's column heads. */
 export async function statusCounts(): Promise<Array<{ vehicleId: string; status: PursuitStatus; n: number }>> {
