@@ -2,12 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import dynamic from 'next/dynamic';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { ShotEditor } from './ShotEditor';
 import {
   capturePage, capturePageExact, METHOD_LABEL, type CaptureMethod, type Region,
 } from '@/lib/capture';
-import { RegionPicker } from './RegionPicker';
 import shell from './Shell.module.css';
 import { ShortcutList, useShortcutPlatform } from './KeyboardShortcuts';
 import { isFeedbackKey, isShortcutsKey } from '@/lib/keyboard-shortcuts';
@@ -19,6 +18,10 @@ import {
 import { enqueue, startOutbox } from '@/lib/feedback-outbox';
 import { useOutbox } from './FeedbackOutbox';
 import { formatDate } from '@/lib/time';
+
+// Drawn only after a click, so fetched then: the feedback box is in every page's script (15 Oct 2026).
+const ShotEditor = dynamic(() => import('./ShotEditor').then((m) => m.ShotEditor), { ssr: false });
+const RegionPicker = dynamic(() => import('./RegionPicker').then((m) => m.RegionPicker), { ssr: false });
 
 type Kind = 'bug' | 'request' | 'question' | 'chore';
 type Priority = 'P0' | 'P1' | 'P2' | 'P3';
