@@ -26,7 +26,14 @@ export async function migrate(db: Db): Promise<{ applied: string[] }> {
     // Concurrent server boots must see the ledger only after the prior migrator commits.
     return db.transaction(async tx => {
       await tx.query("select pg_advisory_xact_lock(192837, 1)");
-      return applyMigrations({ ...db, ...tx, transaction: work => work(tx) });
+      // Every migration shares this transaction, so a deferred trigger event one queues (network 022's route_cache
+      // backfill bumps a revision) would still be pending when a later one alters its table (network 024), and Postgres
+      // refuses that: a fresh database could not be migrated (15 Oct 2026). Each migration's events fire at its end.
+      return applyMigrations({ ...db, ...tx, transaction: async work => {
+        const result = await work(tx);
+        await tx.query('set constraints all immediate');
+        return result;
+      } });
     });
   }
   return applyMigrations(db);
