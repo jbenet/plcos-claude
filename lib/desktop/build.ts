@@ -18,7 +18,8 @@ export const BUILD_INCLUDES = ['.next', '.image-commit', 'package.json', 'packag
 
 /** Left out of what goes in. */
 export function buildExcludes(): string[] {
-  return ['./.next/cache', './.next/trace', '*.map', '*.log', '.env', '.env.*'];
+  // The docs' screenshots (most of docs/ by size); the copy reads only their text.
+  return ['./.next/cache', './.next/trace', '*.map', '*.log', '.env', '.env.*', './docs/*.png', './docs/*.jpg', './docs/*.jpeg', './docs/*.gif', './docs/*.webp', './docs/*.mp4'];
 }
 
 export async function buildResponse(cwd: string = process.cwd()): Promise<Response> {

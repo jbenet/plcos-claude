@@ -108,6 +108,11 @@ a job or a connector (the preview rules), and never holds a key.
   finished (`WRITE_SETTLE_MS`). Postgres flushes its counters about a second after a transaction.
 - **Remote-only paths**: `/api/*`, sign-in, `/desktop/*` and the Developer pages (they show server state such as
   jobs and Astra runs).
+- **The first copy runs four tables at once, biggest first**, each table's next page downloading while the last one
+  is written, 10,000 rows a page. Sync Status shows which tables are copying and how far. The local server starts
+  only once the copy is whole. (15 Oct 2026, after Juan found the first copy slow on the real data.)
+- **Spotlight is kept off** the app's folders (`.metadata_never_index`): it was indexing the copy's build,
+  dependencies and database as they arrived.
 - **The first read of a table replaces it whole**, in one transaction, so rows the build's migrations made locally
   never collide with the server's on a unique key.
 

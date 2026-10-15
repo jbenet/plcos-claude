@@ -48,7 +48,7 @@ export async function desktopProperties(check: Check) {
   check('desktop build takes only an allowlist, without dependencies, data, git, env or other builds',
     leftOut.every((x) => !BUILD_INCLUDES.includes(x)) && BUILD_INCLUDES.every((x) => !x.includes('/') && !x.startsWith('.next-')), BUILD_INCLUDES.join(' '));
   check('desktop build leaves out Next’s cache, source maps, logs and env files',
-    ['./.next/cache', '*.map', '*.log', '.env', '.env.*'].every((x) => ex.includes(x)), ex.join(' '));
+    ['./.next/cache', '*.map', '*.log', '.env', '.env.*', './docs/*.png'].every((x) => ex.includes(x)), ex.join(' '));
 
   // A stream of starts from one address cannot fill the table, and a full table makes room.
   resetPairings();
