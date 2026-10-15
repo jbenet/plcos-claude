@@ -3,7 +3,7 @@
  *   - no tool outside the read allowlist leaves the client, whatever name is asked for;
  *   - the access token appears in nothing the client throws;
  *   - JSON and server-sent-event answers both parse;
- *   - the sign-in never fetches a host that is not DocSend's or Dropbox's;
+ *   - the sign-in never fetches a host that is not DocSend's or Dropbox's, finds metadata by challenge too, and says why it failed;
  *   - the first read takes every page, a second read stops at the last complete one and adds nothing;
  *   - viewers match an LP by email, our team's visits are marked and never returned, an unknown viewer stays null;
  *   - a visit's vehicle follows its data room's mapping, and visitsFor returns time per page and an as-of time.
@@ -110,6 +110,46 @@ export async function docsendProperties(check: Check) {
     try { allowedUrl('http://docsend.com/oauth/token'); } catch { plain = true; }
     check('DOCSEND sign-in metadata pointing at another host is refused, and plain http too',
       refused && plain && fetched.every((h) => h === 'docsend.com'), `fetched ${[...new Set(fetched)].join(', ')}`);
+  }
+
+  // ── The sign-in finds its metadata the ways servers publish it, and says why when it cannot ─────────────
+  {
+    const asMeta = { authorization_endpoint: 'https://docsend.com/oauth/authorize', token_endpoint: 'https://docsend.com/oauth/token', registration_endpoint: 'https://docsend.com/oauth/register' };
+    const viaChallenge: OAuthTransport = async (url, init) => {
+      const u = new URL(url);
+      if (init.method === 'POST' && u.pathname === '/mcp') {
+        return { status: 401, text: async () => '', headers: new Headers({ 'www-authenticate': 'Bearer resource_metadata="https://docsend.com/meta/prm"' }) };
+      }
+      if (u.pathname === '/meta/prm') return { status: 200, text: async () => JSON.stringify({ resource: 'https://docsend.com/mcp', authorization_servers: ['https://docsend.com'] }) };
+      if (u.pathname === '/.well-known/oauth-authorization-server') return { status: 200, text: async () => JSON.stringify(asMeta) };
+      return { status: 404, text: async () => '' };
+    };
+    const meta = await discover(viaChallenge).catch(() => null);
+    const nothing: OAuthTransport = async () => ({ status: 404, text: async () => '' });
+    let said = '';
+    try { await discover(nothing); } catch (e) { said = e instanceof Error ? e.message : ''; }
+
+    const realFetch = globalThis.fetch;
+    const hops: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      hops.push(url);
+      if (url === 'https://docsend.com/a') return new Response(null, { status: 301, headers: { location: 'https://www.docsend.com/a' } });
+      if (url === 'https://www.docsend.com/a') return new Response('{"ok":1}', { status: 200 });
+      if (url === 'https://docsend.com/away') return new Response(null, { status: 302, headers: { location: 'https://elsewhere.example/a' } });
+      throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } });
+    }) as typeof fetch;
+    let followed = false, away = false, down = '';
+    try {
+      const { httpsOAuth } = await import('../../lib/connectors/docsend/oauth');
+      followed = (await httpsOAuth('https://docsend.com/a', { method: 'GET', headers: {} })).status === 200;
+      try { await httpsOAuth('https://docsend.com/away', { method: 'GET', headers: {} }); } catch (e) { away = e instanceof DocsendSignInError; }
+      try { await httpsOAuth('https://docsend.com/down', { method: 'GET', headers: {} }); } catch (e) { down = e instanceof DocsendSignInError ? e.message : ''; }
+    } finally { globalThis.fetch = realFetch; }
+    check('DOCSEND sign-in reads the metadata address from the 401 challenge, follows redirects on DocSend hosts only, and names why it failed',
+      meta?.registrationEndpoint === asMeta.registration_endpoint && /404/.test(said) && followed && away && /ENOTFOUND/.test(down)
+        && !hops.some((h) => h.includes('elsewhere')),
+      `meta ${meta ? 'found' : 'missing'}; "${said}"; "${down}"`);
   }
 
   // ── The sync ────────────────────────────────────────────────────────────────────────────────────────
