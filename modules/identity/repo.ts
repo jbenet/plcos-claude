@@ -1,6 +1,7 @@
 import { resolveEntity, type EntityCreation } from './create';
 // entity.entity_type is the effective local type, protected by the correction migration.
 import { getDb } from '@/lib/db';
+import { buildCache } from '@/lib/build-cache';
 import type { Entity, EntityType } from './types';
 
 type Row = {
@@ -49,7 +50,15 @@ export async function searchEntities(text: string, limit = 40): Promise<Entity[]
 export async function listEntityPreview(preferredIds: string[], limit = 1000): Promise<Entity[]> {
   // GUESS: 1,000 names is the maximum useful foreground map preview.
   const take = Number.isFinite(limit) ? Math.max(1, Math.min(1000, Math.trunc(limit))) : 1000;
-  const preferred = await listEntities([...new Set(preferredIds)].slice(0, take));
+  return [...await previewAt([...new Set(preferredIds)].slice(0, take).join(','), String(take))];
+}
+
+/** Kept per read revision (identity.entity moves it), keyed by the ids in order: the visualizations ask for the same
+ * preview on every visit (15 Oct 2026). Rows are shared: never change one. */
+const previewAt = buildCache((ids: string, take: string) => loadPreview(ids ? ids.split(',') : [], Number(take)));
+
+async function loadPreview(ids: string[], take: number): Promise<Entity[]> {
+  const preferred = await listEntities(ids);
   if (preferred.length >= take) return preferred;
   const db = await getDb();
   const rows = await db.query<Row>(
