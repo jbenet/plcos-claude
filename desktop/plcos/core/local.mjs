@@ -197,7 +197,12 @@ class LocalCopy {
     this.lastSync = { at: new Date().toISOString(), ms: Date.now() - t0, ...r };
     // The local server starts once the copy is whole, so it never renders (or warms) pages from a half-filled database.
     if (!this.next) await this.startNext();
-    if (this.phase !== 'ready' && this.next && await this.nextHealthy()) { this.phase = 'ready'; this.hadCopy = true; this.detail = 'Reading from this Mac'; this.log('local copy ready'); }
+    if (this.phase !== 'ready' && this.next && await this.nextHealthy()) {
+      this.phase = 'ready'; this.hadCopy = true; this.detail = 'Reading from this Mac'; this.log('local copy ready');
+      // A server that has just started (the app's launch, or the server's new build) has loaded no page's code and built
+      // no page's data: the pages this person opened last are built now, behind their next click (15 Oct 2026).
+      void this.warmRecent();
+    }
   }
 
   // ---- the live server ----------------------------------------------------------------------------------------
