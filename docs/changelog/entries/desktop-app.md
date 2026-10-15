@@ -22,3 +22,8 @@ Notes: `docs/31-desktop-app.md`. Server: `/api/desktop/pair`, `/api/desktop/info
 addresses are not copied; secret settings and token hashes arrive as stand-ins), Settings and Preferences always load
 from the server, sync and build downloads are refused where snapshots are and are audited, the build download is an
 allowlist, and pairing caps unanswered requests per address.
+
+**Faster copy, 15 Oct 2026** (Juan: "feels pretty slow"): the first copy runs four tables at once with pages
+prefetched and gzipped, shows its progress, no longer fails on big tables, no longer starts over on a deploy, and a
+fresh copy starts from the database already on the Mac, downloading only what differs. Spotlight leaves the app's
+files alone.

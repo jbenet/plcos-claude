@@ -82,7 +82,7 @@ const xid8 = (s: string | null): string | null => (s && /^\d{1,20}$/.test(s) ? s
  * One page of a table's rows changed since `since` (an xid8 horizon from an earlier page or state; null for all),
  * after the primary key `after` (the last page's `next`). Rows come back as one JSON array text, untouched.
  */
-export async function syncRows(table: string, since: string | null, after: string[] | null, limit: number): Promise<
+export async function syncRows(table: string, since: string | null, after: string[] | null, limit: number, upTo: string[] | null = null): Promise<
   { ok: false; error: string } | { ok: true; horizon: string; rowsJson: string; n: number; next: string[] | null; count: number | null }
 > {
   const db = await getDb();
@@ -104,10 +104,11 @@ export async function syncRows(table: string, since: string | null, after: strin
       params.push(String(BigInt(sinceX) % 4294967296n));
       where.push(`age(t.xmin) <= age($${params.length}::text::xid)`);
     }
-    if (s.pk.length && after) {
-      if (after.length !== s.pk.length) return { ok: false as const, error: 'The cursor does not fit the key.' };
-      const casts = s.pk.map((c, i) => { params.push(after[i]); return `$${params.length}::text::${c.type}`; });
-      where.push(`(${s.pk.map((c) => `t.${ident(c.name)}`).join(', ')}) > (${casts.join(', ')})`);
+    for (const [bound, op] of [[after, '>'], [upTo, '<=']] as const) {
+      if (!s.pk.length || !bound) continue;
+      if (bound.length !== s.pk.length) return { ok: false as const, error: 'The cursor does not fit the key.' };
+      const casts = s.pk.map((c, i) => { params.push(bound[i]); return `$${params.length}::text::${c.type}`; });
+      where.push(`(${s.pk.map((c) => `t.${ident(c.name)}`).join(', ')}) ${op} (${casts.join(', ')})`);
     }
     const order = s.pk.length ? `order by ${s.pk.map((c) => `t.${ident(c.name)}`).join(', ')}` : '';
     // A table with no primary key is read whole, in one page: the app replaces it.
@@ -144,4 +145,36 @@ export async function syncKeys(table: string, after: string[] | null, limit: num
   const more = rows.length > lim;
   const keys = (more ? rows.slice(0, lim) : rows).map((r) => r.k);
   return { ok: true, keys, next: more ? keys[keys.length - 1]! : null };
+}
+
+/**
+ * A table's digest, for a copy that already holds most of its rows (seeded from the Mac's own database, or a copy
+ * cut short): the table in key order, cut into runs of `chunk` rows, each with its last key, its row count and an md5
+ * of its rows' JSON (as `rows` sends them, in UTC). The runs split the whole key space: run i holds the keys after
+ * run i-1's last key, up to and including its own; the last run has no upper end. The app hashes its own rows the
+ * same way and asks only for the runs that differ.
+ */
+export async function syncDigest(table: string, chunk: number): Promise<
+  { ok: false; error: string } | { ok: true; horizon: string; runs: { hi: string[] | null; n: number; md5: string }[] }
+> {
+  const db = await getDb();
+  const s = await shape(db, table);
+  if (!s || !s.pk.length) return { ok: false, error: 'No such table with a primary key.' };
+  const size = Math.max(100, Math.min(50_000, Math.trunc(chunk) || 5000));
+  const pkList = s.pk.map((c) => `t.${ident(c.name)}`).join(', ');
+  return db.transaction(async (tx) => {
+    await tx.exec('set transaction isolation level repeatable read');
+    await tx.exec("set local statement_timeout = '5min'");
+    await tx.exec("set local timezone = 'UTC'");
+    const h = (await tx.one<{ horizon: string }>('select pg_snapshot_xmin(pg_current_snapshot())::text as horizon'))!.horizon;
+    const rows = await tx.query<{ hi: string[]; n: number; md5: string }>(`
+      with r as (
+        select to_jsonb(array[${s.pk.map((c) => `t.${ident(c.name)}::text`).join(', ')}]) as k, md5(${rowJson(table)}::text) as h,
+               (row_number() over (order by ${pkList}) - 1) / ${size} as c, row_number() over (order by ${pkList}) as i
+          from ${ident(s.schema)}.${ident(s.name)} t)
+      select (array_agg(k order by i desc))[1] as hi, count(*)::int as n, md5(string_agg(h, '' order by i)) as md5
+        from r group by c order by c`);
+    const runs = rows.map((r, i) => ({ hi: i === rows.length - 1 ? null : r.hi, n: r.n, md5: r.md5 }));
+    return { ok: true as const, horizon: h, runs };
+  });
 }

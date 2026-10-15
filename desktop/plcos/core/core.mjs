@@ -504,7 +504,7 @@ async function boot() {
     try {
       if (!existsSync(path.join(HERE, 'local.mjs'))) throw new Error('no local.mjs');
       const { startLocal } = await import(path.join(HERE, 'local.mjs'));
-      state.local = await startLocal({ state, log, refreshInfo, remoteFetch, DATA_DIR });
+      state.local = await startLocal({ state, log, refreshInfo, remoteFetch, DATA_DIR, settings });
     } catch (e) { log('the local copy did not start:', String(e?.stack ?? e)); }
   }
   // Learn when the live server deploys a new build (the local copy follows it).
