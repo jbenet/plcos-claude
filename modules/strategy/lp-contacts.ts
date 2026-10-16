@@ -20,14 +20,17 @@ export async function lpContactsFor(
     -- Every alias of the wanted units first, so the joins below are index probes (7 Oct 2026).
     wa as (select * from identity.alias_pairs(array(select entity_id from wanted))),
     contacts as (
-      select w.entity_id org, identity.canonical_entity_id(c.person_entity) person, c.role, 0 priority
+      -- People too: walk the merge chain only for a merged person (16 Oct 2026; ~4,400 calls on Neurotech).
+      select w.entity_id org, case when pe.merged_into is null then pe.entity_id else identity.canonical_entity_id(pe.entity_id) end person,
+             c.role, 0 priority
         from wanted w join wa on wa.canonical_id=w.entity_id join strategy.active_pursuit p on p.entity_id=wa.entity_id
-        join strategy.pursuit_contact c using(pursuit_id)
+        join strategy.pursuit_contact c using(pursuit_id) join identity.entity pe on pe.entity_id=c.person_entity
        where ($2::uuid is null or p.vehicle_id=$2::uuid)
          and (not $3::boolean or c.source is distinct from 'dakota')
       union all
-      select w.entity_id, identity.canonical_entity_id(a.person_entity), a.role, 1
+      select w.entity_id, case when pe.merged_into is null then pe.entity_id else identity.canonical_entity_id(pe.entity_id) end, a.role, 1
         from wanted w join wa on wa.canonical_id=w.entity_id join identity.affiliation a on a.org_entity=wa.entity_id
+        join identity.entity pe on pe.entity_id=a.person_entity
        where a.ended_on is null and a.is_primary and a.kind in ('principal','decision_maker','staff','contact')
          and coalesce(a.role,'') !~* '\\m(board|adviser|advisor|advisory|investor|limited partner)\\M'
          and (not $3::boolean or (a.source is distinct from 'dakota' and not exists (
