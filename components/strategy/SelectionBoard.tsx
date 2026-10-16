@@ -10,7 +10,7 @@ import { actionFailure } from '@/lib/client/action-failure';
 import type { ScoreDetail } from '@/lib/pipeline-data';
 import { BulkLpActions } from './BulkLpActions';
 import { MoveButton, statusMix, statusWord, UndoToast, useMove } from './MoveToSelected';
-import { PEOPLE_SHOWN, peopleCount, rankRows, unitShown, unitsFrom, unitsOn, EMPTY, lead, second, spvFlagged, type PipelineRow, type SortKey, type Status } from './pipeline-model';
+import { PEOPLE_SHOWN, peopleCount, rankRows, unitShown, unitsFrom, unitsOn, EMPTY, lead, second, spvFlagged, type FirstScreen, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { CapacityTag, LpWho, units } from './LpWho';
 import { UnitIcon } from './UnitIcon';
 import { FIRST_ROWS, useGrowOnScroll, useIsCursor, useRowCursor, type CursorStore } from './row-cursor';
@@ -40,8 +40,12 @@ const SORT_LABEL: Partial<Record<SortKey, string>> = {
 const DEFAULT: Status[] = ['new', 'sourcing'];
 
 interface Props {
-  /** Every row in scope, packed for the trip (lib/packed-rows.ts). */
+  /** Every row in scope, packed for the trip (lib/packed-rows.ts); or, with `more`, only the first screen's rows. */
   packed: PackedRows;
+  /** Every row, arriving after the first screen in the same response (lib/pipeline-packed.ts firstThenRest). */
+  more?: Promise<PackedRows>;
+  /** The counts the first screen shows until every row is here. */
+  first?: FirstScreen;
   statuses: StatusInfo[];
   rungNames: string[];
   initialFilters?: Record<string, string>;
@@ -49,15 +53,30 @@ interface Props {
   asOf: string;
 }
 
-export function SelectionBoard({ packed, statuses, rungNames, initialFilters, showVehicle, asOf }: Props) {
+export function SelectionBoard({ packed, more, first, statuses, rungNames, initialFilters, showVehicle, asOf }: Props) {
   const router = useRouter();
-  const given = useMemo(() => unpackRows<PipelineRow>(packed), [packed]);
+  // The first screen draws from its own rows; every row replaces them as soon as they have arrived (16 Oct 2026).
+  const [whole, setWhole] = useState<PackedRows | null>(null);
+  useEffect(() => {
+    let live = true;
+    more?.then((p) => { if (live) setWhole(p); }, () => undefined);
+    return () => { live = false; };
+  }, [more]);
+  const complete = !more || whole !== null;
+  const given = useMemo(() => unpackRows<PipelineRow>(whole ?? packed), [whole, packed]);
   // Move to Selected (issue 0104): the ticked LPs when some are ticked, otherwise the one in focus.
   // The list shows a move at once, ahead of the server (useMove).
   const mv = useMove('selection', given);
   const rows = mv.rows;
   const view = useLpView({ rows, statuses, asOf, initialFilters, mode: 'selection' });
-  const { enabled, setEnabled, counts, active, shown, sort, picked, pick, pickedRows, now } = view;
+  const { enabled, setEnabled, active, shown, sort, picked, pick, pickedRows, now } = view;
+  // Until every row is here, the counts are the server's, worked out over all of them.
+  const early = !complete && first ? first : null;
+  const counts = early ? {
+    all: new Map(Object.entries(early.counts.all) as [Status, number][]), matching: new Map(Object.entries(early.counts.matching) as [Status, number][]),
+  } : view.counts;
+  const total = early ? early.total : rows.length;
+  const filteredTotal = early ? [...counts.matching.values()].reduce((t, v) => t + v, 0) : view.filtered.length;
   const [limit, setLimit] = useState(FIRST_ROWS);
   const moreRef = useGrowOnScroll(() => setLimit((x) => x + PAGE), limit);
   const shownIds = useMemo(() => new Set(shown.map((r) => r.id)), [shown]);
@@ -254,7 +273,7 @@ export function SelectionBoard({ packed, statuses, rungNames, initialFilters, sh
         <button type="button" className={cx(s.toggle, s.toggleAll, all && s.on)} aria-pressed={all}
           title={all ? 'Back to New and Sourcing' : 'Show every status'}
           onClick={() => setEnabled(all ? DEFAULT : statuses.map((x) => x.id))}>
-          <i aria-hidden />All <b>{n(active ? view.filtered.length : rows.length)}</b>
+          <i aria-hidden />All <b>{n(active ? filteredTotal : total)}</b>
         </button>
       </div>
 
@@ -265,7 +284,7 @@ export function SelectionBoard({ packed, statuses, rungNames, initialFilters, sh
           <div className={s.head}>
             <h2>Ranked</h2>
             <div className={s.headMeta}>
-              {units(orgCount, ranked.length - orgCount)} · {n(scored)} scored
+              {early ? units(early.shown.orgs, early.shown.total - early.shown.orgs) : units(orgCount, ranked.length - orgCount)} · {n(early ? early.shown.scored : scored)} scored
               {enabled.length > 0 && !all && <span> · {enabled.map((id) => statuses.find((x) => x.id === id)?.label).join(', ')}</span>}
             </div>
             <div className={s.keysHint}><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>x</kbd> tick · <kbd>s</kbd> to Selected · <kbd>↵</kbd> open</div>
@@ -278,7 +297,7 @@ export function SelectionBoard({ packed, statuses, rungNames, initialFilters, sh
                 <h3>{!rows.length ? 'No pursuits are recorded for this vehicle yet.' : !enabled.length ? 'No status is turned on.' : active ? 'No LP matches.' : `No LP is at ${enabled.map((id) => statuses.find((x) => x.id === id)?.label).join(' or ')}.`}</h3>
                 <p>{!rows.length ? 'An empty list, not a failed read.' : !enabled.length ? 'Turn on a status above to list its LPs.' : active ? 'The search or the filters leave this empty; the counts above say what they do match.' : 'An empty status, not a failed read.'}</p>
                 {active ? <button type="button" className="btn" onClick={() => view.setF(EMPTY)}>Clear the search and filters</button>
-                  : rows.length > 0 && !all && <button type="button" className="btn" onClick={() => setEnabled(statuses.map((x) => x.id))}>Show every status ({n(rows.length)})</button>}
+                  : rows.length > 0 && !all && <button type="button" className="btn" onClick={() => setEnabled(statuses.map((x) => x.id))}>Show every status ({n(total)})</button>}
               </div>
             </div>
           ) : (
