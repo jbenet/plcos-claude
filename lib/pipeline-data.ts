@@ -76,13 +76,11 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
   const inView = [...new Set(pursuits.map(p => p.vehicleId))].map(id => scopes.get(id)!);
   const strategicP = strategicRecords(db, entityIds, inView.flatMap(x => [...x.terms, ...(x.company ? [x.company] : [])]));
   strategicP.catch(() => undefined); // awaited below
-  const entities = await listEntities(entityIds);
-  const organisations = new Set(entities.filter(e => e.entityType !== 'person').map(e => e.entityId));
   // The LP is the committing unit (docs/23): an organisation's row names its people — its contacts on
-  // this pursuit first, then everyone acting for it now — and a person's row names their firms.
-  const orgPursuits = pursuits.filter(p => organisations.has(p.entityId)).map(p => p.pursuitId);
-  const personIds = entityIds.filter(id => !organisations.has(id));
-  const [people, contacts, affiliations] = await Promise.all([
+  // this pursuit first, then everyone acting for it now — and a person's row names their firms. Asked of every LP,
+  // beside the entities rather than after them (16 Oct 2026): each row reads only what fits its kind, so the extra
+  // answers are never used, and a rebuild no longer waits on the entity types before it can start these.
+  const linked = Promise.all([
     db.query<{ org_id: string; id: string; name: string; role: string }>(
       // Aliases first (identity.alias_pairs): index probes, not canonical_entity_id() on every affiliation.
       `select distinct o.canonical_id::text as org_id,
@@ -91,20 +89,24 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
         join identity.entity a_e on a_e.entity_id=a.person_entity
         join identity.entity e on e.entity_id=case when a_e.merged_into is null then a.person_entity else identity.canonical_entity_id(a.person_entity) end
         where a.ended_on is null
-        order by name`, [[...organisations]]),
+        order by name, id`, [entityIds]),
     db.query<{ pursuit_id: string; id: string; name: string; role: string }>(
       `select c.pursuit_id::text, e.entity_id::text id, e.display_name name, coalesce(c.role, '') role
          from strategy.pursuit_contact c join identity.entity c_e on c_e.entity_id=c.person_entity
          join identity.entity e on e.entity_id=case when c_e.merged_into is null then c.person_entity else identity.canonical_entity_id(c.person_entity) end
-        where c.pursuit_id=any($1::uuid[]) order by c.created_at, name`, [orgPursuits]),
+        where c.pursuit_id=any($1::uuid[]) order by c.created_at, name, id`, [pursuits.map(p => p.pursuitId)]),
     db.query<{ person: string; id: string; name: string; role: string | null }>(
       `select p.canonical_id::text person, o.entity_id::text id, o.display_name name, a.role
          from identity.alias_pairs($1::uuid[]) p join identity.affiliation a on a.person_entity=p.entity_id
          join identity.entity a_o on a_o.entity_id=a.org_entity
          join identity.entity o on o.entity_id=case when a_o.merged_into is null then a.org_entity else identity.canonical_entity_id(a.org_entity) end
         where a.ended_on is null and o.entity_type<>'person' and o.retired_at is null
-        order by 1, a.is_primary desc, a.as_of desc nulls last`, [personIds]),
+        order by 1, a.is_primary desc, a.as_of desc nulls last, o.entity_id`, [entityIds]),
   ]);
+  linked.catch(() => undefined); // awaited below
+  const entities = await listEntities(entityIds);
+  const organisations = new Set(entities.filter(e => e.entityType !== 'person').map(e => e.entityId));
+  const [people, contacts, affiliations] = await linked;
   const lpRow = new Map(pursuits.map(p => [`${p.entityId}:${p.vehicleId}`, p.pursuitId]));
   // Grouped once: a scan of every contact and affiliation per row was quadratic in the vehicle's size.
   const group = <T,>(rows: T[], key: (row: T) => string) => {
