@@ -484,7 +484,9 @@ const server = http.createServer(async (req, res) => {
     if (write && req.headers.origin && req.headers.origin !== ORIGIN && req.headers.origin !== `http://localhost:${PORT}`) { res.writeHead(403).end('cross-origin'); return; }
     // Explore mode (16 Oct 2026): while DATA_DIR/explore.json exists, the window's script walks the app by its links and
     // times each step into perf.log, and nothing may change: every request but a GET, a timing or the stop is refused.
-    const exploring = existsSync(path.join(DATA_DIR, 'explore.json'));
+    // At most two hours from the file's making: a file left behind never keeps the person from changing anything.
+    let exploring = false;
+    try { exploring = Date.now() - statSync(path.join(DATA_DIR, 'explore.json')).mtimeMs < 2 * 3600_000; } catch { exploring = false; }
     if (url.pathname === '/__desktop/explore') {
       if (req.method === 'POST') { await readBody(req); rmSync(path.join(DATA_DIR, 'explore.json'), { force: true }); log('explore mode stopped from the window'); res.writeHead(204).end(); return; }
       let cfg = {};
