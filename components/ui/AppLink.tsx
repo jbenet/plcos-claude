@@ -22,7 +22,10 @@ export default function Link({ href, onMouseEnter, onMouseLeave, onFocus, ...res
   const router = useContext(AppRouterContext);
   const target = typeof href === 'string' ? canonicalPath(href, vehicle) : href;
   const ahead = typeof target === 'string' && rest.prefetch !== false ? target : null;
-  return <NextLink href={target} {...rest}
+  // Next's own prefetch of every link in view is off unless asked for (prefetch={true}, an LP page's tabs): for these
+  // pages it fetches only the shell, one request per link, and a vehicle's overview sent 52 of them at once, alongside
+  // the page itself (16 Oct 2026). The pointer's pause above fetches the page that matters, whole.
+  return <NextLink href={target} {...rest} prefetch={rest.prefetch === true ? true : false}
     onMouseEnter={(e) => { if (ahead) prefetchIntent(router, ahead); onMouseEnter?.(e); }}
     onMouseLeave={(e) => { if (ahead) cancelPrefetchIntent(ahead); onMouseLeave?.(e); }}
     onFocus={(e) => { if (ahead) router?.prefetch(ahead, FULL); onFocus?.(e); }} />;
