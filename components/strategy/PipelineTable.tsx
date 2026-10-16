@@ -4,8 +4,9 @@ import Link from '@/components/ui/AppLink';
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { usePrefetch, usePrefetchFirst } from '@/components/ui/prefetch';
 import { BulkLpActions } from './BulkLpActions';
-import { EMPTY, rankRows, unitShown, unitsFrom, unitsOn, lead, type PipelineRow, type SortKey, type Status } from './pipeline-model';
+import { EMPTY, rankRows, unitShown, unitsFrom, unitsOn, lead, type FirstScreen, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { CapacityTag, LpWho, units } from './LpWho';
 import { UnitIcon } from './UnitIcon';
 import { FIRST_ROWS, useGrowOnScroll, useIsCursor, useRowCursor, type CursorStore } from './row-cursor';
@@ -31,8 +32,12 @@ export type { PipelineRow, Status } from './pipeline-model';
 const PAGE = 100;
 
 interface Props {
-  /** Every row in scope, packed for the trip (lib/packed-rows.ts). */
+  /** Every row in scope, packed for the trip (lib/packed-rows.ts); or, with `more`, only the first screen's rows. */
   packed: PackedRows;
+  /** Every row, arriving after the first screen in the same response (pipeline-model firstScreen). */
+  more?: Promise<PackedRows>;
+  /** The counts the first screen shows until every row is here. */
+  first?: FirstScreen;
   statuses: StatusInfo[];
   rungNames: string[];
   initialStatus: Status | 'all' | null;
@@ -43,14 +48,30 @@ interface Props {
   newSection?: React.ReactNode;
 }
 
-export function PipelineTable({ packed, statuses, rungNames, initialStatus, initialFilters, showVehicle, asOf, newSection }: Props) {
+export function PipelineTable({ packed, more, first, statuses, rungNames, initialStatus, initialFilters, showVehicle, asOf, newSection }: Props) {
   const router = useRouter();
-  const given = useMemo(() => unpackRows<PipelineRow>(packed), [packed]);
+  // The first screen draws from its own rows; every row replaces them as soon as they have arrived (16 Oct 2026).
+  const [whole, setWhole] = useState<PackedRows | null>(null);
+  useEffect(() => {
+    let live = true;
+    more?.then((p) => { if (live) setWhole(p); }, () => undefined);
+    return () => { live = false; };
+  }, [more]);
+  const complete = !more || whole !== null;
+  const given = useMemo(() => unpackRows<PipelineRow>(whole ?? packed), [whole, packed]);
   // Move to Selected and Set status show at once, ahead of the server (useMove).
   const mv = useMove('pipeline', given);
   const rows = mv.rows;
   const view = useLpView({ rows, statuses, asOf, initialFilters, mode: 'pipeline', initialStatus });
-  const { enabled, setEnabled, counts, active, shown, sort, sortBy, picked, pick, pickedRows, now } = view;
+  const { enabled, setEnabled, active, shown, sort, sortBy, picked, pick, pickedRows, now } = view;
+  // Until every row is here, the counts are the server's, worked out over all of them.
+  const counts = complete || !first ? view.counts : {
+    all: new Map(Object.entries(first.counts.all) as [Status, number][]), matching: new Map(Object.entries(first.counts.matching) as [Status, number][]),
+  };
+  const total = complete || !first ? rows.length : first.total;
+  const sum = (m: Map<Status, number>, only?: Status[]) => [...m].reduce((t, [k, v]) => (!only || only.includes(k) ? t + v : t), 0);
+  const filteredTotal = complete || !first ? view.filtered.length : sum(counts.matching);
+  const shownTotal = complete || !first ? shown.length : sum(counts.matching, enabled);
   const [limit, setLimit] = useState(FIRST_ROWS);
   const moreRef = useGrowOnScroll(() => setLimit((x) => x + PAGE), limit);
   const shownIds = useMemo(() => new Set(shown.map((r) => r.id)), [shown]);
@@ -70,12 +91,18 @@ export function PipelineTable({ packed, statuses, rungNames, initialStatus, init
     const href = lpHref(r);
     if (e?.metaKey || e?.ctrlKey) window.open(href, '_blank'); else router.push(href);
   }, [router]);
+  // The page a click would open, fetched while the pointer rests on its row or the cursor is on it, and the first
+  // rows' once the list is idle (16 Oct 2026; components/ui/prefetch.ts).
+  const prefetch = usePrefetch();
+  usePrefetchFirst(visible.map(lpHref));
+  const hover = useCallback((r: PipelineRow, on: boolean) => (on ? prefetch.intent(lpHref(r)) : prefetch.cancel(lpHref(r))), [prefetch]);
 
   // The keyboard (issues 0111, 0121), as on Selection: a cursor that moves through the list, the
   // shared one (row-cursor.ts). None until an arrow key or a tick box puts it somewhere.
   const resetKey = `${enabled.join()}|${JSON.stringify(view.f)}|${sort.key}${sort.dir}`;
   const cursor = useRowCursor({ ranked, defaultFirst: false, limit, setLimit, page: PAGE, resetKey });
   const { focus, reveal, setFocus: setFocusId } = cursor;
+  useEffect(() => { if (!focus) return; const href = lpHref(focus); prefetch.intent(href); return () => prefetch.cancel(href); }, [focus, prefetch]);
   // A link to the same person's or firm's other row: if the toggles or the status hide it, show it first.
   const [pending, setPending] = useState<string | null>(null);
   const jump = (id: string) => {
@@ -135,8 +162,8 @@ export function PipelineTable({ packed, statuses, rungNames, initialStatus, init
   // The rendered rows, kept while the cursor moves: each row reads the cursor itself (issue 0121).
   const rowEls = useMemo(() => visible.map((r) => <Row key={r.id} r={r} picked={picked.has(r.id)} cursor={cursor.store}
     statusLabel={statuses.find((x) => x.id === r.status)?.label ?? r.status}
-    all={all} byVehicle={byVehicle} rungNames={rungNames} now={now} onPick={pick} onOpen={open} onFocus={setFocusId} onJump={onJump} />),
-  [visible, picked, cursor.store, statuses, all, byVehicle, rungNames, now, pick, open, setFocusId, onJump]);
+    all={all} byVehicle={byVehicle} rungNames={rungNames} now={now} onPick={pick} onOpen={open} onFocus={setFocusId} onHover={hover} onJump={onJump} />),
+  [visible, picked, cursor.store, statuses, all, byVehicle, rungNames, now, pick, open, setFocusId, hover, onJump]);
 
   const Th = ({ k, className, children }: { k: SortKey; className: string; children: string }) => {
     const on = sort.key === k;
@@ -166,7 +193,7 @@ export function PipelineTable({ packed, statuses, rungNames, initialStatus, init
         <button type="button" role="tab" aria-selected={all} title="Every LP, across all seven statuses."
           className={cx(s.tab, s.all, all && s.on)} onClick={() => setEnabled(statuses.map((x) => x.id))}>
           <span className={s.tabLabel}>All</span>
-          <span className={s.tabNum}>{n(active ? view.filtered.length : rows.length)}{active && <span className={s.tabOf}> of {n(rows.length)}</span>}</span>
+          <span className={s.tabNum}>{n(active ? filteredTotal : total)}{active && <span className={s.tabOf}> of {n(total)}</span>}</span>
         </button>
       </div>
 
@@ -186,16 +213,16 @@ export function PipelineTable({ packed, statuses, rungNames, initialStatus, init
         <div className={s.head}>
           <h2>{all ? 'All statuses' : one?.label ?? 'Pipeline'}</h2>
           <div className={s.headMeta}>
-            {n(shown.length)}{active ? ` of ${n(all ? rows.length : counts.all.get(one?.id as Status) ?? 0)}` : ''} LPs
-            {` · ${units(orgCount, ranked.length - orgCount)}`}
+            {n(shownTotal)}{active ? ` of ${n(all ? total : counts.all.get(one?.id as Status) ?? 0)}` : ''} LPs
+            {` · ${complete || !first ? units(orgCount, ranked.length - orgCount) : units(first.shown.orgs, first.shown.total - first.shown.orgs)}`}
             {one && <span> · {one.means}</span>}
           </div>
           <div className={s.keysHint}><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>x</kbd> tick · <kbd>s</kbd> to Selected · <kbd>↵</kbd> open</div>
           <div className={s.headTools}>
             {picked.size > 0 && <span className={s.small} style={{ margin: 0 }}>{n(picked.size)} selected</span>}
-            <button type="button" className={s.linkBtn} disabled={!shown.length}
+            <button type="button" className={s.linkBtn} disabled={!shown.length || !complete}
               onClick={() => (shown.every((r) => picked.has(r.id)) ? pick(shown.map((r) => r.id), false) : pick(shown.map((r) => r.id), true))}>
-              {shown.length && shown.every((r) => picked.has(r.id)) ? 'Unselect all' : `Select all ${n(shown.length)}`}
+              {shown.length && shown.every((r) => picked.has(r.id)) ? 'Unselect all' : `Select all ${n(shownTotal)}`}
             </button>
           </div>
         </div>
@@ -261,6 +288,7 @@ interface Cols {
   onOpen: (r: PipelineRow, e?: { metaKey?: boolean; ctrlKey?: boolean }) => void;
   onFocus: (id: string) => void;
   onJump: (id: string) => void;
+  onHover: (r: PipelineRow, on: boolean) => void;
 }
 /** A row opens its LP; the controls inside it keep their own clicks. */
 const rowClick = (open: () => void) => (e: React.MouseEvent) => {
@@ -270,7 +298,7 @@ const rowClick = (open: () => void) => (e: React.MouseEvent) => {
 const known = (c: string | null) => (c && !/unknown/i.test(c) ? c : null);
 
 /** One LP unit (docs/23): an organisation with its people named, or an individual with their firms. */
-const Row = memo(function Row({ r, picked, cursor, statusLabel, all, byVehicle, rungNames, now, onPick, onOpen, onFocus, onJump }: Cols & {
+const Row = memo(function Row({ r, picked, cursor, statusLabel, all, byVehicle, rungNames, now, onPick, onOpen, onFocus, onHover, onJump }: Cols & {
   r: PipelineRow; picked: boolean; cursor: CursorStore; statusLabel: string;
 }) {
   const focused = useIsCursor(cursor, r.id);
@@ -279,6 +307,7 @@ const Row = memo(function Row({ r, picked, cursor, statusLabel, all, byVehicle, 
   return (
     <tr data-lp={r.id} className={cx(s.row, picked && s.picked, focused && u.focus)} tabIndex={0} aria-selected={focused}
       onClick={rowClick(() => onOpen(r))} onFocus={(e) => { if (e.target === e.currentTarget) onFocus(r.id); }}
+      onPointerEnter={() => onHover(r, true)} onPointerLeave={() => onHover(r, false)}
       onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) { e.stopPropagation(); onOpen(r, e); } }}>
       {/* Ticking a row puts the cursor on it too, so the arrows go on from there (issue 0121). */}
       <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => { onPick([r.id], e.target.checked); onFocus(r.id); }} /></td>

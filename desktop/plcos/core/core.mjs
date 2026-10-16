@@ -494,6 +494,31 @@ const server = http.createServer(async (req, res) => {
       state.pairing = null;
       res.writeHead(303, { location: '/__desktop/pair' }).end(); return;
     }
+    // Picking a vehicle only sets the shared vehicle cookie (app/api/session/route.ts): answered here, so the switch
+    // does not wait on the live server (a round trip before every vehicle change, 15 Oct 2026). Anything else in the
+    // request (switching people) still goes to the server.
+    if (url.pathname === '/api/session' && req.method === 'POST' && state.session && state.user) {
+      const body = await readBody(req);
+      let ask = null;
+      try { ask = JSON.parse(body.toString('utf8')); } catch { /* sent on below */ }
+      if (ask && typeof ask.vehicleSlug === 'string' && /^[a-z0-9-]{1,64}$/.test(ask.vehicleSlug) && Object.keys(ask).length === 1) {
+        let map = {};
+        try { const cur = state.jar.vehicle; if (cur && cur.startsWith('{')) map = JSON.parse(cur) ?? {}; } catch { map = {}; }
+        map[state.user.handle] = ask.vehicleSlug;
+        state.jar.vehicle = JSON.stringify(map);
+        saveJar();
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end('{"ok":true}');
+        return;
+      }
+      forward(req, res, url, 'remote', body);
+      return;
+    }
+    if (url.pathname === '/__desktop/perf' && req.method === 'POST') {
+      // Click and load timings from the window (src-tauri's init script), one JSON line each in perf.log.
+      const body = (await readBody(req)).toString('utf8').slice(0, 4000);
+      try { appendFileSync(path.join(DATA_DIR, 'perf.log'), `${JSON.stringify({ at: new Date().toISOString(), ...JSON.parse(body) })}\n`); } catch { /* best effort */ }
+      res.writeHead(204).end(); return;
+    }
     if (url.pathname === '/__desktop/sync' && req.method === 'POST') {
       await readBody(req);
       state.local?.syncNow?.();

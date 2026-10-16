@@ -265,3 +265,53 @@ export function matches(r: PipelineRow, f: Filters, words: string[], now: number
   if (f.strategic !== 'any' && f.strategic !== 'useful' && r.strategic.level !== f.strategic) return false;
   return true;
 }
+
+/** Selection opens on New and Sourcing; Pipeline on the most advanced status with somebody in it. */
+export const SELECTION_DEFAULT: Status[] = ['new', 'sourcing'];
+const OPENING_ORDER: Status[] = ['discussing', 'committed', 'connecting', 'selected', 'sourcing', 'new', 'passed'];
+/** The statuses a list opens on (useLpView): from the address, else the page's choice, else the default above. */
+export function openingStatuses(raw: string | undefined, ids: Status[], mode: 'pipeline' | 'selection',
+  initialStatus: Status | 'all' | null | undefined, rows: Pick<PipelineRow, 'status'>[]): Status[] {
+  if (raw === 'all') return ids;
+  const asked = raw?.split(',').filter((x): x is Status => ids.includes(x as Status));
+  if (asked?.length) return mode === 'pipeline' ? [asked[0]!] : asked;
+  if (mode === 'selection') return SELECTION_DEFAULT;
+  if (initialStatus === 'all') return ids;
+  if (initialStatus) return [initialStatus];
+  const first = OPENING_ORDER.find((id) => rows.some((r) => r.status === id));
+  return first ? [first] : ids;
+}
+
+/** The counts a list shows until every row has arrived (firstScreen). */
+export interface FirstScreen {
+  counts: { all: Partial<Record<Status, number>>; matching: Partial<Record<Status, number>> };
+  total: number;
+  shown: { total: number; orgs: number; scored: number };
+}
+
+/**
+ * What a list's first screen needs, worked out where every row is (16 Oct 2026): the rows it opens on, in its
+ * opening order, and each status's counts. A page sends these at once and the whole set right after, in the same
+ * response, so the list shows before 4,000 rows have arrived and been unpacked.
+ */
+export function firstScreen(rows: PipelineRow[], o: { ids: Status[]; mode: 'pipeline' | 'selection'; initialStatus?: Status | 'all' | null;
+  initialFilters?: Record<string, string>; asOf: string; limit: number }) {
+  const given = o.initialFilters ?? {};
+  const enabled = openingStatuses(given.status, o.ids, o.mode, o.initialStatus, rows);
+  const f = filtersFrom(given), sort = sortFrom(given);
+  const words = f.q.toLowerCase().split(/\s+/).filter(Boolean), now = Date.parse(o.asOf);
+  const all: Partial<Record<Status, number>> = {}, matching: Partial<Record<Status, number>> = {};
+  const shown: PipelineRow[] = [];
+  let orgs = 0, scored = 0;
+  for (const r of rows) {
+    all[r.status] = (all[r.status] ?? 0) + 1;
+    if (!matches(r, f, words, now)) continue;
+    matching[r.status] = (matching[r.status] ?? 0) + 1;
+    if (!enabled.includes(r.status)) continue;
+    shown.push(r);
+    if (r.isOrg) orgs++;
+    if (r.score !== null) scored++;
+  }
+  return { rows: rankRows(shown, sort.key, sort.dir).slice(0, o.limit), counts: { all, matching }, total: rows.length,
+    shown: { total: shown.length, orgs, scored } };
+}

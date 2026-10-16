@@ -1,5 +1,5 @@
 import type { PipelineRow } from '@/components/strategy/pipeline-model';
-import { forBrowser } from '@/components/strategy/pipeline-model';
+import { firstScreen, forBrowser, type Status } from '@/components/strategy/pipeline-model';
 import { packRows, type PackedRows } from '@/lib/packed-rows';
 
 /**
@@ -9,8 +9,41 @@ import { packRows, type PackedRows } from '@/lib/packed-rows';
  * The packed value is shared: never change it.
  */
 const packed = new WeakMap<readonly PipelineRow[], PackedRows>();
-export function packPipelineRows(rows: readonly PipelineRow[]): PackedRows {
-  let value = packed.get(rows);
-  if (!value) { value = packRows(rows.map(forBrowser)); packed.set(rows, value); }
+const packedLean = new WeakMap<readonly PipelineRow[], PackedRows>();
+/**
+ * `lean`: for the Pipeline table, which sorts and filters on the strategic level and points but never shows the
+ * reasons behind them; those texts were 430 KB of Neurotech's 1.6 MB (16 Oct 2026). Selection shows them, so it
+ * packs them whole.
+ */
+export function packPipelineRows(rows: readonly PipelineRow[], { lean = false }: { lean?: boolean } = {}): PackedRows {
+  const memo = lean ? packedLean : packed;
+  let value = memo.get(rows);
+  if (!value) {
+    value = packRows(rows.map((r) => {
+      const b = forBrowser(r);
+      return lean ? { ...b, strategic: { ...b.strategic, reasons: [] } } : b;
+    }));
+    memo.set(rows, value);
+  }
   return value;
+}
+
+/** The rows a list's first screen shows (GUESS: its 30 visible rows and a few to move the cursor through). */
+const FIRST_SCREEN = 40;
+
+/**
+ * A list's rows in two parts (16 Oct 2026): its first screen, packed small and sent at once, and every row, sent in
+ * the same response right after it. The table shows on the first part; Neurotech's Pipeline was 1.2 MB to send and
+ * unpack before anything showed. Spread into PipelineTable's or SelectionBoard's props.
+ */
+export function firstThenRest(rows: readonly PipelineRow[], o: { ids: Status[]; mode: 'pipeline' | 'selection';
+  initialStatus?: Status | 'all' | null; initialFilters?: Record<string, string>; asOf: string; lean?: boolean }) {
+  const lean = o.lean ?? true;
+  // A link to one LP opens with the cursor on it, wherever it ranks: send every row at once.
+  if (o.initialFilters?.lp) return { packed: packPipelineRows(rows, { lean }) };
+  const first = firstScreen(rows as PipelineRow[], { ...o, limit: FIRST_SCREEN });
+  const packed = packRows(first.rows.map((r) => { const b = forBrowser(r); return lean ? { ...b, strategic: { ...b.strategic, reasons: [] } } : b; }));
+  // Resolved on a later turn, so the first part is written before the whole set is.
+  const more = new Promise<PackedRows>((resolve) => setTimeout(() => resolve(packPipelineRows(rows, { lean })), 0));
+  return { packed, more, first: { counts: first.counts, total: first.total, shown: first.shown } };
 }
