@@ -50,7 +50,7 @@ export async function strategyRouteSummaries(ids: string[], kind: string, contac
   const result = new Map<string, RecordedRoute>();
   for (const id of ids) {
     const endpointContacts = new Map((contacts.get(id) ?? []).map(c => [c.entityId, c]));
-    const chains = new Map<string, { route: Route; at: Date; current: boolean }>();
+    const chains = new Map<string, { route: Route; contact: LpContact | undefined; row: { computed_at: Date; input_revision: string; revision: string } }>();
     const own = byTarget.get(id);
     if (!endpointContacts.size) {
       // Individuals keep the original stored ranking and count. A removed firm contact
@@ -66,14 +66,18 @@ export async function strategyRouteSummaries(ids: string[], kind: string, contac
       const row = byTarget.get(endpoint);
       for (const original of row?.routes ?? []) {
         if (original.viaContact && !endpointContacts.has(original.viaContact.entityId)) continue;
-        const contact = endpointContacts.get(endpoint);
-        const route = contact ? { ...original, viaContact: contact } : original;
-        const key = [route.fromEntity, ...route.hops.map(h => h.toEntity)].join('|');
+        // The contact replaces viaContact only on the route kept, so nothing is copied per candidate (16 Oct 2026).
+        let key: string = original.fromEntity ?? '';
+        for (const h of original.hops) key += '|' + (h.toEntity ?? '');
         const prior = chains.get(key);
-        if (!prior || route.weakestTier < prior.route.weakestTier) chains.set(key, { route, at: new Date(row!.computed_at), current: isCurrent(row!) });
+        if (!prior || original.weakestTier < prior.route.weakestTier) chains.set(key, { route: original, contact: endpointContacts.get(endpoint), row: row! });
       }
     }
-    const best = [...chains.values()].sort((a, b) => a.route.weakestTier.localeCompare(b.route.weakestTier))[0];
+    // The first chain with the strongest tier, as a stable sort by tier would give.
+    let kept: { route: Route; contact: LpContact | undefined; row: { computed_at: Date; input_revision: string; revision: string } } | undefined;
+    for (const chain of chains.values()) if (!kept || chain.route.weakestTier.localeCompare(kept.route.weakestTier) < 0) kept = chain;
+    const best = kept && { route: kept.contact ? { ...kept.route, viaContact: kept.contact } : kept.route,
+      at: new Date(kept.row.computed_at), current: isCurrent(kept.row) };
     if (!best && !own) continue;
     const route = best?.route;
     result.set(id, { entityId: id, count: chains.size, at: best?.at ?? new Date(own!.computed_at), tier: route?.weakestTier ?? null,
