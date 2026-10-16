@@ -5,7 +5,7 @@ import Link, { inDesktopApp, usePrefetchPages } from '@/components/ui/AppLink';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BulkLpActions } from './BulkLpActions';
-import { EMPTY, rankRows, unitShown, unitsFrom, unitsOn, lead, type PipelineRow, type SortKey, type Status } from './pipeline-model';
+import { EMPTY, rankRows, unitShown, unitsFrom, unitsOn, lead, type FirstScreen, type PipelineRow, type SortKey, type Status } from './pipeline-model';
 import { CapacityTag, LpWho, units } from './LpWho';
 import { UnitIcon } from './UnitIcon';
 import { FIRST_ROWS, useGrowOnScroll, useIsCursor, useRowCursor, type CursorStore } from './row-cursor';
@@ -36,7 +36,7 @@ interface Props {
   /** Every row, arriving after the first screen in the same response (pipeline-model firstScreen). */
   more?: Promise<PackedRows>;
   /** The counts the first screen shows until every row is here. */
-  first?: { counts: { all: Partial<Record<Status, number>>; matching: Partial<Record<Status, number>> }; total: number };
+  first?: FirstScreen;
   statuses: StatusInfo[];
   rungNames: string[];
   initialStatus: Status | 'all' | null;
@@ -211,7 +211,7 @@ export function PipelineTable({ packed, more, first, statuses, rungNames, initia
           <h2>{all ? 'All statuses' : one?.label ?? 'Pipeline'}</h2>
           <div className={s.headMeta}>
             {n(shownTotal)}{active ? ` of ${n(all ? total : counts.all.get(one?.id as Status) ?? 0)}` : ''} LPs
-            {` · ${units(orgCount, ranked.length - orgCount)}`}
+            {` · ${complete || !first ? units(orgCount, ranked.length - orgCount) : units(first.shown.orgs, first.shown.total - first.shown.orgs)}`}
             {one && <span> · {one.means}</span>}
           </div>
           <div className={s.keysHint}><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>x</kbd> tick · <kbd>s</kbd> to Selected · <kbd>↵</kbd> open</div>

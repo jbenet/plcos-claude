@@ -34,13 +34,16 @@ const FIRST_SCREEN = 40;
 /**
  * A list's rows in two parts (16 Oct 2026): its first screen, packed small and sent at once, and every row, sent in
  * the same response right after it. The table shows on the first part; Neurotech's Pipeline was 1.2 MB to send and
- * unpack before anything showed. Spread into PipelineTable's props.
+ * unpack before anything showed. Spread into PipelineTable's or SelectionBoard's props.
  */
 export function firstThenRest(rows: readonly PipelineRow[], o: { ids: Status[]; mode: 'pipeline' | 'selection';
-  initialStatus?: Status | 'all' | null; initialFilters?: Record<string, string>; asOf: string }) {
+  initialStatus?: Status | 'all' | null; initialFilters?: Record<string, string>; asOf: string; lean?: boolean }) {
+  const lean = o.lean ?? true;
+  // A link to one LP opens with the cursor on it, wherever it ranks: send every row at once.
+  if (o.initialFilters?.lp) return { packed: packPipelineRows(rows, { lean }) };
   const first = firstScreen(rows as PipelineRow[], { ...o, limit: FIRST_SCREEN });
-  const packed = packRows(first.rows.map((r) => { const b = forBrowser(r); return { ...b, strategic: { ...b.strategic, reasons: [] } }; }));
+  const packed = packRows(first.rows.map((r) => { const b = forBrowser(r); return lean ? { ...b, strategic: { ...b.strategic, reasons: [] } } : b; }));
   // Resolved on a later turn, so the first part is written before the whole set is.
-  const more = new Promise<PackedRows>((resolve) => setTimeout(() => resolve(packPipelineRows(rows, { lean: true })), 0));
-  return { packed, more, first: { counts: first.counts, total: first.total } };
+  const more = new Promise<PackedRows>((resolve) => setTimeout(() => resolve(packPipelineRows(rows, { lean })), 0));
+  return { packed, more, first: { counts: first.counts, total: first.total, shown: first.shown } };
 }

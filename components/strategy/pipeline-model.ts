@@ -282,6 +282,13 @@ export function openingStatuses(raw: string | undefined, ids: Status[], mode: 'p
   return first ? [first] : ids;
 }
 
+/** The counts a list shows until every row has arrived (firstScreen). */
+export interface FirstScreen {
+  counts: { all: Partial<Record<Status, number>>; matching: Partial<Record<Status, number>> };
+  total: number;
+  shown: { total: number; orgs: number; scored: number };
+}
+
 /**
  * What a list's first screen needs, worked out where every row is (16 Oct 2026): the rows it opens on, in its
  * opening order, and each status's counts. A page sends these at once and the whole set right after, in the same
@@ -295,11 +302,16 @@ export function firstScreen(rows: PipelineRow[], o: { ids: Status[]; mode: 'pipe
   const words = f.q.toLowerCase().split(/\s+/).filter(Boolean), now = Date.parse(o.asOf);
   const all: Partial<Record<Status, number>> = {}, matching: Partial<Record<Status, number>> = {};
   const shown: PipelineRow[] = [];
+  let orgs = 0, scored = 0;
   for (const r of rows) {
     all[r.status] = (all[r.status] ?? 0) + 1;
     if (!matches(r, f, words, now)) continue;
     matching[r.status] = (matching[r.status] ?? 0) + 1;
-    if (enabled.includes(r.status)) shown.push(r);
+    if (!enabled.includes(r.status)) continue;
+    shown.push(r);
+    if (r.isOrg) orgs++;
+    if (r.score !== null) scored++;
   }
-  return { rows: rankRows(shown, sort.key, sort.dir).slice(0, o.limit), counts: { all, matching }, total: rows.length };
+  return { rows: rankRows(shown, sort.key, sort.dir).slice(0, o.limit), counts: { all, matching }, total: rows.length,
+    shown: { total: shown.length, orgs, scored } };
 }

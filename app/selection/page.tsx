@@ -3,7 +3,7 @@ import { Page } from '@/components/shell/Page';
 import { SelectionBoard } from '@/components/strategy/SelectionBoard';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
-import { packPipelineRows } from '@/lib/pipeline-packed';
+import { firstThenRest } from '@/lib/pipeline-packed';
 import { pipelineData } from '@/lib/authz/read/pipeline';
 import { RUNGS, RUNG_LABEL, STATUSES } from '@/lib/authz/read/strategy';
 import { formatDate } from '@/lib/time';
@@ -30,7 +30,7 @@ async function Selection({ searchParams }: { searchParams: Promise<Record<string
       </p>
       <SelectionBoard
         key={current?.id ?? 'all'}
-        packed={packPipelineRows(rows)}
+        {...firstThenRest(rows, { ids: STATUSES.map((s) => s.id), mode: 'selection', initialFilters: filters, asOf, lean: false })}
         asOf={asOf}
         statuses={STATUSES.map((s) => ({ id: s.id, label: s.label, means: s.means }))}
         rungNames={RUNGS.map((r) => RUNG_LABEL[r])}
