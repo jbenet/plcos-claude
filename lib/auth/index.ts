@@ -8,6 +8,7 @@
  */
 import type { Queryable } from '@/lib/db';
 import type { AppUser } from '@/modules/platform';
+import { cache } from 'react';
 import { config } from '@/config/deployment';
 
 export type { AppUser };
@@ -45,7 +46,9 @@ export async function auth(): Promise<AuthProvider> {
   return localAuth();
 }
 
-/** Convenience for server components. */
-export async function currentUser(): Promise<AppUser> {
-  return (await auth()).currentUser();
-}
+/**
+ * Convenience for server components. Once per page render: a page's sections each ask, and each asking read the
+ * person's row again (an LP page read it 5 times, performance pass 16 Oct 2026). Outside a render (a server action,
+ * a route handler, an MCP call) React's cache keeps nothing, so a change a person makes is read fresh.
+ */
+export const currentUser: () => Promise<AppUser> = cache(async () => (await auth()).currentUser());
