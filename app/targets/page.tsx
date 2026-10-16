@@ -75,7 +75,7 @@ async function Pipeline({ searchParams }: { searchParams: Promise<Record<string,
 
       <PipelineTable
         key={current?.id ?? 'all'}
-        packed={packPipelineRows(rows)}
+        packed={packPipelineRows(rows, { lean: true })}
         asOf={asOf}
         statuses={STATUSES.map((s) => ({ id: s.id, label: s.label, means: s.means }))}
         rungNames={RUNGS.map((r) => RUNG_LABEL[r])}

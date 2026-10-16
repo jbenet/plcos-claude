@@ -9,8 +9,21 @@ import { packRows, type PackedRows } from '@/lib/packed-rows';
  * The packed value is shared: never change it.
  */
 const packed = new WeakMap<readonly PipelineRow[], PackedRows>();
-export function packPipelineRows(rows: readonly PipelineRow[]): PackedRows {
-  let value = packed.get(rows);
-  if (!value) { value = packRows(rows.map(forBrowser)); packed.set(rows, value); }
+const packedLean = new WeakMap<readonly PipelineRow[], PackedRows>();
+/**
+ * `lean`: for the Pipeline table, which sorts and filters on the strategic level and points but never shows the
+ * reasons behind them; those texts were 430 KB of Neurotech's 1.6 MB (16 Oct 2026). Selection shows them, so it
+ * packs them whole.
+ */
+export function packPipelineRows(rows: readonly PipelineRow[], { lean = false }: { lean?: boolean } = {}): PackedRows {
+  const memo = lean ? packedLean : packed;
+  let value = memo.get(rows);
+  if (!value) {
+    value = packRows(rows.map((r) => {
+      const b = forBrowser(r);
+      return lean ? { ...b, strategic: { ...b.strategic, reasons: [] } } : b;
+    }));
+    memo.set(rows, value);
+  }
   return value;
 }
