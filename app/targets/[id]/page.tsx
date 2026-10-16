@@ -374,7 +374,8 @@ async function TargetWorkspace({ params, searchParams }: {
       {/* Each kind of detail on its own tab, with its own address (design A, step 2). */}
       <nav className={hd.tabs} aria-label="LP detail">
         {TABS.map((k) => (
-        <Link key={k} href={k === 'activity' ? base : `${base}?tab=${k}`} aria-current={k === tab ? 'page' : undefined}>
+        // The other tabs are fetched whole as soon as the page shows, so a tab click answers at once (16 Oct 2026).
+        <Link key={k} href={k === 'activity' ? base : `${base}?tab=${k}`} aria-current={k === tab ? 'page' : undefined} prefetch={k === tab ? undefined : true}>
           {TAB_LABEL[k]}{count[k] ? <small>{count[k]}</small> : null}
         </Link>
         ))}

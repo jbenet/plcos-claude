@@ -4,6 +4,7 @@ import Link from '@/components/ui/AppLink';
 
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { usePrefetch } from '@/components/ui/prefetch';
 import { scoreDetailAction } from '@/app/selection/actions';
 import { actionFailure } from '@/lib/client/action-failure';
 import type { ScoreDetail } from '@/lib/pipeline-data';
@@ -71,6 +72,14 @@ export function SelectionBoard({ packed, statuses, rungNames, initialFilters, sh
   const resetKey = `${enabled.join()}|${JSON.stringify(view.f)}|${sort.key}${sort.dir}`;
   const cursor = useRowCursor({ ranked, initialId: initialFilters?.lp ?? null, defaultFirst: true, limit, setLimit, page: PAGE, resetKey });
   const { focusId, focus, reveal, setFocus: setFocusId } = cursor;
+  // The row in focus is the likeliest to be opened next: its LP page is fetched ahead (16 Oct 2026).
+  const prefetch = usePrefetch();
+  useEffect(() => {
+    if (!focus) return;
+    const href = `/${focus.vehicleSlug}/pipeline/${focus.id}`;
+    prefetch.intent(href);
+    return () => prefetch.cancel(href);
+  }, [focus, prefetch]);
   // One copy of the reasons: beside the list when there is room, under the LP in focus when not.
   const wrap = useRef<HTMLElement>(null);
   const [narrow, setNarrow] = useState(false);

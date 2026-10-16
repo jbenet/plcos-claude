@@ -20,9 +20,6 @@ const config: NextConfig = {
   agentRules: false,
   // The floating dev badge sits on top of the user switcher in the rail.
   devIndicators: false,
-  // A page fetched ahead of a click (the Mac app prefetches every link in view, components/ui/AppLink.tsx) is used for
-  // 30 s rather than Next's 5 minutes, so a page opened later is read fresh (15 Oct 2026).
-  experimental: { staleTimes: { static: 30 } },
   // Both servers can run at once — the demo for screenshots, the real one for work — and two
   // dev servers cannot share a build directory.
   // A production build of the real profile (npm run build:real, issue 0023) has its own directory
@@ -36,6 +33,13 @@ const config: NextConfig = {
    * deployment. There is no sign-in either: anyone on that network can read and change the
    * real data.
    */
+  experimental: {
+    // A page fetched ahead of a click (components/ui/prefetch.ts) or just seen is shown from the browser's copy for
+    // this long (seconds) when opened, rather than built again: tabs and back-and-forth answer at once. Next keeps a
+    // prefetched page 5 minutes otherwise. A person's own change empties it (revalidatePath, router.refresh); a
+    // colleague's or an agent's shows after at most this long (15–16 Oct 2026). GUESS: 30 s.
+    staleTimes: { dynamic: 30, static: 30 },
+  },
   allowedDevOrigins: ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '*.local', 'localhost', '127.0.0.1'],
 };
 
