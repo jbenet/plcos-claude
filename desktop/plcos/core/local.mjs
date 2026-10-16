@@ -176,7 +176,10 @@ class LocalCopy {
       if (!url.pathname.startsWith('/_next/') && !url.pathname.startsWith('/api/')) this.lastPageAt = Date.now();
     }
     if (this.phase !== 'ready') return false;
-    if (this.serverCommit && this.build?.commit !== this.serverCommit) return false;
+    // A new build on the server: this one keeps answering, with the data it was built for, while the new one downloads
+    // (about 8 s), and stops only to be replaced (16 Oct 2026). Sending pages to the server meanwhile reached a build that
+    // had just started and had built nothing yet, and mixed two builds in one window. Its own changes still go there.
+    if (this.serverCommit && this.build?.commit !== this.serverCommit && !this.next) return false;
     if (this.settling()) return false;
     return !REMOTE_ONLY.some((r) => r.test(url.pathname));
   }
