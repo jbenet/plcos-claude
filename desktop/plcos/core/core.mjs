@@ -18,6 +18,7 @@ import http from 'node:http';
 import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -330,9 +331,10 @@ function forward(req, res, url, which, body, { retryRemoteOnError = false } = {}
       void refreshInfo();
     }
     out['x-plcos-upstream'] = which;
-    // Choosing a vehicle (or person) only sets a cookie: it is not a write the copy must catch up with, and counting it
-    // sent every page after a vehicle switch to the live server for seconds.
-    if (which === 'remote' && !(req.method === 'GET' || req.method === 'HEAD') && upRes.statusCode < 400 && url.pathname !== '/api/session') {
+    // Choosing a vehicle (or person) only sets a cookie, and a read-only action (local.mjs READ_ACTIONS) changes nothing:
+    // neither is a write the copy must catch up with, and counting one sent every page after it to the live server.
+    const readOnly = Boolean(req.headers['next-action'] && state.local?.readsOnly?.(String(req.headers['next-action'])));
+    if (which === 'remote' && !(req.method === 'GET' || req.method === 'HEAD') && upRes.statusCode < 400 && url.pathname !== '/api/session' && !readOnly) {
       state.lastWriteAt = Date.now();
       state.stats.writes++;
       state.local?.onWrite?.(url);
@@ -567,6 +569,15 @@ async function boot() {
 server.on('error', (e) => { log('cannot listen:', String(e.message)); process.exit(e.code === 'EADDRINUSE' ? 3 : 1); });
 server.listen(PORT, '127.0.0.1', () => {
   log(`core ${VERSION} on ${ORIGIN}, server ${SERVER.origin}, data ${DATA_DIR}`);
+  // This process answers every click in the window, so time it cannot answer is time a click waits (16 Oct 2026): each
+  // minute with a pause over 100 ms is logged, to read perf.log's clicks against.
+  const lag = monitorEventLoopDelay({ resolution: 20 });
+  lag.enable();
+  setInterval(() => {
+    const max = Math.round(lag.max / 1e6);
+    if (max > 100) log(`event loop held up to ${max} ms (p99 ${Math.round(lag.percentile(99) / 1e6)} ms) in the last minute`);
+    lag.reset();
+  }, 60_000).unref();
   process.stdout.write(`PLCOS_DESKTOP_READY ${ORIGIN}\n`);
   boot().catch((e) => log('boot failed', String(e?.stack ?? e)));
 });

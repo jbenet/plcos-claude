@@ -62,4 +62,15 @@ export async function desktopProperties(check: Check) {
   check('desktop pairing makes room when full by dropping the oldest unanswered one',
     pendingPairing(room.userCode, 5000) !== null, room.userCode);
   resetPairings();
+
+  // The Mac app's core leaves a sync page's rows as text for Postgres (desktop/plcos/core/local.mjs, 16 Oct 2026).
+  const core = './../../desktop/plcos/core/local.mjs';
+  const { splitRowsPage } = await import(core) as { splitRowsPage: (t: string) => { rows: string; n: number; next: unknown; count: unknown; horizon: unknown } | null };
+  const tricky = [{ id: 'a,"rows":[x', search: { rows: [1], next: ['b'], q: 'said ,"rows":[ and }' } }, { id: 'b\\"' }];
+  const page = (next: unknown, rows: unknown[]) => `{"ok":true,"horizon":"7","n":${rows.length},"next":${JSON.stringify(next)},"count":null,"rows":${JSON.stringify(rows)}}`;
+  const split = splitRowsPage(page(['a,"rows":[', 'x'], tricky));
+  check('desktop sync page keeps its rows as text, exactly',
+    Boolean(split) && JSON.stringify(JSON.parse(split!.rows)) === JSON.stringify(tricky) && JSON.stringify(split!.next) === JSON.stringify(['a,"rows":[', 'x']) && split!.n === 2, JSON.stringify(split?.next));
+  check('desktop sync page in another shape is parsed whole, not split',
+    splitRowsPage('{"ok":true,"horizon":"1","next":null,"rows":[]}') === null && splitRowsPage('{"ok":false,"error":"x"}') === null && splitRowsPage(page(null, []))?.n === 0, 'shapes');
 }
