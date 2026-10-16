@@ -169,14 +169,15 @@ const INIT_SCRIPT: &str = r#"
   // A plain link to one of the app's own pages opens in place, as the app's own links do (16 Oct 2026). A page that
   // still used <a> for an LP reloaded the whole window, 1-2 s here, against 4 ms for the page from the local copy.
   // Bubbling, so the app's links (which handle their own clicks first) are left alone; modified clicks, downloads,
-  // files, the API, sign-in and in-page anchors keep the browser's way.
+  // files, the API, sign-in and links to the page already open keep the browser's way.
   document.addEventListener('click', (e) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
     if (!a || a.hasAttribute('download') || (a.target && a.target !== '_self')) return;
     const u = new URL(a.getAttribute('href'), location.href);
     if (u.origin !== location.origin || /^\/(api|auth|__desktop|signin|setup|_next)(\/|$)/.test(u.pathname) || /\.[a-z0-9]+$/i.test(u.pathname)) return;
-    if (u.pathname === location.pathname && u.search === location.search && u.hash) return;
+    // The same page again is the browser's: an anchor within it, or a reload ("Try again" on an error is href="").
+    if (u.pathname === location.pathname && u.search === location.search) return;
     const router = window.next && window.next.router;
     if (!router || typeof router.push !== 'function') return;
     e.preventDefault();
