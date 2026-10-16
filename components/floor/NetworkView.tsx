@@ -1,5 +1,7 @@
 'use client';
 
+import Link from '@/components/ui/AppLink';
+
 import { useMemo, useState } from 'react';
 import type { LinkState, NetLink, NetNode, Network } from '@/lib/lenses-client';
 import { LINK_STATE_LABEL } from '@/lib/lenses-client';
@@ -260,7 +262,7 @@ export function NetworkView({ network }: { network: Network }) {
       <p className={s.netnote}>
         <b>{n(unreached)} of {n(allTargets.length)} pursuits have no recorded line in this preview.</b>{' '}
         That is a statement about our records, not about their network. {network.note}{' '}
-        <a href="/routes">Search warm routes</a> for paths beyond this preview.
+        <Link href="/routes">Search warm routes</Link> for paths beyond this preview.
       </p>
 
       <div className="fllegend">

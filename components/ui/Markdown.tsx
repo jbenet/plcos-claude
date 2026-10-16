@@ -1,3 +1,4 @@
+import Link from '@/components/ui/AppLink';
 import { parseInline, parseMarkdown, type Block, type Inline } from '@/lib/markdown';
 
 /**
@@ -40,7 +41,7 @@ export function Spans({
           return href.startsWith('http') ? (
             <a key={i} href={href} target="_blank" rel="noreferrer">{s.text}</a>
           ) : (
-            <a key={i} href={href}>{s.text}</a>
+            <Link key={i} href={href}>{s.text}</Link>
           );
         }
         return <span key={i}>{s.text}</span>;

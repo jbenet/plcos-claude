@@ -1,5 +1,7 @@
 'use client';
 
+import Link from '@/components/ui/AppLink';
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
@@ -376,7 +378,7 @@ export function EmailDraftBox({ draft, gmail, path }: { draft: DraftView; gmail:
         <span className={s.where}>
           {gmail.mode === 'off' ? <>Gmail is off here. {gmail.why}</>
             : gmail.email ? <>Goes to the Drafts of {gmail.email}{gmail.mode === 'fake' ? ' (the demo’s fake Gmail)' : ''}. Nothing is sent from here.</>
-              : <>Connect your Gmail in <a href="/settings?section=email">Preferences</a> to move drafts there. Nothing is sent from here.</>}
+              : <>Connect your Gmail in <Link href="/settings?section=email">Preferences</Link> to move drafts there. Nothing is sent from here.</>}
           {stops > 0 && <> · {stops} {stops === 1 ? 'check says' : 'checks say'} stop: read {stops === 1 ? 'it' : 'them'} before sending.</>}
         </span>
       </div>

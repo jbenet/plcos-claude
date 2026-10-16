@@ -1,5 +1,7 @@
 'use client';
 
+import Link from '@/components/ui/AppLink';
+
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Glyph } from '@/components/ui/Glyph';
@@ -222,7 +224,7 @@ export function ScoreMark({ r, href }: { r: PipelineRow; href: string }) {
   const title = `${r.scoreKind}${r.scoreAt ? `, ${fmt(r.scoreAt)}` : ''}. Describes the evidence on file, not a probability of commitment.`;
   return (
     <div className={s.score}>
-      <a className={s.scoreNum} href={href} title={title} onClick={(e) => e.stopPropagation()}>{r.score}</a>
+      <Link className={s.scoreNum} href={href} title={title} onClick={(e) => e.stopPropagation()}>{r.score}</Link>
       <span className={s.bar} aria-hidden><i className={tone(r.score)} style={{ width: `${r.score}%` }} /></span>
       <span className={cx(s.scoreKind, stale && s.stale)}>{r.scoreKind.startsWith('Fit') ? 'Fit' : stale ? 'Provisional, stale' : 'Provisional'}</span>
     </div>
@@ -257,7 +259,7 @@ export function Flags({ r, href }: { r: PipelineRow; href: string }) {
     <Disclose label={`${n(r.riskCount)} ${r.riskCount === 1 ? 'flag' : 'flags'}`}>
       <ul>
         {r.risks.map((x, i) => <li key={i}>{x}</li>)}
-        {r.riskCount > r.risks.length && <li>and {n(r.riskCount - r.risks.length)} more on the <a href={href}>LP&rsquo;s page</a></li>}
+        {r.riskCount > r.risks.length && <li>and {n(r.riskCount - r.risks.length)} more on the <Link href={href}>LP&rsquo;s page</Link></li>}
       </ul>
     </Disclose>
   );

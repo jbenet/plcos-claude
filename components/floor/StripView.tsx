@@ -1,5 +1,7 @@
 'use client';
 
+import Link from '@/components/ui/AppLink';
+
 import { Fragment } from 'react';
 import type { FloorState } from '@/lib/floor-client';
 import type { Strip, Track } from '@/lib/lenses-client';
@@ -194,7 +196,7 @@ export function StripView({ strip, floor }: { strip: Strip; floor: FloorState })
         </div>
       </section>
 
-      <p className="cover dark">{strip.note} Each cell previews at most six labels. <a href="/all/calendar">Open calendar records</a> · <a href="/agents">Open agent runs</a>.</p>
+      <p className="cover dark">{strip.note} Each cell previews at most six labels. <Link href="/all/calendar">Open calendar records</Link> · <Link href="/agents">Open agent runs</Link>.</p>
     </div>
   );
 }

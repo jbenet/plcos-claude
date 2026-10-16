@@ -1,5 +1,7 @@
 'use client';
 
+import Link from '@/components/ui/AppLink';
+
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { scoreDetailAction } from '@/app/selection/actions';
@@ -212,10 +214,10 @@ export function SelectionBoard({ packed, statuses, rungNames, initialFilters, sh
       </>}
       links={single && (
         <div className={m.links} role="group" aria-label={`Open ${lead(single)}`}>
-          <a className="btn" href={`/${single.vehicleSlug}/pipeline/${single.id}`}>LP page</a>
-          <a className="btn" href={`/${single.vehicleSlug}/strategy/${single.entityId}`}>Strategy</a>
-          <a className="btn" href={`/${single.vehicleSlug}/fit/${single.entityId}`}>Fit &amp; standing</a>
-          <a className="btn" href={`/${single.vehicleSlug}/routes?target=${single.entityId}`}>Routes</a>
+          <Link className="btn" href={`/${single.vehicleSlug}/pipeline/${single.id}`}>LP page</Link>
+          <Link className="btn" href={`/${single.vehicleSlug}/strategy/${single.entityId}`}>Strategy</Link>
+          <Link className="btn" href={`/${single.vehicleSlug}/fit/${single.entityId}`}>Fit &amp; standing</Link>
+          <Link className="btn" href={`/${single.vehicleSlug}/routes?target=${single.entityId}`}>Routes</Link>
         </div>
       )} />
   );
@@ -453,7 +455,7 @@ const Why = memo(function Why({ r, position, sortLabel, rungNames, now, onJump }
         {d?.route && <div className={s.fact}><span>Best path</span><span>{d.route.via} <span className={s.none}>· tier {d.route.tier}</span>{d.route.why && <span className={s.small}>{d.route.why}</span>}</span></div>}
         {d?.ask && <div className={s.fact}><span>Ask</span><span>{d.ask}{d.list && <span className={s.small}>List: {d.list}{d.confidence ? ` · ${d.confidence} confidence` : ''}</span>}</span></div>}
         <div className={s.fact}><span>Next</span><span>{d?.next ?? r.next ?? <span className={s.none}>Nothing recorded</span>}{r.nextOn && <span className={s.small}>Due {fmtShort(r.nextOn, now)}</span>}</span></div>
-        <div className={s.fact}><span>Routes</span><span><a className={s.fig} href={`/${r.vehicleSlug}/routes?target=${r.entityId}`}><Icon name="link" title="Routes" />{r.route ? `${n(r.route)} recorded` : 'None recorded yet'}</a></span></div>
+        <div className={s.fact}><span>Routes</span><span><Link className={s.fig} href={`/${r.vehicleSlug}/routes?target=${r.entityId}`}><Icon name="link" title="Routes" />{r.route ? `${n(r.route)} recorded` : 'None recorded yet'}</Link></span></div>
         <div className={s.fact}><span>Contact</span><span>
           {r.meetings > 0 ? `Met ${r.meetings}×, last ${fmtShort(r.lastMeeting, now)}` : 'Never met'}
           {r.lastTouch && <span className={s.small}>Last touch {fmtShort(r.lastTouch, now)}{r.waitingSince ? ', waiting on them' : ''}</span>}
