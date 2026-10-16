@@ -46,16 +46,30 @@ export const WARM_MIN_GAP_MS = 10_000;
 const PAGE_TIMEOUT_MS = 120_000;
 
 export interface WarmState { seen: string | null; warmed: string | null; lastWarmAt: number; running: boolean; skipped?: string | null }
-export interface WarmObservation { revision: string; importActive: boolean }
+/** `foreground`: the part of the read revision only people's writes move (network 017), when known. */
+export interface WarmObservation { revision: string; importActive: boolean; foreground?: string | null }
+
+/**
+ * What a warm-up answers to. With no import running, any change to the data. While one runs, the data changes all
+ * the time, so only a person's own change (16 Oct 2026: imports ran for hours that night, and every page a person's
+ * write emptied waited for their next click to rebuild it, 300-500 ms each). An import's own changes still wait: the
+ * pages answer from their last build and rebuild behind them.
+ */
+export function warmKey(seen: WarmObservation): string | null {
+  if (!seen.importActive) return seen.revision;
+  return seen.foreground == null ? null : `person:${seen.foreground}`;
+}
 
 /**
  * Warm when the data has settled: the same revision on two looks in a row, not yet warmed, no import
- * job active, none in flight, and the last warm-up at least WARM_MIN_GAP_MS ago.
+ * job active (or, while one is, a person's own change: warmKey), none in flight, and the last warm-up at least
+ * WARM_MIN_GAP_MS ago.
  */
 export function warmDecision(state: WarmState, seen: WarmObservation, now: number, minGapMs = WARM_MIN_GAP_MS): 'warm' | 'wait' {
-  if (state.running || seen.importActive) return 'wait';
-  if (seen.revision !== state.seen) return 'wait';
-  if (seen.revision === state.warmed) return 'wait';
+  const key = warmKey(seen);
+  if (state.running || key === null) return 'wait';
+  if (key !== state.seen) return 'wait';
+  if (key === state.warmed) return 'wait';
   if (now - state.lastWarmAt < minGapMs) return 'wait';
   return 'warm';
 }
@@ -70,11 +84,12 @@ export function warmPaths(slugs: string[], lpPath: string | null): string[] {
 
 async function observe(): Promise<WarmObservation> {
   const db = await getDb();
-  const row = (await db.one<{ revision: string; import_active: boolean }>(`select
+  const row = (await db.one<{ revision: string; foreground: string; import_active: boolean }>(`select
       r.revision::text || ':' || rr.revision::text || ':' || rr.epoch::text || ':' || current_date::text as revision,
+      r.foreground::text || ':' || current_date::text as foreground,
       exists (select 1 from platform.import_job where status in ('queued', 'running')) as import_active
     from network.read_revision r, network.route_revision rr where r.singleton and rr.singleton`))!;
-  return { revision: row.revision, importActive: row.import_active };
+  return { revision: row.revision, foreground: row.foreground, importActive: row.import_active };
 }
 
 async function targets(first: boolean): Promise<string[]> {
@@ -146,7 +161,7 @@ export function startPageWarm(): void {
     let seen: WarmObservation;
     try { seen = await observe(); } catch { return; } // database starting or busy: look again later
     const decision = warmDecision(state, seen, Date.now());
-    state.seen = seen.revision;
+    state.seen = warmKey(seen);
     if (decision === 'wait') return;
     state.running = true;
     const first = state.warmed === null, started = performance.now();
@@ -174,7 +189,7 @@ export function startPageWarm(): void {
     } finally {
       const { revokeWarmPass } = await import('@/lib/auth/warm');
       revokeWarmPass();
-      if (!skipped) state.warmed = seen.revision;
+      if (!skipped) state.warmed = warmKey(seen);
       state.lastWarmAt = Date.now();
       state.running = false;
     }

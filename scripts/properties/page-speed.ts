@@ -64,7 +64,10 @@ export async function pageSpeedProperties(check: Check) {
   check('page-speed warm: a revision seen for the first time waits for it to settle', warmDecision(s(), { revision: 'a', importActive: false }, at) === 'wait', '');
   check('page-speed warm: the same revision on two looks is warmed', warmDecision(s({ seen: 'a' }), { revision: 'a', importActive: false }, at) === 'warm', '');
   check('page-speed warm: a revision already warmed is not warmed again', warmDecision(s({ seen: 'a', warmed: 'a' }), { revision: 'a', importActive: false }, at) === 'wait', '');
-  check('page-speed warm: nothing is warmed while an import job is queued or running', warmDecision(s({ seen: 'a' }), { revision: 'a', importActive: true }, at) === 'wait', '');
+  check('page-speed warm: an import\'s own changes are not warmed while it is queued or running', warmDecision(s({ seen: 'a' }), { revision: 'a', importActive: true }, at) === 'wait'
+    && warmDecision(s({ seen: 'person:1', warmed: 'person:1' }), { revision: 'b', foreground: '1', importActive: true }, at) === 'wait', '');
+  check('page-speed warm: a person\'s own change is warmed while an import runs, once it settles', warmDecision(s({ seen: 'person:1', warmed: 'a' }), { revision: 'c', foreground: '1', importActive: true }, at) === 'warm'
+    && warmDecision(s({ seen: 'a', warmed: 'a' }), { revision: 'c', foreground: '1', importActive: true }, at) === 'wait', '');
   check('page-speed warm: one warm-up at a time', warmDecision(s({ seen: 'a', running: true }), { revision: 'a', importActive: false }, at) === 'wait', '');
   check('page-speed warm: warm-ups are at least the minimum gap apart',
     warmDecision(s({ seen: 'b', warmed: 'a', lastWarmAt: at - 10_000 }), { revision: 'b', importActive: false }, at, 30_000) === 'wait'
