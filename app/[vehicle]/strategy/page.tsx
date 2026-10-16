@@ -234,7 +234,7 @@ async function VehicleStrategyPage({ params, searchParams }: {
           : 'No stage exits are recorded yet, so stage-to-stage conversion is unknown, not zero.'}{' '}
         <Ref label="Conversion basis" href="#funnel" at={now} basis="Vehicle-scoped status-change audit. Distinct LPs with recorded exits; history is incomplete, so these are not cohort conversion rates." /></p>
       {gaps.length > 0 && <p><b>Gaps.</b> {gaps.map((g, i) => <span key={g.id}>{i > 0 ? '; ' : ''}<Link className={s.inline} href={filterLink(g.id)}>{count(g.rows.length)} {g.label.toLowerCase()}</Link></span>)}. Missing records are unknown, not evidence of absence.</p>}
-      {top[0] ? <p><b>Next.</b> Highest on the scale: <a className={s.inline} href={top[0].href}>{top[0].title}</a>{top[0].utility !== null ? `, GUESS ${money(top[0].utility)} of utility` : ', unscored'}.{' '}
+      {top[0] ? <p><b>Next.</b> Highest on the scale: <Link className={s.inline} href={top[0].href}>{top[0].title}</Link>{top[0].utility !== null ? `, GUESS ${money(top[0].utility)} of utility` : ', unscored'}.{' '}
         {movesInTop} of the top {top.length} are whole-raise moves and {top.length - movesInTop} are single-LP actions. {count(scored)} of {plural(active.length, 'LP action')} have the inputs for a score; the rest follow, ordered by evidence work.{scored < active.length ? ' An LP action is scored once it has a capacity, a likelihood and a current route.' : ''}</p>
         : <p><b>Next.</b> No active LP actions or moves are recorded. Add pursuits in the pipeline or import a move menu below.</p>}
       {total.historical && <p className="muted">Historical vehicle: these records describe a past raise.</p>}
@@ -247,7 +247,7 @@ async function VehicleStrategyPage({ params, searchParams }: {
         <tbody>{top.map((o, i) => <tr key={o.id}>
           <td className={s.num}>{i + 1}</td>
           <td className={s.hideS}>{o.status ? <span className={s.kindLp}><span className={`tag ${s.tagLp}`}>LP</span><StatusMark status={o.status} /></span> : <span className={`tag ${s.tagMove}`}>{o.tag}</span>}</td>
-          <td className={s.what}><span className={s.t1}><a href={o.href}><b>{o.title}</b></a>{o.chosen && <span className={s.chosen}>chosen</span>}{o.position !== null && <span className={s.manual}>placed #{o.position}</span>}</span><span className={s.text}>{o.text}</span></td>
+          <td className={s.what}><span className={s.t1}><Link href={o.href}><b>{o.title}</b></Link>{o.chosen && <span className={s.chosen}>chosen</span>}{o.position !== null && <span className={s.manual}>placed #{o.position}</span>}</span><span className={s.text}>{o.text}</span></td>
           <td className={s.score}>{o.utility === null ? <span className="muted">Unscored · {o.work} evidence pts</span> : <><span className={s.bar} aria-hidden><i style={{ width: `${topMax ? Math.max(3, o.utility / topMax * 100) : 0}%` }} /></span><b>{money(o.utility)}</b></>}</td>
           <td className={`${s.r} ${s.hideS}`}>{o.priority === null ? '—' : money(o.priority)}</td>
           <td className={`${s.r} ${s.hideS}`}>{o.hours ?? '—'}</td>

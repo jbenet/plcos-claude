@@ -3,6 +3,7 @@ import { formatDate } from '@/lib/time';
 import type { Band, PageDrop, ReadFunnel, Unanswered } from '@/lib/conversion/dataroom';
 import { MIN_FOR_RATE } from '@/lib/conversion/model';
 import s from './conversion.module.css';
+import Link from '@/components/ui/AppLink';
 
 /**
  * Dataroom views (docs/33 §1, charts 7–10), from DocSend visits (docs/32). Drawn as the rest of the page is: plain
@@ -101,7 +102,7 @@ export function NoFollowUpCard({ rows, href }: { rows: Unanswered[]; href: (id: 
         <ul className={s.plain}>
           {rows.slice(0, 40).map((r) => (
             <li key={r.pursuitId}>
-              <a href={href(r.pursuitId)}>{r.name}</a> <span className={s.muted}>{day(r.last)}{r.document ? ` · ${r.document}` : ''}</span>
+              <Link href={href(r.pursuitId)}>{r.name}</Link> <span className={s.muted}>{day(r.last)}{r.document ? ` · ${r.document}` : ''}</span>
             </li>
           ))}
           {rows.length > 40 && <li className={s.muted}>and {rows.length - 40} more</li>}

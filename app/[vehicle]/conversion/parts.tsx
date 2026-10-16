@@ -6,6 +6,7 @@ import {
   type Cohort, type FunnelStep, type MoneyPoint, type SegmentPanel, type Waiting, type Week,
 } from '@/lib/conversion/model';
 import s from './conversion.module.css';
+import Link from '@/components/ui/AppLink';
 
 /**
  * The charts of outreach conversion (docs/33). Drawn on the server as SVG and plain HTML: no chart library, a
@@ -119,7 +120,7 @@ export function WaitingCard({ title, bins, href, empty }: { title: string; bins:
             <span className={s.srate}>{b.rows.length}</span>
           </summary>
           <ul>
-            {b.rows.slice(0, 40).map((r) => <li key={r.pursuitId}><a href={href(r.pursuitId)}>{r.name}</a> <span className={s.muted}>{r.days} d</span></li>)}
+            {b.rows.slice(0, 40).map((r) => <li key={r.pursuitId}><Link href={href(r.pursuitId)}>{r.name}</Link> <span className={s.muted}>{r.days} d</span></li>)}
             {b.rows.length > 40 && <li className={s.muted}>and {b.rows.length - 40} more</li>}
           </ul>
         </details>
