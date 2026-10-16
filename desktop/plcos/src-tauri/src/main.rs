@@ -188,12 +188,15 @@ const INIT_SCRIPT: &str = r#"
     const n = performance.getEntriesByType('navigation')[0];
     if (n) send({ kind: 'load', path: location.pathname, ttfb: Math.round(n.responseStart), html: Math.round(n.responseEnd), dcl: Math.round(n.domContentLoadedEventEnd), load: Math.round(n.loadEventEnd), bytes: n.transferSize || n.decodedBodySize || 0 });
   }, 0));
-  let run = 0;
+  let run = 0, exploring = false;
   document.addEventListener('click', (e) => {
     const el = e.target && e.target.closest ? e.target.closest('a[href],tr[data-lp],button,[role=button],summary,label') : null;
     if (!el) return;
-    const id = ++run, t0 = e.timeStamp, from = location.pathname + location.search;
-    const what = el.tagName.toLowerCase() + (el.getAttribute('href') ? ' ' + el.getAttribute('href').split('?')[0] : '');
+    const tab = (el.getAttribute('href') || '').match(/[?&]tab=/) ? '?tab' : '';
+    timeStep(el.tagName.toLowerCase() + (el.getAttribute('href') ? ' ' + el.getAttribute('href').split('?')[0] + tab : ''), e.timeStamp);
+  }, true);
+  function timeStep(what, t0) {
+    const id = ++run, from = location.pathname + location.search;
     let last = performance.now(), changed = false, stall = 0, prev = performance.now();
     const mo = new MutationObserver(() => { last = performance.now(); changed = true; });
     mo.observe(document.body, { childList: true, subtree: true, characterData: true });
@@ -207,10 +210,55 @@ const INIT_SCRIPT: &str = r#"
         const rsc = performance.getEntriesByType('resource').filter((r) => r.startTime >= t0 - 5 && r.name.includes('_rsc'));
         send({ kind: 'click', what, from: from.split('?')[0], to: location.pathname, total: Math.round(last - t0),
           fetch: Math.round(rsc.reduce((m, r) => Math.max(m, r.responseEnd - t0), 0)), bytes: rsc.reduce((b, r) => b + (r.transferSize || r.decodedBodySize || 0), 0),
-          requests: rsc.length, stall: Math.round(stall), superseded: run !== id });
+          requests: rsc.length, stall: Math.round(stall), superseded: run !== id, ...(exploring ? { explore: true } : {}) });
       }
     }, 25);
-  }, true);
+  }
+
+  // Explore mode (16 Oct 2026; the core's /__desktop/explore, on while DATA_DIR/explore.json exists): walks the app the
+  // way it is used most (the rail's Pipeline, an LP, its tabs, back, the next LP; sometimes another module), by links
+  // only, with a pointer's pause before half the clicks, timing each step above. The core refuses every change meanwhile.
+  // Any real key, click or scroll stops it for good.
+  fetch('/__desktop/explore', { cache: 'no-store' }).then((r) => r.json()).then((cfg) => { if (cfg && cfg.on) explore(cfg); }).catch(() => {});
+  function explore(cfg) {
+    exploring = true;
+    let stopped = false;
+    const stop = () => { if (stopped) return; stopped = true; exploring = false; fetch('/__desktop/explore', { method: 'POST' }).catch(() => {}); };
+    for (const t of ['mousedown', 'keydown', 'wheel', 'touchstart']) addEventListener(t, (e) => { if (e.isTrusted) stop(); }, true);
+    let st;
+    try { st = JSON.parse(sessionStorage.getItem('plcos-explore') || 'null'); } catch (_) { st = null; }
+    if (!st) st = { n: 0, seed: cfg.seed * 9301 + 49297 };
+    const rand = () => (st.seed = (st.seed * 9301 + 49297) % 233280) / 233280;
+    const pick = (a) => a[Math.floor(rand() * a.length)];
+    const shown = (sel) => [...document.querySelectorAll(sel)].filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !el.closest('details:not([open])'); });
+    const ok = (a) => { const h = a.getAttribute('href') || ''; return h.startsWith('/') && !/^\/(api|auth|__desktop|signin|setup|settings|preferences|developer|dev|desktop)(\/|$)/.test(h) && !a.hasAttribute('download') && !a.target; };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const quiet = async () => { const end = performance.now() + 8000; let last = performance.now(); const mo = new MutationObserver(() => { last = performance.now(); }); mo.observe(document.body, { childList: true, subtree: true, characterData: true }); while (performance.now() - last < 400 && performance.now() < end) await sleep(50); mo.disconnect(); };
+    (async () => {
+      await sleep(2500);
+      while (!stopped && st.n < cfg.steps) {
+        st.n++; try { sessionStorage.setItem('plcos-explore', JSON.stringify(st)); } catch (_) {}
+        const x = rand();
+        const rows = shown('div.work tbody a[href^="/"]').filter(ok), tabs = shown('div.work nav[class*=lp-header] a[href^="/"]').filter(ok);
+        let el = null;
+        if (x < 0.14 && history.length > 1) { timeStep('back', performance.now()); history.back(); }
+        else if (x < 0.40 && tabs.length) el = pick(tabs);
+        else if (x < 0.78 && rows.length) el = rand() < 0.6 ? pick(rows.slice(0, 6)) : pick(rows);
+        else {
+          const rail = shown('nav.rail a[href^="/"]').filter(ok);
+          const pipe = rail.filter((a) => /\/pipeline$/.test(a.getAttribute('href')));
+          el = pick(rand() < 0.6 && pipe.length ? pipe : rail);
+        }
+        if (el) {
+          el.scrollIntoView({ block: 'center' });
+          if (rand() < 0.5) { for (const t of ['pointerover', 'pointerenter', 'mouseover', 'mouseenter']) el.dispatchEvent(new (t.startsWith('pointer') ? PointerEvent : MouseEvent)(t, { bubbles: !t.endsWith('enter') })); await sleep(250); }
+          el.click();
+        }
+        await sleep(300); await quiet(); await sleep(400 + rand() * 1000);
+      }
+      if (!stopped && st.n >= cfg.steps) stop();
+    })();
+  }
 })();
 "#;
 

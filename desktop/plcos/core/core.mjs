@@ -482,6 +482,17 @@ const server = http.createServer(async (req, res) => {
     // A write must come from this window's own page.
     const write = !(req.method === 'GET' || req.method === 'HEAD');
     if (write && req.headers.origin && req.headers.origin !== ORIGIN && req.headers.origin !== `http://localhost:${PORT}`) { res.writeHead(403).end('cross-origin'); return; }
+    // Explore mode (16 Oct 2026): while DATA_DIR/explore.json exists, the window's script walks the app by its links and
+    // times each step into perf.log, and nothing may change: every request but a GET, a timing or the stop is refused.
+    const exploring = existsSync(path.join(DATA_DIR, 'explore.json'));
+    if (url.pathname === '/__desktop/explore') {
+      if (req.method === 'POST') { await readBody(req); rmSync(path.join(DATA_DIR, 'explore.json'), { force: true }); log('explore mode stopped from the window'); res.writeHead(204).end(); return; }
+      let cfg = {};
+      try { cfg = exploring ? JSON.parse(readFileSync(path.join(DATA_DIR, 'explore.json'), 'utf8')) : {}; } catch { cfg = {}; }
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ on: exploring, steps: Number(cfg.steps) || 200, seed: Number(cfg.seed) || 1 }));
+      return;
+    }
+    if (exploring && write && url.pathname !== '/__desktop/perf') { res.writeHead(403, { 'content-type': 'text/plain' }).end('Explore mode reads only.'); return; }
 
     if (url.pathname === '/__desktop/about') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(aboutPage()); return; }
     if (url.pathname === '/__desktop/status') { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(statusJson())); return; }
