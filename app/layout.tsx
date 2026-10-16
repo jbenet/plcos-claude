@@ -11,7 +11,7 @@ import { vehicleSelection } from '@/lib/session';
 import { DEFAULT_THEME, THEME_BOOT, themeAttr } from '@/lib/theme';
 import { VIEWPORT_BOOT } from '@/lib/viewport';
 import { config } from '@/config/deployment';
-import { feedbackHome } from '@/config/ports';
+import { feedbackBoxHome } from '@/config/ports';
 import { FeedbackButton } from '@/components/shell/FeedbackBox';
 import { isDbBusy } from '@/lib/db/scheduling';
 import { routingContext } from '@/lib/internal-routing';
@@ -69,7 +69,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <h1>The server is busy, try again.</h1>
         <p>This request waited too long for the database and was dropped before it started.</p>
         <a className="btn" href="">Try again</a>{' '}
-        <FeedbackButton profile={config.data.profile} home={feedbackHome(config.data.profile)} />
+        <FeedbackButton profile={config.data.profile} home={feedbackBoxHome(config.data.profile, config.data.desktopCopy)} />
       </main>
     </body></html>;
   }

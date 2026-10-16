@@ -2,7 +2,7 @@ import Link from '@/components/ui/AppLink';
 import { cookies, headers } from 'next/headers';
 import { USER_COOKIE } from '@/lib/auth/cookie';
 import { config } from '@/config/deployment';
-import { feedbackHome } from '@/config/ports';
+import { feedbackBoxHome } from '@/config/ports';
 import { auth } from '@/lib/auth';
 import { isDbBusy } from '@/lib/db/scheduling';
 import { shareRequestWork } from '@/lib/page-render';
@@ -25,7 +25,7 @@ export async function Rail() {
         <p>Navigation could not load. You can still file feedback.</p>
         <a className="btn" href="">Try again</a>
       </div>
-      <div className="railfoot"><div className="railrow"><FeedbackButton variant="rail" profile={config.data.profile} home={feedbackHome(config.data.profile)} /><SystemStatus /></div></div>
+      <div className="railfoot"><div className="railrow"><FeedbackButton variant="rail" profile={config.data.profile} home={feedbackBoxHome(config.data.profile, config.data.desktopCopy)} /><SystemStatus /></div></div>
     </nav>;
   }
 }
@@ -61,7 +61,7 @@ async function LoadedRail() {
 
       <div className="railfoot">
         <div className="railrow">
-          <FeedbackButton variant="rail" profile={config.data.profile} home={feedbackHome(config.data.profile)} />
+          <FeedbackButton variant="rail" profile={config.data.profile} home={feedbackBoxHome(config.data.profile, config.data.desktopCopy)} />
           <Link className="railgear" href="/settings" aria-label="Your settings" title="Your settings">
             <span aria-hidden>⚙</span>
           </Link>
