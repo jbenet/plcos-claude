@@ -73,7 +73,6 @@ export async function authorizeAction(user: Principal & { id: string }, name: Ac
     }
     case 'pursuit': vehicle = await pursuitVehicles(values(input, 'pursuitId')); break;
     case 'pursuitArg': vehicle = await pursuitVehicles([input]); break;
-    case 'score': vehicle = await pursuitVehicles([args[1]]); if (!vehicle.includes(id(input))) throw new AuthorizationError(); break;
     case 'bulk': {
       const selected = value(input, 'rows');
       if (!Array.isArray(selected) || selected.length > 5000) throw new AuthorizationError();

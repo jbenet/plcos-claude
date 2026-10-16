@@ -116,7 +116,6 @@ export const actionRules = {
   'app/routes/actions.ts#recordOwnTieAction': { action: 'mutate', scope: 'global' },
   'app/routes/actions.ts#removeOwnTieAction': { action: 'mutate', scope: 'global' },
   'app/routes/actions.ts#buildNetworkAction': { action: 'admin', scope: 'global' },
-  'app/selection/actions.ts#scoreDetailAction': { action: 'read', scope: 'score' },
   'app/selection/actions.ts#saveWeights': { action: 'admin', scope: 'global' },
   'app/signals-actions.ts#disposeSignal': { action: 'mutate', scope: 'signal' },
   'app/soft-hard/actions.ts#requestHarden': { action: 'mutate', scope: 'exposure' },
