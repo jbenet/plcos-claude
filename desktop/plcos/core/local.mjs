@@ -68,10 +68,10 @@ const WARM_RECENT_MS = 15_000;
 const IDLE_SYNC_MS = 15_000;
 const BUSY_SYNC_MS = 2_000;
 /** Paths the live server always answers: sign-in, the app's own pages, server state (jobs, Astra, imports). */
-// Server actions that only read (16 Oct 2026), by file#export: Selection's score detail is one, fetched on every move
-// of its cursor. A POST, so it still goes to the live server, but it is not a write the copy must catch up with: counted
-// as one, each cursor move sent every page after it to the live server until the next sync.
-const READ_ACTIONS = new Set(['app/selection/actions.ts#scoreDetailAction']);
+// Server actions that only read, by file#export (16 Oct 2026). A POST, so it still goes to the live server, but it is
+// not a write the copy must catch up with: counted as one, it sent every page after it to the live server until the
+// next sync. Selection's score detail was the one; it is now a GET the copy answers itself (app/selection/detail).
+const READ_ACTIONS = new Set([]);
 const REMOTE_ONLY = [/^\/settings(\/|$)/, /^\/preferences(\/|$)/, /^\/api\//, /^\/auth\//, /^\/signin/, /^\/setup/, /^\/desktop\//, /^\/dev(\/|$)/, /^\/developer(\/|$)/, /^\/issues(\/|$)/, /^\/agents(\/|$)/];
 
 const sh = (cmd, args, opts = {}) => new Promise((resolve, reject) => {
@@ -167,7 +167,11 @@ class LocalCopy {
 
   canServe(url, req) {
     // A page opened, not one fetched ahead of a hover (Next marks those next-router-prefetch).
-    if (req?.method === 'GET' && !req.headers?.['next-router-prefetch']) { this.remember(url); if (!url.pathname.startsWith('/_next/')) this.lastPageAt = Date.now(); }
+    // A JSON read a page makes (a row's basis, Selection's score detail) is the person at work, not a page to rebuild.
+    if (req?.method === 'GET' && !req.headers?.['next-router-prefetch']) {
+      if (!String(req.headers?.accept ?? '').startsWith('application/json')) this.remember(url);
+      if (!url.pathname.startsWith('/_next/')) this.lastPageAt = Date.now();
+    }
     if (this.phase !== 'ready') return false;
     if (this.serverCommit && this.build?.commit !== this.serverCommit) return false;
     if (this.settling()) return false;

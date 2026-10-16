@@ -2,6 +2,8 @@ import type { Action } from './index';
 export const routeRules = {
   // A row's basis on a vehicle's plan, read when the row opens (lib/strategy-basis.ts).
   'app/[vehicle]/strategy/basis/route.ts#GET': 'read',
+  // An LP's score detail on the selection page, read when the cursor rests on it (app/selection/detail/route.ts).
+  'app/selection/detail/route.ts#GET': 'read',
   'app/api/connection-feedback/route.ts#POST': 'feedback',
   'app/api/connection-feedback/route.ts#GET': 'feedback',
   // Connect DocSend (docs/32-docsend.md): an Admin signs in to DocSend; each handler checks its signed state cookie.

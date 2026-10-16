@@ -5,8 +5,6 @@ import Link from '@/components/ui/AppLink';
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePrefetch } from '@/components/ui/prefetch';
-import { scoreDetailAction } from '@/app/selection/actions';
-import { actionFailure } from '@/lib/client/action-failure';
 import type { ScoreDetail } from '@/lib/pipeline-data';
 import { BulkLpActions } from './BulkLpActions';
 import { MoveButton, statusMix, statusWord, UndoToast, useMove } from './MoveToSelected';
@@ -406,10 +404,11 @@ const Why = memo(function Why({ r, position, sortLabel, rungNames, now, onJump }
   const [detail, setDetail] = useState<ScoreDetail | null | 'loading' | 'failed'>('loading');
   useEffect(() => {
     let live = true;
-    // Read once the cursor rests: a held arrow key would otherwise queue a server read per row, and
-    // Next runs server actions one at a time, so a Move after it would wait (issue 0121).
+    // Read once the cursor rests: a held arrow key would otherwise start a server read per row (issue 0121).
     const t = setTimeout(() => {
-      scoreDetailAction(r.vehicleId, r.id).then((d) => { if (live) setDetail(d); }, (e) => { if (live) { actionFailure(e, ''); setDetail('failed'); } });
+      fetch(`/${r.vehicleSlug}/selection/detail?v=${encodeURIComponent(r.vehicleId)}&lp=${encodeURIComponent(r.id)}`, { headers: { accept: 'application/json' } })
+        .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`score detail ${res.status}`))))
+        .then((j: { detail: ScoreDetail | null }) => { if (live) setDetail(j.detail); }, () => { if (live) setDetail('failed'); });
     }, READ_AFTER_MS);
     return () => { live = false; clearTimeout(t); };
   }, [r.vehicleId, r.id]);
