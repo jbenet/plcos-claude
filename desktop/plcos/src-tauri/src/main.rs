@@ -161,6 +161,38 @@ const INIT_SCRIPT: &str = r#"
     if (a.target === '_blank' || e.metaKey) { e.preventDefault(); location.href = new URL(a.getAttribute('href'), location.href).href; }
   }, true);
   window.open = (u) => { if (u) location.href = new URL(String(u), location.href).href; return null; };
+
+  // How long clicks take in this window (15 Oct 2026): from a click to the page standing still, with the page data's
+  // fetch and any long pauses in the window's own work, sent to the core's perf.log. Paths only, no page text.
+  if (location.port !== '47100') return;
+  const send = (o) => { try { fetch('/__desktop/perf', { method: 'POST', body: JSON.stringify(o), keepalive: true, headers: { 'content-type': 'application/json' } }); } catch (_) {} };
+  addEventListener('load', () => setTimeout(() => {
+    const n = performance.getEntriesByType('navigation')[0];
+    if (n) send({ kind: 'load', path: location.pathname, ttfb: Math.round(n.responseStart), html: Math.round(n.responseEnd), dcl: Math.round(n.domContentLoadedEventEnd), load: Math.round(n.loadEventEnd), bytes: n.transferSize || n.decodedBodySize || 0 });
+  }, 0));
+  let run = 0;
+  document.addEventListener('click', (e) => {
+    const el = e.target && e.target.closest ? e.target.closest('a[href],tr[data-lp],button,[role=button],summary,label') : null;
+    if (!el) return;
+    const id = ++run, t0 = e.timeStamp, from = location.pathname + location.search;
+    const what = el.tagName.toLowerCase() + (el.getAttribute('href') ? ' ' + el.getAttribute('href').split('?')[0] : '');
+    let last = performance.now(), changed = false, stall = 0, prev = performance.now();
+    const mo = new MutationObserver(() => { last = performance.now(); changed = true; });
+    mo.observe(document.body, { childList: true, subtree: true, characterData: true });
+    const frame = () => { const t = performance.now(); if (t - prev > 50) stall += t - prev; prev = t; if (run === id) requestAnimationFrame(frame); };
+    requestAnimationFrame(frame);
+    const check = setInterval(() => {
+      const now = performance.now(), url = location.pathname + location.search;
+      if (run !== id || now - t0 > 8000 || ((changed || url !== from) && now - last > 150)) {
+        clearInterval(check); mo.disconnect();
+        if (!changed && url === from) return;
+        const rsc = performance.getEntriesByType('resource').filter((r) => r.startTime >= t0 - 5 && r.name.includes('_rsc'));
+        send({ kind: 'click', what, from: from.split('?')[0], to: location.pathname, total: Math.round(last - t0),
+          fetch: Math.round(rsc.reduce((m, r) => Math.max(m, r.responseEnd - t0), 0)), bytes: rsc.reduce((b, r) => b + (r.transferSize || r.decodedBodySize || 0), 0),
+          requests: rsc.length, stall: Math.round(stall), superseded: run !== id });
+      }
+    }, 25);
+  }, true);
 })();
 "#;
 

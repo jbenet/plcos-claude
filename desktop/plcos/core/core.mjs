@@ -494,6 +494,12 @@ const server = http.createServer(async (req, res) => {
       state.pairing = null;
       res.writeHead(303, { location: '/__desktop/pair' }).end(); return;
     }
+    if (url.pathname === '/__desktop/perf' && req.method === 'POST') {
+      // Click and load timings from the window (src-tauri's init script), one JSON line each in perf.log.
+      const body = (await readBody(req)).toString('utf8').slice(0, 4000);
+      try { appendFileSync(path.join(DATA_DIR, 'perf.log'), `${JSON.stringify({ at: new Date().toISOString(), ...JSON.parse(body) })}\n`); } catch { /* best effort */ }
+      res.writeHead(204).end(); return;
+    }
     if (url.pathname === '/__desktop/sync' && req.method === 'POST') {
       await readBody(req);
       state.local?.syncNow?.();
