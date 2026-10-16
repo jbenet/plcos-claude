@@ -451,6 +451,10 @@ class LocalCopy {
     const psql = path.join(bin, 'psql');
     const has = await sh(psql, ['-h', '127.0.0.1', '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-Atc', `select 1 from pg_database where datname = '${DB_NAME}'`], { env: pgEnv });
     if (!has.trim()) await sh(psql, ['-h', '127.0.0.1', '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-c', `create database ${DB_NAME}`], { env: pgEnv });
+    // The server's clock, not the Mac's: dates the database works out (current_date, a day's boundary) must agree with
+    // Railway's. In Chicago from 7 pm to midnight they did not, and every route cached by the server was keyed to
+    // tomorrow, so the copy recomputed all 7,000 of them every evening while pages waited on live searches (16 Oct 2026).
+    await sh(psql, ['-h', '127.0.0.1', '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-c', `alter database ${DB_NAME} set timezone to 'UTC'`], { env: pgEnv });
     this.pgStop = () => sh(path.join(bin, 'pg_ctl'), ['-D', data, '-m', 'fast', 'stop'], { env: pgEnv }).catch(() => undefined);
   }
 
@@ -477,6 +481,8 @@ class LocalCopy {
       NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1', NEXT_DIST_DIR: '.next',
       DATA_PROFILE: 'real', PREVIEW_COPY_AT: new Date().toISOString(), PLCOS_DESKTOP_COPY: '1', PLCOS_DESKTOP_SECRET: this.secret,
       DATABASE_URL: this.dbUrl, PORT: String(NEXT_PORT), GIT_COMMIT: path.basename(dir),
+      // As on the server (above, ensurePostgres): pages draw dates the way the web app does.
+      TZ: 'UTC',
     };
   }
 
