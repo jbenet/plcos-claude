@@ -3,7 +3,7 @@ import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { SECTION } from '@/lib/nav';
 import { SprintStrip } from '@/components/calendar/SprintStrip';
-import { auth } from '@/lib/auth';
+import { currentUser } from '@/lib/auth';
 import { issues as issueSink } from '@/lib/issues';
 import { auditLog } from '@/modules/platform';
 import { describeAudit } from '@/lib/audit-words';
@@ -32,7 +32,7 @@ async function todayContent() {
   // Only the LPs at Connecting are read whole; the open count is counted (performance pass, 14 Oct 2026).
   const [user, sink, selection, audit, tickets, conflicts, asks, connecting, openCounts, totals, weeks, urgencyState] =
     await Promise.all([
-      auth().then((a) => a.currentUser()),
+      currentUser(),
       issueSink(),
       vehicleSelection(),
       auditLog(40),

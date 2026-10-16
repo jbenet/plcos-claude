@@ -21,16 +21,18 @@ const touchWords = (c: DirectContact) => c.via
 /** Whole picker inputs shared across route clicks. Database writes and midnight
  * invalidate the snapshot; user-specific ownership stays in the page. */
 const pickerInputs = buildCache(async (vehicleId: string) => {
-  const [tiers, vehicles, fit, team, pursuits, profiles, founders] = await Promise.all([
-    tierCounts(), listVehicles(),
-    listAssessments(vehicleId || null),
-    (await auth()).listUsers(), listPursuits(vehicleId || null), listFirmProfiles(), portfolioFounders(),
-  ]);
-
   // Targets worth showing (issues 0022–0023, real): the LPs in this pipeline and the organisations
   // they act for — not every person and firm in the replica, which made this page 1.7 MB — and
-  // never a member of the team, by the team's own list.
-  const affiliations = await affiliationsFor([...new Set([...pursuits.filter(p => !p.historical).map(p => p.entityId), ...Object.keys(founders)])]);
+  // never a member of the team, by the team's own list. Their affiliations need only the pursuits and
+  // founders, so they start as soon as those are read, beside the rest (performance pass, 16 Oct 2026).
+  const pursuitsP = listPursuits(vehicleId || null), foundersP = portfolioFounders();
+  const affiliationsP = Promise.all([pursuitsP, foundersP]).then(([pursuits, founders]) =>
+    affiliationsFor([...new Set([...pursuits.filter(p => !p.historical).map(p => p.entityId), ...Object.keys(founders)])]));
+  const [tiers, vehicles, fit, team, pursuits, profiles, founders, affiliations] = await Promise.all([
+    tierCounts(), listVehicles(),
+    listAssessments(vehicleId || null),
+    (await auth()).listUsers(), pursuitsP, listFirmProfiles(), foundersP, affiliationsP,
+  ]);
   const teamNames = new Set(team.map((u) => u.name));
   const inPipeline = new Set([...pursuits.filter((p) => !p.historical).map((p) => p.entityId), ...Object.keys(founders)]);
   for (const a of affiliations) if (a.current && inPipeline.has(a.personId)) inPipeline.add(a.orgId);
