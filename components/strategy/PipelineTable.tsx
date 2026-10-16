@@ -32,8 +32,12 @@ export type { PipelineRow, Status } from './pipeline-model';
 const PAGE = 100;
 
 interface Props {
-  /** Every row in scope, packed for the trip (lib/packed-rows.ts). */
+  /** Every row in scope, packed for the trip (lib/packed-rows.ts); or, with `more`, only the first screen's rows. */
   packed: PackedRows;
+  /** Every row, arriving after the first screen in the same response (pipeline-model firstScreen). */
+  more?: Promise<PackedRows>;
+  /** The counts the first screen shows until every row is here. */
+  first?: { counts: { all: Partial<Record<Status, number>>; matching: Partial<Record<Status, number>> }; total: number };
   statuses: StatusInfo[];
   rungNames: string[];
   initialStatus: Status | 'all' | null;
@@ -44,14 +48,30 @@ interface Props {
   newSection?: React.ReactNode;
 }
 
-export function PipelineTable({ packed, statuses, rungNames, initialStatus, initialFilters, showVehicle, asOf, newSection }: Props) {
+export function PipelineTable({ packed, more, first, statuses, rungNames, initialStatus, initialFilters, showVehicle, asOf, newSection }: Props) {
   const router = useRouter();
-  const given = useMemo(() => unpackRows<PipelineRow>(packed), [packed]);
+  // The first screen draws from its own rows; every row replaces them as soon as they have arrived (16 Oct 2026).
+  const [whole, setWhole] = useState<PackedRows | null>(null);
+  useEffect(() => {
+    let live = true;
+    more?.then((p) => { if (live) setWhole(p); }, () => undefined);
+    return () => { live = false; };
+  }, [more]);
+  const complete = !more || whole !== null;
+  const given = useMemo(() => unpackRows<PipelineRow>(whole ?? packed), [whole, packed]);
   // Move to Selected and Set status show at once, ahead of the server (useMove).
   const mv = useMove('pipeline', given);
   const rows = mv.rows;
   const view = useLpView({ rows, statuses, asOf, initialFilters, mode: 'pipeline', initialStatus });
-  const { enabled, setEnabled, counts, active, shown, sort, sortBy, picked, pick, pickedRows, now } = view;
+  const { enabled, setEnabled, active, shown, sort, sortBy, picked, pick, pickedRows, now } = view;
+  // Until every row is here, the counts are the server's, worked out over all of them.
+  const counts = complete || !first ? view.counts : {
+    all: new Map(Object.entries(first.counts.all) as [Status, number][]), matching: new Map(Object.entries(first.counts.matching) as [Status, number][]),
+  };
+  const total = complete || !first ? rows.length : first.total;
+  const sum = (m: Map<Status, number>, only?: Status[]) => [...m].reduce((t, [k, v]) => (!only || only.includes(k) ? t + v : t), 0);
+  const filteredTotal = complete || !first ? view.filtered.length : sum(counts.matching);
+  const shownTotal = complete || !first ? shown.length : sum(counts.matching, enabled);
   const [limit, setLimit] = useState(FIRST_ROWS);
   const moreRef = useGrowOnScroll(() => setLimit((x) => x + PAGE), limit);
   const shownIds = useMemo(() => new Set(shown.map((r) => r.id)), [shown]);
@@ -173,7 +193,7 @@ export function PipelineTable({ packed, statuses, rungNames, initialStatus, init
         <button type="button" role="tab" aria-selected={all} title="Every LP, across all seven statuses."
           className={cx(s.tab, s.all, all && s.on)} onClick={() => setEnabled(statuses.map((x) => x.id))}>
           <span className={s.tabLabel}>All</span>
-          <span className={s.tabNum}>{n(active ? view.filtered.length : rows.length)}{active && <span className={s.tabOf}> of {n(rows.length)}</span>}</span>
+          <span className={s.tabNum}>{n(active ? filteredTotal : total)}{active && <span className={s.tabOf}> of {n(total)}</span>}</span>
         </button>
       </div>
 
@@ -193,16 +213,16 @@ export function PipelineTable({ packed, statuses, rungNames, initialStatus, init
         <div className={s.head}>
           <h2>{all ? 'All statuses' : one?.label ?? 'Pipeline'}</h2>
           <div className={s.headMeta}>
-            {n(shown.length)}{active ? ` of ${n(all ? rows.length : counts.all.get(one?.id as Status) ?? 0)}` : ''} LPs
+            {n(shownTotal)}{active ? ` of ${n(all ? total : counts.all.get(one?.id as Status) ?? 0)}` : ''} LPs
             {` · ${units(orgCount, ranked.length - orgCount)}`}
             {one && <span> · {one.means}</span>}
           </div>
           <div className={s.keysHint}><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>x</kbd> tick · <kbd>s</kbd> to Selected · <kbd>↵</kbd> open</div>
           <div className={s.headTools}>
             {picked.size > 0 && <span className={s.small} style={{ margin: 0 }}>{n(picked.size)} selected</span>}
-            <button type="button" className={s.linkBtn} disabled={!shown.length}
+            <button type="button" className={s.linkBtn} disabled={!shown.length || !complete}
               onClick={() => (shown.every((r) => picked.has(r.id)) ? pick(shown.map((r) => r.id), false) : pick(shown.map((r) => r.id), true))}>
-              {shown.length && shown.every((r) => picked.has(r.id)) ? 'Unselect all' : `Select all ${n(shown.length)}`}
+              {shown.length && shown.every((r) => picked.has(r.id)) ? 'Unselect all' : `Select all ${n(shownTotal)}`}
             </button>
           </div>
         </div>

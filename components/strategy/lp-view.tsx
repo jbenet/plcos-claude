@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
 import { Glyph } from '@/components/ui/Glyph';
 import { formatDate } from '@/lib/time';
 import {
-  CHOICES, EMPTY, FILTER_LABEL, filtersFrom, haystack, matches, numeric, sortFrom, unitShown, unitsFrom, unitsOn,
+  CHOICES, EMPTY, FILTER_LABEL, filtersFrom, haystack, matches, numeric, openingStatuses, sortFrom, unitShown, unitsFrom, unitsOn,
   type Filters, type PipelineRow, type SortKey, type Status,
 } from './pipeline-model';
 import { UnitIcon } from './UnitIcon';
@@ -43,22 +43,11 @@ export interface ViewOptions {
   initialStatus?: Status | 'all' | null;
 }
 
-const SELECTION_DEFAULT: Status[] = ['new', 'sourcing'];
 
 export function useLpView({ rows, statuses, asOf, initialFilters = {}, mode, initialStatus }: ViewOptions) {
   const ids = useMemo(() => statuses.map((x) => x.id), [statuses]);
   const now = useMemo(() => Date.parse(asOf), [asOf]);
-  const parseStatuses = (raw: string | undefined): Status[] => {
-    if (raw === 'all') return ids;
-    const asked = raw?.split(',').filter((x): x is Status => ids.includes(x as Status));
-    if (asked?.length) return mode === 'pipeline' ? [asked[0]!] : asked;
-    if (mode === 'selection') return SELECTION_DEFAULT;
-    if (initialStatus === 'all') return ids;
-    if (initialStatus) return [initialStatus];
-    // Open on the most advanced status with somebody in it: the work nearest money.
-    const first = (['discussing', 'committed', 'connecting', 'selected', 'sourcing', 'new', 'passed'] as Status[]).find((id) => rows.some((r) => r.status === id));
-    return first ? [first] : ids;
-  };
+  const parseStatuses = (raw: string | undefined): Status[] => openingStatuses(raw, ids, mode, initialStatus, rows);
   const [enabled, setEnabled] = useState<Status[]>(() => parseStatuses(initialFilters.status));
   const [f, setF] = useState<Filters>(() => filtersFrom(initialFilters));
   const [sort, setSort] = useState(() => sortFrom(initialFilters));
