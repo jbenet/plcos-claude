@@ -183,6 +183,7 @@ export async function runImportOperation(db: Db, job: ImportJob, progress: Impor
         : operation==='notes' ? await (await import('@/lib/connectors/affinity/notes')).readNotes(actor,options)
         : operation==='meetings' ? await (await import('@/lib/connectors/affinity/meetings')).readMeetings(actor,options)
         : operation==='history' ? await (await import('@/lib/connectors/affinity/history')).readHistory(actor,options)
+        : operation==='recent-emails' ? await (await import('@/lib/connectors/affinity/recent-emails')).readRecentEmails(actor)
         : operation==='translate' ? await (await import('@/lib/connectors/affinity/translate')).translate(actor)
         : null;
       // A read that stopped at its request cap finished its chunk: the receipt keeps the resume point, and the job

@@ -21,11 +21,12 @@ import { pushRefusal, type PushAnswer } from './push';
  * And a DocSend read (docs/32-docsend.md, read only): every data room the connected sign-in sees.
  *
  *   POST { "kind": "export" | "findings" | "duplicates" | "calendar" | "docsend" }   → 202 { job: { id, kind, status } }
- *   POST { "kind": "affinity", "operation": "slice" | "history" | "notes" | "meetings" | "translate" }
+ *   POST { "kind": "affinity", "operation": "slice" | "history" | "recent-emails" | "notes" | "meetings" | "translate" }
+ *   (recent-emails: only the emails since our newest, lib/connectors/affinity/recent-emails.ts; 16 Oct 2026)
  *   GET  ?job=<id>                          → 200 { job: { id, kind, status, phase, error, counts, … } }
  */
 const KINDS: readonly ImportKind[] = ['export', 'findings', 'duplicates', 'affinity', 'calendar', 'docsend'];
-const AFFINITY_OPERATIONS = ['slice', 'history', 'notes', 'meetings', 'translate'] as const;
+const AFFINITY_OPERATIONS = ['slice', 'history', 'recent-emails', 'notes', 'meetings', 'translate'] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function queueJob(caller: SyncCaller, request: Request, o: { db?: Db } = {}): Promise<PushAnswer> {
