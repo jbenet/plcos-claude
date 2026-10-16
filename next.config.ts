@@ -20,6 +20,9 @@ const config: NextConfig = {
   agentRules: false,
   // The floating dev badge sits on top of the user switcher in the rail.
   devIndicators: false,
+  // A page fetched ahead of a click (the Mac app prefetches every link in view, components/ui/AppLink.tsx) is used for
+  // 30 s rather than Next's 5 minutes, so a page opened later is read fresh (15 Oct 2026).
+  experimental: { staleTimes: { static: 30 } },
   // Both servers can run at once — the demo for screenshots, the real one for work — and two
   // dev servers cannot share a build directory.
   // A production build of the real profile (npm run build:real, issue 0023) has its own directory

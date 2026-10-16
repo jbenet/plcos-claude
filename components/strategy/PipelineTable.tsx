@@ -1,6 +1,6 @@
 'use client';
 
-import Link from '@/components/ui/AppLink';
+import Link, { inDesktopApp, usePrefetchPages } from '@/components/ui/AppLink';
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -70,6 +70,10 @@ export function PipelineTable({ packed, statuses, rungNames, initialStatus, init
     const href = lpHref(r);
     if (e?.metaKey || e?.ctrlKey) window.open(href, '_blank'); else router.push(href);
   }, [router]);
+  // In the Mac app an LP's page is fetched when the pointer reaches its row, and the first rows' pages as soon as the
+  // list shows, so the click that follows opens it at once (components/ui/AppLink.tsx).
+  const warm = useCallback((r: PipelineRow) => { if (inDesktopApp()) router.prefetch(lpHref(r), { kind: 'full' as never }); }, [router]);
+  usePrefetchPages(visible.slice(0, PREFETCH_FIRST).map(lpHref));
 
   // The keyboard (issues 0111, 0121), as on Selection: a cursor that moves through the list, the
   // shared one (row-cursor.ts). None until an arrow key or a tick box puts it somewhere.
@@ -135,8 +139,8 @@ export function PipelineTable({ packed, statuses, rungNames, initialStatus, init
   // The rendered rows, kept while the cursor moves: each row reads the cursor itself (issue 0121).
   const rowEls = useMemo(() => visible.map((r) => <Row key={r.id} r={r} picked={picked.has(r.id)} cursor={cursor.store}
     statusLabel={statuses.find((x) => x.id === r.status)?.label ?? r.status}
-    all={all} byVehicle={byVehicle} rungNames={rungNames} now={now} onPick={pick} onOpen={open} onFocus={setFocusId} onJump={onJump} />),
-  [visible, picked, cursor.store, statuses, all, byVehicle, rungNames, now, pick, open, setFocusId, onJump]);
+    all={all} byVehicle={byVehicle} rungNames={rungNames} now={now} onPick={pick} onOpen={open} onFocus={setFocusId} onJump={onJump} onWarm={warm} />),
+  [visible, picked, cursor.store, statuses, all, byVehicle, rungNames, now, pick, open, setFocusId, onJump, warm]);
 
   const Th = ({ k, className, children }: { k: SortKey; className: string; children: string }) => {
     const on = sort.key === k;
@@ -254,6 +258,8 @@ function nextStatus(from: Status | undefined): Status {
 }
 
 const lpHref = (r: PipelineRow) => `/${r.vehicleSlug}/pipeline/${r.id}`;
+/** The rows whose LP pages the Mac app fetches as soon as the list shows (GUESS: the ones most often opened next). */
+const PREFETCH_FIRST = 5;
 
 interface Cols {
   all: boolean; byVehicle: boolean; rungNames: string[]; now: number;
@@ -261,6 +267,7 @@ interface Cols {
   onOpen: (r: PipelineRow, e?: { metaKey?: boolean; ctrlKey?: boolean }) => void;
   onFocus: (id: string) => void;
   onJump: (id: string) => void;
+  onWarm: (r: PipelineRow) => void;
 }
 /** A row opens its LP; the controls inside it keep their own clicks. */
 const rowClick = (open: () => void) => (e: React.MouseEvent) => {
@@ -270,7 +277,7 @@ const rowClick = (open: () => void) => (e: React.MouseEvent) => {
 const known = (c: string | null) => (c && !/unknown/i.test(c) ? c : null);
 
 /** One LP unit (docs/23): an organisation with its people named, or an individual with their firms. */
-const Row = memo(function Row({ r, picked, cursor, statusLabel, all, byVehicle, rungNames, now, onPick, onOpen, onFocus, onJump }: Cols & {
+const Row = memo(function Row({ r, picked, cursor, statusLabel, all, byVehicle, rungNames, now, onPick, onOpen, onFocus, onJump, onWarm }: Cols & {
   r: PipelineRow; picked: boolean; cursor: CursorStore; statusLabel: string;
 }) {
   const focused = useIsCursor(cursor, r.id);
@@ -278,7 +285,7 @@ const Row = memo(function Row({ r, picked, cursor, statusLabel, all, byVehicle, 
   const touch = fmtShort(r.lastTouch, now);
   return (
     <tr data-lp={r.id} className={cx(s.row, picked && s.picked, focused && u.focus)} tabIndex={0} aria-selected={focused}
-      onClick={rowClick(() => onOpen(r))} onFocus={(e) => { if (e.target === e.currentTarget) onFocus(r.id); }}
+      onClick={rowClick(() => onOpen(r))} onMouseEnter={() => onWarm(r)} onFocus={(e) => { if (e.target === e.currentTarget) { onFocus(r.id); onWarm(r); } }}
       onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) { e.stopPropagation(); onOpen(r, e); } }}>
       {/* Ticking a row puts the cursor on it too, so the arrows go on from there (issue 0121). */}
       <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => { onPick([r.id], e.target.checked); onFocus(r.id); }} /></td>
