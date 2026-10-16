@@ -1,5 +1,7 @@
 'use client';
 
+import Link from '@/components/ui/AppLink';
+
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BulkLpActions } from './BulkLpActions';
@@ -282,7 +284,7 @@ const Row = memo(function Row({ r, picked, cursor, statusLabel, all, byVehicle, 
       <td className={s.cCheck}><input type="checkbox" aria-label={`Select ${lead(r)}`} checked={picked} onChange={(e) => { onPick([r.id], e.target.checked); onFocus(r.id); }} /></td>
       <td className={s.cLp}>
         <div className={u.nameLine}><UnitIcon org={r.isOrg} /><div>
-        <div className={s.lpName}><a href={lpHref(r)}>{lead(r)}</a><CapacityTag r={r} /></div>
+        <div className={s.lpName}><Link href={lpHref(r)}>{lead(r)}</Link><CapacityTag r={r} /></div>
         <LpWho r={r} onJump={onJump} />
         {r.headline && <div className={s.headline} title={r.headline}>{r.headline}</div>}
         {r.doNotContact && <span className={s.dnc}>Do not contact</span>}
@@ -335,9 +337,9 @@ const Row = memo(function Row({ r, picked, cursor, statusLabel, all, byVehicle, 
 
 function Routes({ r }: { r: PipelineRow }) {
   return (
-    <a className={cx(s.fig, !r.route && s.zero)} href={`/${r.vehicleSlug}/routes?target=${r.entityId}`} title="Recorded warm intro routes">
+    <Link className={cx(s.fig, !r.route && s.zero)} href={`/${r.vehicleSlug}/routes?target=${r.entityId}`} title="Recorded warm intro routes">
       <Icon name="link" title="Routes" />{r.route ?? '—'}
-    </a>
+    </Link>
   );
 }
 function Met({ meetings, last, now, compact }: { meetings: number; last: string | null; now: number; compact?: boolean }) {

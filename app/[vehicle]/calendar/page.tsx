@@ -1,3 +1,4 @@
+import Link from '@/components/ui/AppLink';
 import { coalescePage } from '@/lib/page-render';
 import { notFound } from 'next/navigation';
 import { Page } from '@/components/shell/Page';
@@ -111,7 +112,7 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
       {feeds && feeds.sources === 0 && (
         <p className="note" style={{ marginTop: 6 }}>
           <b>Travel and Events</b> come from the team’s own calendars, read through each person’s mailguard token in{' '}
-          <a href="/settings?section=email#calendars">Preferences</a>: an entry over two or more days with a place is a trip,
+          <Link href="/settings?section=email#calendars">Preferences</Link>: an entry over two or more days with a place is a trip,
           and a conference, summit or talk is an event. Read only; nothing is written back.
         </p>
       )}
