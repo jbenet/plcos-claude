@@ -149,6 +149,15 @@ export function portFor(serve: Serve, layout: Layout, env: Record<string, string
 }
 
 /**
+ * The feedback box's view of feedbackHome. The desktop app's local copy files nothing itself, but its box works:
+ * the app sends every write, this one included, to the live server, which files it (Juan, 16 Oct 2026: "Feedback
+ * needs to be able to be submitted in local app"). The copy's own route still refuses (app/api/feedback/route.ts).
+ */
+export function feedbackBoxHome(profile: 'demo' | 'real', desktopCopy: boolean): { filesHere: boolean; livePort: number | null } {
+  return desktopCopy ? { filesHere: true, livePort: null } : feedbackHome(profile);
+}
+
+/**
  * Whether this server files feedback, and where the live app is when it does not. Issue numbers
  * are taken in filing order, so two branches filing would take the same ones: only a live row
  * files (docs/COLLAB.md). Never throws — a page renders whatever the file says, and a file that

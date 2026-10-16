@@ -177,6 +177,12 @@ export async function checkoutProperties(check: Check) {
       `live app from a dev worktree: ${liveOf(dev)}, from a sub-agent’s: ${liveOf(agent)}; feedback from the live folder: ${liveFiles ? 'filed' : 'refused'}, ` +
         `from a dev worktree: ${devHome.filesHere ? 'filed' : `refused, pointing at :${devHome.livePort}`}`,
     );
+    const deskBox = ports.feedbackBoxHome('real', true), plainBox = ports.feedbackBoxHome('demo', false);
+    check(
+      'The desktop app’s local copy opens the feedback box (the app sends the report to the live server); elsewhere the box follows feedbackHome',
+      deskBox.filesHere && deskBox.livePort === null && JSON.stringify(plainBox) === JSON.stringify(ports.feedbackHome('demo')),
+      `desktop copy: ${JSON.stringify(deskBox)}; elsewhere: ${JSON.stringify(plainBox)}`,
+    );
 
     // The preview's copy, of a fake source whose lock holds a live pid, as the live server's does.
     const source = join(scratch, 'plcos-data', 'real');
