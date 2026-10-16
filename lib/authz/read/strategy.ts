@@ -1,5 +1,5 @@
 import { currentUser } from '@/lib/auth';
-import { buildCache } from '@/lib/build-cache';
+import { buildCache, liveRevisions } from '@/lib/build-cache';
 import { getDb } from '@/lib/db';
 import * as raw from '@/modules/strategy';
 import { licensedAccess, redactSpv, spvRowMark } from './r3';
@@ -22,12 +22,13 @@ export async function spvMarks(...args: Parameters<typeof raw.spvMarks>) {
 }
 /**
  * Every LP's SPV reading on a vehicle's plan, kept per data revision (16 Oct 2026): the strategy page read 4,000 of
- * them on each visit, 18 ms of SQL before it could draw. Redacted per viewer below, after the shared cache.
+ * them on each visit, 18 ms of SQL before it could draw. Redacted per viewer below, after the shared cache. Keyed on
+ * the live revision: the readings join research.claim, which moves it and not the read one (network 024).
  */
 const planSpv = buildCache(async (vehicleId: string) => {
   const data = await raw.strategyOf(vehicleId);
   return data ? raw.spvReadings(await getDb(), data.rows.map((r) => r.pursuit.entityId)) : new Map<string, raw.SpvReading>();
-});
+}, 16, liveRevisions);
 /** spvMarks for the LPs of strategyOf(vehicleId), from the cache above. */
 export async function planSpvMarks(vehicleId: string) {
   const [user, rows] = await Promise.all([currentUser(), planSpv(vehicleId)]);
