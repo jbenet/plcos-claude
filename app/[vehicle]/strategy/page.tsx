@@ -15,7 +15,7 @@ import { Propose } from '@/components/plays/Propose';
 import { vehicleSelection } from '@/lib/session';
 import { dateLabel, shortDate } from '@/lib/time';
 import { config } from '@/config/deployment';
-import { spvMarks, vehicleStrategy, STATUS_LABEL, type StrategyAction } from '@/lib/authz/read/strategy';
+import { planSpvMarks, vehicleStrategy, STATUS_LABEL, type StrategyAction } from '@/lib/authz/read/strategy';
 import { presenceFor, utilityOf } from '@/modules/strategy/move-utility';
 import { gapAdvice, pipelineAdvice, type GapId, type Sentence } from '@/modules/strategy/advice';
 import { StatusMark } from '@/components/ui/StatusMark';
@@ -89,7 +89,7 @@ async function VehicleStrategyPage({ params, searchParams }: {
   const vehicle = all.find(v => v.slug === slug);
   if (!vehicle) notFound();
   const db = await getDb();
-  const [data, plays, users, query, moves, history] = await Promise.all([vehicleStrategy(vehicle.id), boardFor(vehicle.id), listUsers(), searchParams, listMoves(db, vehicle.id), moveHistory(db, vehicle.id)]);
+  const [data, plays, users, query, moves, history, spv] = await Promise.all([vehicleStrategy(vehicle.id), boardFor(vehicle.id), listUsers(), searchParams, listMoves(db, vehicle.id), moveHistory(db, vehicle.id), planSpvMarks(vehicle.id)]);
   if (!data) notFound();
   const { total, rows, now, since, counts, weekly } = data;
   // An import or a reconcile pass can move thousands of LPs in a week: the list names the latest, found by id
@@ -133,8 +133,9 @@ async function VehicleStrategyPage({ params, searchParams }: {
   const ranks = new Map(queue.map((o, i) => [o.id, i + 1]));
 
   // SPV stance (Juan, 27 Sep 2026), per LP unit: the same mark as the fit list and selection.
-  const spv = await spvMarks(db, rows.map(r => r.pursuit.entityId));
-  const viewIds = new Map(rows.map(r => [r.pursuit.pursuitId, views.filter(v => v.rows.includes(r)).map(v => v.id)]));
+  // A set per view: rows × views × includes() was 7 ms of each visit at 4,000 LPs (16 Oct 2026).
+  const inView = views.map(v => ({ id: v.id, rows: new Set(v.rows) }));
+  const viewIds = new Map(rows.map(r => [r.pursuit.pursuitId, inView.filter(v => v.rows.has(r)).map(v => v.id)]));
   const tableRows: StrategyTableRow[] = rows.map(r => {
     const effort = lpEffortScore(r);
     return {

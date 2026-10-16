@@ -1,4 +1,6 @@
 import { currentUser } from '@/lib/auth';
+import { buildCache } from '@/lib/build-cache';
+import { getDb } from '@/lib/db';
 import * as raw from '@/modules/strategy';
 import { licensedAccess, redactSpv, spvRowMark } from './r3';
 export * from '@/modules/strategy';
@@ -17,6 +19,19 @@ export async function spvReadings(...args: Parameters<typeof raw.spvReadings>) {
 export async function spvMarks(...args: Parameters<typeof raw.spvMarks>) {
   const rows = await spvReadings(...args);
   return new Map([...rows].map(([id, row]) => [id, spvRowMark(row)]));
+}
+/**
+ * Every LP's SPV reading on a vehicle's plan, kept per data revision (16 Oct 2026): the strategy page read 4,000 of
+ * them on each visit, 18 ms of SQL before it could draw. Redacted per viewer below, after the shared cache.
+ */
+const planSpv = buildCache(async (vehicleId: string) => {
+  const data = await raw.strategyOf(vehicleId);
+  return data ? raw.spvReadings(await getDb(), data.rows.map((r) => r.pursuit.entityId)) : new Map<string, raw.SpvReading>();
+});
+/** spvMarks for the LPs of strategyOf(vehicleId), from the cache above. */
+export async function planSpvMarks(vehicleId: string) {
+  const [user, rows] = await Promise.all([currentUser(), planSpv(vehicleId)]);
+  return new Map([...rows].map(([id, row]) => [id, spvRowMark(redactSpv(user, row))]));
 }
 export async function lpContactsFor(...args: Parameters<typeof raw.lpContactsFor>) {
   const user = await currentUser();
