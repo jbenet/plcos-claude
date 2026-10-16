@@ -26,6 +26,23 @@ const DB_NAME = 'plcos_desktop';
 const PAGE = Number(env.PLCOS_DESKTOP_PAGE || 10_000);
 /** Rows per run when checking a table that is already here against the server's digest. */
 const DIGEST_RUN = 5000;
+/**
+ * A sync page's fields parsed, its rows left as JSON text (remoteRows), or null when the text is not in the server's
+ * shape: {"ok":true,…fields…,"n":N,…,"rows":[…]} with the rows last. A literal ,"rows":[ cannot occur inside a JSON
+ * string (its quotes are escaped), so the first one is the field.
+ */
+export function splitRowsPage(text) {
+  if (!text.startsWith('{"ok":true,') || !text.endsWith(']}')) return null;
+  const cut = text.indexOf(',"rows":[');
+  if (cut < 0) return null;
+  try {
+    const fields = JSON.parse(`${text.slice(0, cut)}}`);
+    return Number.isInteger(fields.n) ? { ...fields, rows: text.slice(cut + 8, -1) } : null;
+  } catch { return null; }
+}
+
+/** Rows in a page from remoteRows: an array, or the rows' JSON text with the server's count beside it. */
+const rowCount = (page) => (typeof page.rows === 'string' ? page.n : page.rows.length);
 const quoteIdent = (s) => `"${String(s).replace(/"/g, '""')}"`;
 const quoteTable = (t) => t.split('.').map(quoteIdent).join('.');
 /** Never seeded from this Mac: what the server's sync never sends either (people's secrets, migration bookkeeping). */
@@ -51,6 +68,10 @@ const WARM_RECENT_MS = 15_000;
 const IDLE_SYNC_MS = 15_000;
 const BUSY_SYNC_MS = 2_000;
 /** Paths the live server always answers: sign-in, the app's own pages, server state (jobs, Astra, imports). */
+// Server actions that only read (16 Oct 2026), by file#export: Selection's score detail is one, fetched on every move
+// of its cursor. A POST, so it still goes to the live server, but it is not a write the copy must catch up with: counted
+// as one, each cursor move sent every page after it to the live server until the next sync.
+const READ_ACTIONS = new Set(['app/selection/actions.ts#scoreDetailAction']);
 const REMOTE_ONLY = [/^\/settings(\/|$)/, /^\/preferences(\/|$)/, /^\/api\//, /^\/auth\//, /^\/signin/, /^\/setup/, /^\/desktop\//, /^\/dev(\/|$)/, /^\/developer(\/|$)/, /^\/issues(\/|$)/, /^\/agents(\/|$)/];
 
 const sh = (cmd, args, opts = {}) => new Promise((resolve, reject) => {
@@ -105,6 +126,7 @@ class LocalCopy {
       secret: this.secret,
       ready: () => this.phase === 'ready',
       canServe: (url, req) => this.canServe(url, req),
+      readsOnly: (actionId) => this.readActionIds().has(actionId),
       onWrite: () => { this.lastWriteAt = Date.now(); this.poke(); },
       onSignedIn: () => this.poke(),
       onSignedOut: () => { this.phase = 'waiting'; this.detail = 'Waiting for sign-in'; },
@@ -117,12 +139,35 @@ class LocalCopy {
     };
   }
 
+  /**
+   * A slow table catching up in the background (route_cache: 7,000 rows of 60 KB, all rewritten whenever identity
+   * changes, 16 Oct 2026) waits between pages while the person is clicking, so its download and writes do not compete
+   * with the page they asked for. GUESS: two seconds since the last page; a minute at most, so it still finishes.
+   */
+  async yieldToPerson() {
+    const until = Date.now() + 60_000;
+    while (Date.now() - (this.lastPageAt ?? 0) < 2_000 && Date.now() < until && !this.stopped) await new Promise((r) => setTimeout(r, 250));
+  }
+
+  /** The ids of READ_ACTIONS in this build (Next names server actions by a hash per build), read once per build. */
+  readActionIds() {
+    const dir = this.build?.dir;
+    if (this.readIds?.dir === dir) return this.readIds.ids;
+    let ids = new Set();
+    try {
+      const m = JSON.parse(readFileSync(path.join(dir, '.next/server/server-reference-manifest.json'), 'utf8'));
+      ids = new Set(Object.entries(m.node ?? {}).filter(([, v]) => READ_ACTIONS.has(`${v.filename}#${v.exportedName}`)).map(([id]) => id));
+    } catch { /* no build yet: every POST counts as a write */ }
+    this.readIds = { dir, ids };
+    return ids;
+  }
+
   /** After a write, until a sync that started once the write had settled has finished (the pages are rebuilt after). */
   settling() { return this.lastWriteAt > 0 && this.settledFor !== this.lastWriteAt; }
 
   canServe(url, req) {
     // A page opened, not one fetched ahead of a hover (Next marks those next-router-prefetch).
-    if (req?.method === 'GET' && !req.headers?.['next-router-prefetch']) this.remember(url);
+    if (req?.method === 'GET' && !req.headers?.['next-router-prefetch']) { this.remember(url); if (!url.pathname.startsWith('/_next/')) this.lastPageAt = Date.now(); }
     if (this.phase !== 'ready') return false;
     if (this.serverCommit && this.build?.commit !== this.serverCommit) return false;
     if (this.settling()) return false;
@@ -251,10 +296,25 @@ class LocalCopy {
   // ---- the live server ----------------------------------------------------------------------------------------
 
   async remoteJson(pathname) {
+    return this.remoteAnswer(pathname, false);
+  }
+
+  /**
+   * A page of rows, left as text (16 Oct 2026). The server writes its few fields first and the rows last
+   * (app/api/desktop/sync/route.ts), so only the fields are parsed here and the rows go to Postgres as they came:
+   * parsing a 16 MB page of route_cache and encoding it again for the insert held this process, which also answers
+   * every click in the window, for 100-200 ms a page, page after page while a big table caught up.
+   * `rows` is then a string; anything not in that shape is parsed whole, as before.
+   */
+  async remoteRows(pathname) {
+    return this.remoteAnswer(pathname, true);
+  }
+
+  async remoteAnswer(pathname, rowsAsText) {
     const res = await this.remoteFetch(pathname);
     const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* not json */ }
+    let json = rowsAsText ? splitRowsPage(text) : null;
+    if (!json) try { json = JSON.parse(text); } catch { /* not json */ }
     if (res.status === 403 || res.status === 401 || (res.status >= 300 && res.status < 400)) {
       await this.refreshInfo();
       throw new Error(`the server refused ${pathname.split('?')[0]} (${res.status})`);
@@ -606,7 +666,7 @@ class LocalCopy {
         const asked = Date.now();
         if (!whole) qs.set('since', since);
         if (from) qs.set('after', JSON.stringify(from));
-        const p = this.remoteJson(`/api/desktop/sync?${qs}`).then((page) => {
+        const p = this.remoteRows(`/api/desktop/sync?${qs}`).then((page) => {
           const ms = Date.now() - asked;
           if (ms > 8_000) limit = Math.max(500, Math.floor(limit / 2));
           else if (ms < 2_000) limit = Math.min(PAGE, limit * 2);
@@ -620,8 +680,10 @@ class LocalCopy {
       for (;;) {
         const page = await pending;
         horizon ??= page.horizon;
+        if (page.next && this.background.has(info.t)) await this.yieldToPerson();
         pending = page.next ? fetchPage(page.next) : null;
-        if (page.rows.length) { await this.apply(client, table, mine, page.rows, keyed); n += page.rows.length; onRows(n); }
+        const got = rowCount(page);
+        if (got) { await this.apply(client, table, mine, page.rows, keyed); n += got; onRows(n); }
         if (!page.next) { count = page.count; break; }
         after = page.next;
       }
@@ -690,11 +752,13 @@ class LocalCopy {
         await client.query(`delete from ${table} t ${where}`, params);
         let after = prevHi;
         for (;;) {
+          if (this.background.has(info.t)) await this.yieldToPerson();
           const qs = new URLSearchParams({ op: 'rows', t: info.t, limit: String(PAGE) });
           if (after) qs.set('after', JSON.stringify(after));
           if (run.hi) qs.set('upto', JSON.stringify(run.hi));
-          const page = await this.remoteJson(`/api/desktop/sync?${qs}`);
-          if (page.rows.length) { await this.apply(client, table, mine, page.rows, true); n += page.rows.length; onRows(n); }
+          const page = await this.remoteRows(`/api/desktop/sync?${qs}`);
+          const got = rowCount(page);
+          if (got) { await this.apply(client, table, mine, page.rows, true); n += got; onRows(n); }
           if (!page.next) break;
           after = page.next;
         }
@@ -724,7 +788,7 @@ class LocalCopy {
     await client.query(
       `insert into ${table} (${cols.join(', ')})${mine.ident_always ? ' overriding system value' : ''}
        select ${cols.join(', ')} from jsonb_populate_recordset(null::${table}, $1::jsonb)${conflict}`,
-      [JSON.stringify(rows)],
+      [typeof rows === 'string' ? rows : JSON.stringify(rows)],
     );
   }
 
