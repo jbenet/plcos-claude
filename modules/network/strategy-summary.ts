@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import { buildCache, routesRevisions } from '@/lib/build-cache';
-import { lpContactsFor } from '@/modules/strategy/lp-contacts';
+import { lpContactsFor, type LpContact } from '@/modules/strategy/lp-contacts';
 import { revisionFor } from './cache';
 import type { EvidenceTier, Route } from './types';
 
@@ -35,14 +35,15 @@ const storedRoutes = buildCache(async (kind: string) => {
     ({ fromEntity, fromName, weakestTier, viaContact, hops: ids.map((toEntity, i) => ({ toEntity, toName: names[i]! })) }) as unknown as Route) }]));
 }, 4, routesRevisions);
 
-export async function strategyRouteSummaries(ids: string[], kind: string): Promise<Map<string, RecordedRoute>> {
+/** `contacts`: lpContactsFor(ids), when the caller asks for the same ids under several kinds (lib/lp-stats). */
+export async function strategyRouteSummaries(ids: string[], kind: string, contactsOf?: Promise<Map<string, LpContact[]>>): Promise<Map<string, RecordedRoute>> {
   if (!ids.length) return new Map();
   const db = await getDb();
   // The stored searches are read beside the revision (whose contact signature is the slow part after
   // a write), and whether each is current is decided here (performance pass, 8 Oct 2026).
   const versioned = revisionFor(db);
   versioned.catch(() => undefined); // awaited below
-  const contacts = await lpContactsFor(ids);
+  const contacts = await (contactsOf ?? lpContactsFor(ids));
   const [stored, version] = await Promise.all([storedRoutes(kind), versioned]);
   const byTarget = stored;
   const isCurrent = (r: { input_revision: string; revision: string }) => r.input_revision === version.revision && r.revision === version.generation;
