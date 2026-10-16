@@ -46,7 +46,7 @@ const TABLES_AT_ONCE = Number(env.PLCOS_DESKTOP_TABLES_AT_ONCE || 4);
  */
 const WRITE_SETTLE_MS = Number(env.PLCOS_DESKTOP_SETTLE_MS || 1_000);
 // GUESS — the pages rebuilt after a sync that changed something, and the most time that may take before reads resume.
-const RECENT_PAGES = 3;
+const RECENT_PAGES = 8;
 const WARM_RECENT_MS = 15_000;
 const IDLE_SYNC_MS = 15_000;
 const BUSY_SYNC_MS = 2_000;
@@ -86,7 +86,10 @@ class LocalCopy {
     this.lastSyncFinishedAt = 0;
     this.settledFor = 0;              // the write (lastWriteAt) the copy has caught up with
     this.serverForeground = null;     // the server's foreground revision while this copy holds an older one
-    this.recent = [];                 // the last pages this person opened, newest first, to rebuild after a change
+    // The last pages this person opened, newest first, to rebuild after a change; kept on disk, so a relaunch (or the
+    // server's new build) rebuilds them before the first click rather than after it (15 Oct 2026: 1.9 s cold LP page).
+    this.recentFile = path.join(this.dir, 'recent-pages.json');
+    try { this.recent = JSON.parse(readFileSync(this.recentFile, 'utf8')).filter((x) => typeof x === 'string').slice(0, RECENT_PAGES); } catch { this.recent = []; }
     this.lastSync = null;             // { at, ms, tables, rows, deleted }
     this.serverCommit = null;
     this.wake = null;
@@ -118,7 +121,8 @@ class LocalCopy {
   settling() { return this.lastWriteAt > 0 && this.settledFor !== this.lastWriteAt; }
 
   canServe(url, req) {
-    if (req?.method === 'GET') this.remember(url);
+    // A page opened, not one fetched ahead of a hover (Next marks those next-router-prefetch).
+    if (req?.method === 'GET' && !req.headers?.['next-router-prefetch']) this.remember(url);
     if (this.phase !== 'ready') return false;
     if (this.serverCommit && this.build?.commit !== this.serverCommit) return false;
     if (this.settling()) return false;
@@ -132,7 +136,8 @@ class LocalCopy {
     const q = new URLSearchParams(url.search);
     q.delete('_rsc');
     const page = q.size ? `${p}?${q}` : p;
-    this.recent = [page, ...this.recent.filter((x) => x !== page)].slice(0, RECENT_PAGES);
+    const next = [page, ...this.recent.filter((x) => x !== page)].slice(0, RECENT_PAGES);
+    if (next.join('\n') !== this.recent.join('\n')) { this.recent = next; try { writeFileSync(this.recentFile, JSON.stringify(next)); } catch { /* best effort */ } }
   }
 
   /**
