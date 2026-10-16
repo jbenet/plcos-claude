@@ -27,32 +27,31 @@ export async function strategicRecords(q: Queryable, entityIds: string[], words:
   if (!ids.length) return { texts, prospects };
   const loose = [...new Set(words.map((w) => w.replace(/\*$/, '').trim().toLowerCase()).filter(Boolean))]
     .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  // Aliases first (identity.alias_pairs): index probes, not canonical_entity_id() on every claim and note (78 ms -> 16 ms
+  // on the real copy's Neurotech, 16 Oct 2026; a person's own change rebuilds this before their next page).
   const [claims, profiles, sourced] = await Promise.all([
     loose ? q.query<{ id: string; field: string; value: string; as_of: Date | string | null }>(
-      `select identity.canonical_entity_id(c.entity_id)::text id, substr(c.field, 8) field, c.value, c.as_of
-         from research.claim c
+      `select o.canonical_id::text id, substr(c.field, 8) field, c.value, c.as_of
+         from identity.alias_pairs($1::uuid[]) o join research.claim c on c.entity_id = o.entity_id
         where c.superseded_by is null and c.field = any($2::text[]) and c.value ~* $3
-          and identity.canonical_entity_id(c.entity_id) = any($1::uuid[])
         order by c.as_of desc nulls last`, [ids, STRATEGIC_FIELDS.map((f) => `public.${f}`), loose]) : Promise.resolve([]),
     loose ? q.query<{ id: string; text: string; at: Date | string | null }>(
-      `select identity.canonical_entity_id(n.entity_id)::text id,
+      `select o.canonical_id::text id,
               concat_ws('. ', n.data->'profile'->>'summary',
                 (select string_agg(x, ', ') from jsonb_array_elements_text(case when jsonb_typeof(n.data->'profile'->'interests') = 'array'
                   then n.data->'profile'->'interests' else '[]'::jsonb end) x)) text,
               coalesce((n.data->'researched'->>'at')::date, n.created_at::date) at
-         from research.note n
+         from identity.alias_pairs($1::uuid[]) o join research.note n on n.entity_id = o.entity_id
         where n.kind = 'public_profile' and n.profile_text ~* $2
-          and identity.canonical_entity_id(n.entity_id) = any($1::uuid[])
         order by n.created_at desc`, [ids, loose]) : Promise.resolve([]),
     q.query<{ id: string; vehicle: string; strategic: boolean | null; reason: string | null; status: string | null }>(
-      `select distinct on (identity.canonical_entity_id(n.entity_id), n.data->>'vehicleId')
-              identity.canonical_entity_id(n.entity_id)::text id, n.data->>'vehicleId' vehicle,
+      `select distinct on (o.canonical_id, n.data->>'vehicleId')
+              o.canonical_id::text id, n.data->>'vehicleId' vehicle,
               case when jsonb_typeof(n.data->'strategic') = 'boolean' then (n.data->>'strategic')::boolean end strategic,
               n.data->>'reason' reason, n.data->>'status' status
-         from research.note n
+         from identity.alias_pairs($1::uuid[]) o join research.note n on n.entity_id = o.entity_id
         where n.data->>'source' = 'prospects' and n.data ? 'vehicleId'
-          and identity.canonical_entity_id(n.entity_id) = any($1::uuid[])
-        order by identity.canonical_entity_id(n.entity_id), n.data->>'vehicleId', n.created_at desc`, [ids]),
+        order by o.canonical_id, n.data->>'vehicleId', n.created_at desc`, [ids]),
   ]);
   const add = (id: string, t: StrategicText) => texts.set(id, [...(texts.get(id) ?? []), t]);
   for (const c of claims) add(c.id, { field: c.field, value: c.value, asOf: day(c.as_of) });

@@ -69,6 +69,13 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
     return { touchesBy, sums, closes, restricted, readings, spv };
   })();
   touched.catch(() => undefined);
+  // Strategic value (issue 0120): each vehicle's field and, for an SPV, its company; then the records. Read beside the
+  // entities and people, not after them: it needs only the pursuits, and waiting put it last on a rebuild's path
+  // (~50 ms of 340 after a person's own change, 16 Oct 2026).
+  const scopes = new Map(vehicles.map(v => [v.id, strategicScope(v, config.strategic.domains)]));
+  const inView = [...new Set(pursuits.map(p => p.vehicleId))].map(id => scopes.get(id)!);
+  const strategicP = strategicRecords(db, entityIds, inView.flatMap(x => [...x.terms, ...(x.company ? [x.company] : [])]));
+  strategicP.catch(() => undefined); // awaited below
   const entities = await listEntities(entityIds);
   const organisations = new Set(entities.filter(e => e.entityType !== 'person').map(e => e.entityId));
   // The LP is the committing unit (docs/23): an organisation's row names its people — its contacts on
@@ -122,12 +129,7 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
   const firmsFor = (p: Pursuit): PipelineRow['firms'] =>
     (firmsOf.get(p.entityId) ?? []).map(f => ({ ...f, lpRow: lpRow.get(`${f.id}:${p.vehicleId}`) ?? null }));
   const spvKind = new Set(vehicles.filter(v => v.kind === 'spv').map(v => v.id));
-  // Strategic value (issue 0120): each vehicle's field and, for an SPV, its company; then the records.
-  const scopes = new Map(vehicles.map(v => [v.id, strategicScope(v, config.strategic.domains)]));
-  const inView = [...new Set(pursuits.map(p => p.vehicleId))].map(id => scopes.get(id)!);
-  const [strategicOn, { touchesBy, sums, closes, restricted, readings, spv }, [assessments, plans]] = await Promise.all([
-    strategicRecords(db, entityIds, inView.flatMap(x => [...x.terms, ...(x.company ? [x.company] : [])])), touched, planned,
-  ]);
+  const [strategicOn, { touchesBy, sums, closes, restricted, readings, spv }, [assessments, plans]] = await Promise.all([strategicP, touched, planned]);
   const strategies = new Map(plans.flatMap(plan => plan?.rows.map(r => [r.pursuit.pursuitId, r] as const) ?? []));
   const fit = new Map(assessments.map(a => [`${a.entityId}:${a.vehicleId}`, a]));
   const scoreFor = (p: Pursuit) => {
