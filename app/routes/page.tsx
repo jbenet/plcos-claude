@@ -15,7 +15,7 @@ import { ProposeButton } from '@/components/routes/ProposeButton';
 import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
 import { Coverage } from '@/components/ui/Coverage';
 import { Glyph } from '@/components/ui/Glyph';
-import { auth } from '@/lib/auth';
+import { currentUser } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import { listEntities, affiliationsFor } from '@/lib/authz/read/identity';
 import { TargetPicker } from '@/components/routes/TargetPicker';
@@ -60,7 +60,7 @@ async function Routes({
   const { target, r, q = '', sort: sortParam, min: minParam, touch: touchParam, expanded, page, family } = params;
   // "Routes through X" (Juan, 2 Oct 2026): the same page, toggled in the address, so any state links.
   const through = params.mode === 'through';
-  const user = await (await auth()).currentUser();
+  const user = await currentUser();
   const { tiers, vehicles, affiliations: pickerAffiliations, fit, asks, team, entities: pipelineEntities, targets, contact, rows: pipelineRows, founders } =
     await routeInputs(selection.current?.id ?? '');
   // The server searches the targets (issue 0023): the page carries only the rows it draws.
