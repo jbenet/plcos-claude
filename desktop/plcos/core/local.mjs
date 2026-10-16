@@ -170,7 +170,9 @@ class LocalCopy {
     // A JSON read a page makes (a row's basis, Selection's score detail) is the person at work, not a page to rebuild.
     if (req?.method === 'GET' && !req.headers?.['next-router-prefetch']) {
       if (!String(req.headers?.accept ?? '').startsWith('application/json')) this.remember(url);
-      if (!url.pathname.startsWith('/_next/')) this.lastPageAt = Date.now();
+      // Not the window's own polling (/api/import-jobs every 2 s while it is open): that would hold a slow table's
+      // catch-up at its longest wait for as long as the window is open.
+      if (!url.pathname.startsWith('/_next/') && !url.pathname.startsWith('/api/')) this.lastPageAt = Date.now();
     }
     if (this.phase !== 'ready') return false;
     if (this.serverCommit && this.build?.commit !== this.serverCommit) return false;
