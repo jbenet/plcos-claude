@@ -55,14 +55,23 @@ type Row = {
   as_of: Date | string; certainty: string; note: string | null;
 };
 
+/**
+ * The canonical record of an entity row `e`: itself unless merged, and only then the walk up the merges. Nearly every
+ * record is unmerged, and calling canonical_entity_id() on each of 2,000 rows cost ~20 ms a query (performance pass,
+ * 16 Oct 2026); coalesce evaluates the walk only when the first value is null.
+ */
+const CANON = (e: string) => `coalesce(case when ${e}.merged_into is null then ${e}.entity_id end, identity.canonical_entity_id(${e}.entity_id))`;
+
 const SELECT = `
   select a.affiliation_id, a.kind, a.role, a.started_on, a.ended_on, a.is_primary,
          a.source, a.as_of, a.certainty, a.note, p.entity_id as person_entity,
          o.entity_id as org_entity, p.display_name as person_name,
          o.display_name as org_name, o.entity_type::text as org_type
     from identity.affiliation a
-    join identity.entity p on p.entity_id = identity.canonical_entity_id(a.person_entity)
-    join identity.entity o on o.entity_id = identity.canonical_entity_id(a.org_entity)`;
+    join identity.entity pa on pa.entity_id = a.person_entity
+    join identity.entity oa on oa.entity_id = a.org_entity
+    join identity.entity p on p.entity_id = ${CANON('pa')}
+    join identity.entity o on o.entity_id = ${CANON('oa')}`;
 
 const toAffiliation = (r: Row): Affiliation => ({
   affiliationId: r.affiliation_id,
@@ -111,7 +120,7 @@ export async function affiliationsFor(ids: string[], limit = 2000): Promise<Affi
   if (!ids.length) return [];
   const db = await getDb();
   return (await db.query<Row>(`with recursive wanted(id) as (
-    select identity.canonical_entity_id(id) from unnest($1::uuid[]) id
+    select ${CANON('e')} from unnest($1::uuid[]) x(id) join identity.entity e on e.entity_id = x.id
     union select e.entity_id from identity.entity e join wanted w on e.merged_into = w.id
   ), selected_ids as materialized (
     select affiliation_id from (
