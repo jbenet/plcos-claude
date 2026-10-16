@@ -12,6 +12,7 @@
 // Every step can fail without breaking the app: the core then sends everything to the live server.
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
+import { rm } from 'node:fs/promises';
 import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -170,7 +171,9 @@ class LocalCopy {
     // A JSON read a page makes (a row's basis, Selection's score detail) is the person at work, not a page to rebuild.
     if (req?.method === 'GET' && !req.headers?.['next-router-prefetch']) {
       if (!String(req.headers?.accept ?? '').startsWith('application/json')) this.remember(url);
-      if (!url.pathname.startsWith('/_next/')) this.lastPageAt = Date.now();
+      // Not the window's own polling (/api/import-jobs every 2 s while it is open): that would hold a slow table's
+      // catch-up at its longest wait for as long as the window is open.
+      if (!url.pathname.startsWith('/_next/') && !url.pathname.startsWith('/api/')) this.lastPageAt = Date.now();
     }
     if (this.phase !== 'ready') return false;
     if (this.serverCommit && this.build?.commit !== this.serverCommit) return false;
@@ -344,11 +347,12 @@ class LocalCopy {
       const got = res.headers.get('x-build-commit') || commit || 'unknown';
       await pipeline(Readable.fromWeb(res.body), createWriteStream(archive));
       await sh('tar', ['-xzf', archive, '-C', tmp]);
+      const packed = statSync(archive).size;
       rmSync(archive, { force: true });
       dir = path.join(builds, got);
       rmSync(dir, { recursive: true, force: true });
       renameSync(tmp, dir);
-      this.log('downloaded build', got, `(${Math.round(statSize(dir) / 1e6)} MB)`);
+      this.log('downloaded build', got, `(${Math.round(packed / 1e6)} MB packed)`);
     }
     const commitHere = path.basename(dir);
     await this.installDeps(dir);
@@ -480,7 +484,8 @@ class LocalCopy {
     for (const name of readdirSync(builds)) {
       if (name === keep || name.startsWith('.incoming-') && Date.now() - Number(name.slice(10)) < 3600_000) continue;
       if (name.startsWith('.incoming-') || name !== keep) {
-        if (this.build?.commit !== name) rmSync(path.join(builds, name), { recursive: true, force: true });
+        // Removed off this process's thread: thousands of files took 0.4 s here, which every click waited out (16 Oct 2026).
+        if (this.build?.commit !== name) rm(path.join(builds, name), { recursive: true, force: true }).catch((e) => this.log('removing an old build:', String(e?.message ?? e).slice(0, 200)));
       }
     }
   }
@@ -866,9 +871,3 @@ class LocalCopy {
   }
 }
 
-function statSize(dir) {
-  let n = 0;
-  const walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (e.isFile()) n += statSync(p).size; } };
-  try { walk(dir); } catch { /* best effort */ }
-  return n;
-}

@@ -1,4 +1,5 @@
 import { strategyRouteSummaries } from '@/modules/network';
+import { lpContactsFor } from '@/modules/strategy/lp-contacts';
 import { getDb } from '@/lib/db';
 import { buildCache, liveRevisions } from '@/lib/build-cache';
 import { pipelineData } from '@/lib/pipeline-data';
@@ -101,8 +102,9 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
     db.query<{ id: string; vehicle: string; track: 'soft' | 'hard'; amount: string }>(
       `select identity.canonical_entity_id(x.entity_id)::text id, x.vehicle_id::text vehicle, x.track::text track, sum(x.amount)::text amount
        from pipeline.exposure x where x.closed_at is null and x.vehicle_id=any($1::uuid[]) group by 1,2,3`, [vehicleIds]),
-    Promise.all([...new Set(vehicles.map(v => v.kind))].map(async kind =>
-      [...(await strategyRouteSummaries(ids, kind)).values()].map(r => ({ id: r.entityId, kind, tier: r.tier })))).then(groups => groups.flat()),
+    // The same LPs' contacts under every kind: read once, not once per kind (52 ms each, 16 Oct 2026).
+    ((contacts) => Promise.all([...new Set(vehicles.map(v => v.kind))].map(async kind =>
+      [...(await strategyRouteSummaries(ids, kind, contacts)).values()].map(r => ({ id: r.entityId, kind, tier: r.tier })))).then(groups => groups.flat()))(lpContactsFor(ids)),
   ]);
 
   const first = <T extends { id: string }>(list: T[]) => { const m = new Map<string, T>(); for (const x of list) if (!m.has(x.id)) m.set(x.id, x); return m; };
