@@ -9,7 +9,7 @@ import { StatusStepper } from '@/components/strategy/StatusStepper';
 import { AdvanceForm } from '@/components/strategy/AdvanceForm';
 import { EvidenceRef, type EvidenceDoc } from '@/components/ui/EvidenceRef';
 import { Coverage } from '@/components/ui/Coverage';
-import { auth } from '@/lib/auth';
+import { currentUser } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
 import {
   IMPLIED_LABEL, PASSED_BY_LABEL, RUNG_LABEL, STATUS_LABEL, getPursuit, impliedRung, spvMarks, statusNeedsEvidence, strategyPursuitsFor, suggestionsFor, updatesFor,
@@ -79,7 +79,7 @@ async function TargetWorkspace({ params, searchParams }: {
   const pursuit = await getPursuit(id);
   if (!pursuit) notFound();
 
-  const [user, vehicles, [entity]] = await Promise.all([(async () => (await auth()).currentUser())(), listVehicles(), listEntities([pursuit.entityId])]);
+  const [user, vehicles, [entity]] = await Promise.all([currentUser(), listVehicles(), listEntities([pursuit.entityId])]);
   // The routes page's own search — team scope, three hops, this vehicle — so the warm intro box
   // and the page it opens agree (issue 0093).
   const vehicleKind = vehicles.find((v) => v.id === pursuit.vehicleId)?.kind ?? 'fund';
