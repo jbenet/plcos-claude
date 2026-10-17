@@ -242,16 +242,38 @@ export async function syncCountersignature(
  * An invited seat moves to "IOI given", dated; a seat already at IOI takes the new amount. A seat
  * further on (allocated, wired) or passed is left alone: the indication is history by then. Called
  * from pipeline.recordIndication, in its transaction. Creates no seat: inviting is the room's act.
+ * Answers each seat it changed as it was before, so withdrawing the indication can put it back (restoreIoi).
  */
-export async function syncIoi(entityId: string, vehicleId: string, on: Date, amount: number, q?: Queryable): Promise<number> {
+export interface SeatBefore { seatId: string; stage: string; amount: number | null; ioiAt: string | null }
+export async function syncIoi(entityId: string, vehicleId: string, on: Date, amount: number, q?: Queryable): Promise<SeatBefore[]> {
   const db = q ?? (await getDb());
-  const rows = await db.query<{ seat_id: string }>(
-    `update close.spv_seat
-        set stage = 'ioi', ioi_at = coalesce(ioi_at, $3), amount = $4
-      where vehicle_id = $2 and identity.canonical_entity_id(entity_id) = identity.canonical_entity_id($1::uuid)
-        and stage in ('invited', 'ioi')
-      returning seat_id`,
+  const rows = await db.query<{ seat_id: string; stage: string; amount: string | null; ioi_at: Date | string | null }>(
+    `update close.spv_seat s
+        set stage = 'ioi', ioi_at = coalesce(s.ioi_at, $3), amount = $4
+       from close.spv_seat b
+      where b.seat_id = s.seat_id and s.vehicle_id = $2
+        and identity.canonical_entity_id(s.entity_id) = identity.canonical_entity_id($1::uuid)
+        and s.stage in ('invited', 'ioi')
+      returning s.seat_id::text, b.stage::text, b.amount::text, b.ioi_at`,
     [entityId, vehicleId, on, amount],
   );
-  return rows.length;
+  return rows.map((r) => ({ seatId: r.seat_id, stage: r.stage, amount: r.amount === null ? null : Number(r.amount), ioiAt: r.ioi_at ? new Date(r.ioi_at).toISOString() : null }));
+}
+
+/**
+ * Put seats back as they were before an indication moved them (pipeline.withdrawIndication): only a seat still where
+ * that indication left it, at IOI with its amount; one the room moved on since is left alone. Answers how many.
+ */
+export async function restoreIoi(seats: SeatBefore[], amount: number, q?: Queryable): Promise<number> {
+  const db = q ?? (await getDb());
+  let n = 0;
+  for (const s of seats) {
+    const rows = await db.query(
+      `update close.spv_seat set stage = $2::close.spv_stage, amount = $3, ioi_at = $4
+        where seat_id = $1 and stage = 'ioi' and amount = $5 returning seat_id`,
+      [s.seatId, s.stage, s.amount, s.ioiAt, amount],
+    );
+    n += rows.length;
+  }
+  return n;
 }

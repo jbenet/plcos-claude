@@ -35,6 +35,9 @@ export interface UpdateInput {
   indicated?: { low: number; high?: number | null; on?: Date | null; touchpointId?: string | null } | null;
 }
 
+/** A write through the mail desk: whether a person was in the loop, and the token it came through. */
+export interface DeskVia { autonomous: boolean; tokenId: string }
+
 export interface UpdateResult {
   updateId: string;
   /** False when this form was saved already: nothing was written the second time. */
@@ -65,8 +68,10 @@ function taken(s: UpdateSuggestion, input: UpdateInput): boolean {
 /**
  * `opts.q`: the caller's transaction (the mail desk adding an LP and its indicated amount in one, docs/27 §5). The
  * update is then written inside it, and reconciliation, which reads committed records, is left to the caller.
+ * `opts.via`: a call through the mail desk, kept in the audit entries of the update, its status and its amount (red team,
+ * 17 Oct 2026), so an autonomous write is told apart from a person's and traced to its token.
  */
-export async function addUpdate(actorId: string, input: UpdateInput, opts: { q?: Queryable } = {}): Promise<UpdateResult> {
+export async function addUpdate(actorId: string, input: UpdateInput, opts: { q?: Queryable; via?: DeskVia } = {}): Promise<UpdateResult> {
   const body = input.body.trim();
   if (!body) throw new StatusRefused('An update needs words: what happened, or what changed.');
   if (!input.idempotencyKey.trim()) throw new StatusRefused('This form has no key; reload the page and save again.');
@@ -100,7 +105,7 @@ export async function addUpdate(actorId: string, input: UpdateInput, opts: { q?:
         // The next step stays unless the update names a new one.
         nextStep: next ? next.step : p.nextStep,
         nextStepOn: next ? next.on : p.nextStepOn,
-      }, { q: tx, updateId, source: input.status!.source });
+      }, { q: tx, updateId, source: input.status!.source, via: opts.via });
       applied.status = { from: p.status, to };
       if (next) applied.nextStep = { step: next.step, on: next.on?.toISOString().slice(0, 10) ?? null };
     } else if (next) {
@@ -124,7 +129,7 @@ export async function addUpdate(actorId: string, input: UpdateInput, opts: { q?:
       const on = input.touch && !applied.touch?.ahead ? input.touch.on : i.on ?? new Date();
       const touchpointId = applied.touch && !applied.touch.ahead ? applied.touchpointId! : i.touchpointId ?? null;
       const { low, high } = indicationRange(i.low, i.high);
-      const indicationId = await recordIndication(actorId, { pursuitId: p.pursuitId, low, high, on, touchpointId, updateId }, { q: tx });
+      const indicationId = await recordIndication(actorId, { pursuitId: p.pursuitId, low, high, on, touchpointId, updateId }, { q: tx, via: opts.via });
       applied.indicated = { indicationId, low, high, on: on.toISOString().slice(0, 10), touchpointId };
     }
 
@@ -134,7 +139,7 @@ export async function addUpdate(actorId: string, input: UpdateInput, opts: { q?:
     await tx.query(
       `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
        values ($1, 'pursuit.update_added', 'pursuit', $2, $3)`,
-      [actorId, p.pursuitId, JSON.stringify({ entity: p.entityName, vehicle: p.vehicleName, updateId, applied })],
+      [actorId, p.pursuitId, JSON.stringify({ entity: p.entityName, vehicle: p.vehicleName, updateId, applied, ...opts.via })],
     );
     return { updateId, created, applied };
   });

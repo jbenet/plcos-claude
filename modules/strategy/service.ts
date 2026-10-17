@@ -328,7 +328,8 @@ function checkStatus(change: { status: PursuitStatus; passedBy?: PassedBy | null
  * change as a consequence of the update rather than as a second event.
  */
 export async function setStatus(
-  actorId: string, pursuitId: string, change: StatusChange, opts: { q?: Queryable; updateId?: string; source?: 'us' | 'rule' } = {},
+  actorId: string, pursuitId: string, change: StatusChange,
+  opts: { q?: Queryable; updateId?: string; source?: 'us' | 'rule'; via?: { autonomous: boolean; tokenId: string } } = {},
 ): Promise<void> {
   const { passed, reason } = checkStatus(change);
   const nextStep = change.nextStep?.trim() || null;
@@ -363,6 +364,8 @@ export async function setStatus(
         fromId: pursuit.status, toId: change.status,
         ...(passed ? { passedBy: change.passedBy } : {}), ...(reason ? { reason } : {}), ...(nextStep ? { nextStep } : {}),
         ...(opts.updateId ? { updateId: opts.updateId } : {}),
+        // Through the mail desk: whether a person clicked, and the token (red team, 17 Oct 2026).
+        ...opts.via,
       })],
     );
   };

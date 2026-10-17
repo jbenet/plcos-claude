@@ -32,6 +32,28 @@ export async function outreachEntitiesProperties(check: Check, db: Db) {
     && second.status === 200 && second.json.data.sendTo?.replaced === 'investments@invented-sendto.example' && rows === 1
     && row?.entity?.sendTo?.email === 'ir@invented-sendto.example' && row.entity.sendTo.setBy === 'juan' && noEmail.status === 400,
     `first ${first.status} ${JSON.stringify(first.json?.data?.sendTo ?? first.json)?.slice(0, 120)}; second ${second.status} replaced ${second.json?.data?.sendTo?.replaced}; rows ${rows}; read ${read.status} ${JSON.stringify(row?.entity ?? null)?.slice(0, 160)}; no email ${noEmail.status}`);
+  // A replaced send-to stays recoverable (red team, 17 Oct 2026): the old address, who set it and when in the audit entry,
+  // read back as the previous one, and put back through the same path; an autonomous replacement is the Mail desk's.
+  const { previousSendTo } = await import('../../lib/outreach/entity-reads');
+  const { setSendTo } = await import('../../lib/outreach/entities');
+  const desk = (await db.one<{ id: string }>(`select id::text from platform.app_user where handle = 'mail-desk'`))!.id;
+  const audit = await db.one<{ actor: string; detail: any }>(`select actor_id::text actor, detail from platform.audit_log
+    where action = 'contact.send_to_set' and subject_id = $1 order by id desc limit 1`, [lp]);
+  const before = await previousSendTo(lp, db);
+  const agentSet = await call(rw, 'contacts', {}, { method: 'POST', headers: { 'x-autonomous': '1' },
+    body: { pursuitId: lpP, email: 'deals@invented-sendto.example', source: 'gmail-signature', role: 'send-to' } });
+  const agentAudit = await db.one<{ actor: string; detail: any }>(`select actor_id::text actor, detail from platform.audit_log
+    where action = 'contact.send_to_set' and subject_id = $1 order by id desc limit 1`, [lp]);
+  const agentPrev = await previousSendTo(lp, db);
+  await db.transaction((tx) => setSendTo(tx, { entityId: lp, email: agentPrev!.email, claimId: null, actorId: juan.id, tokenId: null, autonomous: false, source: 'restored' }));
+  const restored = await db.one<{ email: string; set_by: string }>('select email, set_by::text from identity.send_to where entity_id = $1', [lp]);
+  check('Send-to: a replacement keeps the old address in history — its address, who set it and when in the audit entry, read back as the previous one — an autonomous one is the Mail desk\'s, and a person restores it through the same path',
+    audit?.actor === juan.id && audit.detail.previous?.email === 'investments@invented-sendto.example' && audit.detail.previous.setBy === juan.id && !!audit.detail.previous.setAt
+    && before?.email === 'investments@invented-sendto.example' && before.autonomous === false
+    && agentSet.status === 200 && agentAudit?.actor === desk && agentAudit.detail.autonomous === true && typeof agentAudit.detail.tokenId === 'string'
+    && agentAudit.detail.previous?.email === 'ir@invented-sendto.example' && agentPrev?.email === 'ir@invented-sendto.example' && agentPrev.autonomous === true
+    && restored?.email === 'ir@invented-sendto.example' && restored.set_by === juan.id && (await previousSendTo(lp, db))?.email === 'deals@invented-sendto.example',
+    `person: actor ${audit?.actor === juan.id ? 'juan' : audit?.actor}, previous ${JSON.stringify(audit?.detail?.previous ?? null)}, read ${before?.email}; agent ${agentSet.status}${agentSet.json?.error ? ` (${agentSet.json.error})` : ''}: actor ${agentAudit?.actor === desk ? 'desk' : agentAudit?.actor}, autonomous ${agentAudit?.detail?.autonomous}, previous ${agentAudit?.detail?.previous?.email}; restored ${restored?.email}`);
   const other = await post('contacts', { pursuitId: lpP, email: 'investments@invented-sendto.example', source: 'gmail', confirmedBy: 'juan', role: 'none' });
   const clear = await post('contacts', { pursuitId: lpP, email: 'ir@invented-sendto.example', source: 'gmail', confirmedBy: 'juan', role: 'none' });
   const left = (await db.one<{ n: number }>('select count(*)::int n from identity.send_to where entity_id = $1', [lp]))!.n;

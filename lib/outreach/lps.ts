@@ -207,10 +207,10 @@ export async function addLp(ctx: DeskContext, raw: Record<string, unknown>) {
         // ── An amount they indicated: the update box's own service, in this transaction ──
         let updateId: string | null = null, indicationId: string | null = null;
         if (a.indicated) {
-          const r = await addUpdate(owner.id, {
+          const r = await addUpdate(desk ?? owner.id, {
             pursuitId, body: autonomous ? `From mail, by the mail desk on its own: ${a.evidence.words}` : a.evidence.words, idempotencyKey: `desk:${owner.id}:lps:${a.idempotencyKey}`,
             indicated: { low: a.indicated.low, high: a.indicated.high ?? null, on: a.indicated.on ? at(a.indicated.on) : null },
-          }, { q: tx });
+          }, { q: tx, via: { autonomous, tokenId: ctx.env.tokenId } });
           updateId = r.updateId; indicationId = r.applied.indicated?.indicationId ?? null;
         }
 

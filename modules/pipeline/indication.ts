@@ -1,5 +1,5 @@
 import { getDb, type Queryable } from '@/lib/db';
-import { syncIoi } from '@/modules/close';
+import { restoreIoi, syncIoi, type SeatBefore } from '@/modules/close';
 
 /**
  * An indication of interest and the amount indicated (Juan, 4 Oct 2026; docs/27-outreach-api.md §1),
@@ -64,7 +64,7 @@ export function indicationRange(low: unknown, high?: unknown): { low: number; hi
 export async function recordIndication(
   actorId: string,
   args: { pursuitId: string; low: number; high?: number | null; on?: Date | null; touchpointId?: string | null; updateId?: string | null },
-  opts: { q?: Queryable } = {},
+  opts: { q?: Queryable; via?: { autonomous: boolean; tokenId: string } } = {},
 ): Promise<string> {
   const { low, high } = indicationRange(args.low, args.high);
   const on = args.on ?? new Date();
@@ -90,12 +90,40 @@ export async function recordIndication(
       values ($1, $2, $3, $4, $5, $6::date, $7, $8, $9) returning indication_id::text id`,
       [p.pursuit_id, p.entity_id, p.vehicle_id, low, high, on.toISOString().slice(0, 10), args.touchpointId ?? null, args.updateId ?? null, actorId]))!;
     // The war room's IOI stage is the same fact (close.spv_seat): keep it in step.
-    const seats = p.kind === 'spv' ? await syncIoi(p.entity_id, p.vehicle_id, on, low, tx) : 0;
+    // Each seat as it was before, kept in the audit entry: withdrawing this indication puts it back.
+    const seats = p.kind === 'spv' ? await syncIoi(p.entity_id, p.vehicle_id, on, low, tx) : [];
     await tx.query(`insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
       values ($1, 'pursuit.indication_recorded', 'pursuit', $2, $3)`,
     [actorId, p.pursuit_id, JSON.stringify({ indicationId: row.id, low, high, on: on.toISOString().slice(0, 10),
-      touchpointId: args.touchpointId ?? null, updateId: args.updateId ?? null, seatsMovedToIoi: seats })]);
+      touchpointId: args.touchpointId ?? null, updateId: args.updateId ?? null, seatsMovedToIoi: seats.length, seatsBefore: seats, ...opts.via })]);
     return row.id;
+  };
+  if (opts.q) return run(opts.q);
+  return (await getDb()).transaction(run);
+}
+
+/**
+ * Withdraw the current indication on a pursuit, with nothing in its place (red team, 17 Oct 2026: the mail desk records
+ * amounts on its own, so a person can take one back). It stays on record, superseded; an SPV seat it moved to IOI goes
+ * back to the stage and amount it had, unless the room has moved it since. Answers what was withdrawn and how many seats
+ * went back.
+ */
+export async function withdrawIndication(actorId: string, args: { pursuitId: string }, opts: { q?: Queryable } = {}): Promise<{ indicationId: string; seatsRestored: number }> {
+  const run = async (tx: Queryable) => {
+    const cur = await tx.one<{ indication_id: string; pursuit_id: string; low: string }>(`select i.indication_id::text, strategy.canonical_pursuit_id(i.pursuit_id)::text pursuit_id, i.low::text
+        from pipeline.indication i where i.superseded_at is null
+         and strategy.canonical_pursuit_id(i.pursuit_id) = strategy.canonical_pursuit_id($1::uuid)
+       order by i.recorded_at desc limit 1 for update`, [args.pursuitId]);
+    if (!cur) throw new IndicationRefused('There is no indicated amount recorded here to withdraw.');
+    await tx.query(`update pipeline.indication set superseded_at = now() where superseded_at is null
+      and strategy.canonical_pursuit_id(pursuit_id) = $1::uuid`, [cur.pursuit_id]);
+    const recorded = await tx.one<{ seats: SeatBefore[] | null }>(`select detail->'seatsBefore' seats from platform.audit_log
+      where action = 'pursuit.indication_recorded' and detail->>'indicationId' = $1 order by id desc limit 1`, [cur.indication_id]);
+    const seatsRestored = recorded?.seats?.length ? await restoreIoi(recorded.seats, Number(cur.low), tx) : 0;
+    await tx.query(`insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
+      values ($1, 'pursuit.indication_withdrawn', 'pursuit', $2, $3)`,
+    [actorId, cur.pursuit_id, JSON.stringify({ indicationId: cur.indication_id, seatsRestored })]);
+    return { indicationId: cur.indication_id, seatsRestored };
   };
   if (opts.q) return run(opts.q);
   return (await getDb()).transaction(run);

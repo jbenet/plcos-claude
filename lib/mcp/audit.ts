@@ -46,7 +46,9 @@ export function affectedIds(args: Record<string, unknown>, answer: Answer | null
   const out: Record<string, string> = {};
   const data = answer?.data && typeof answer.data === 'object' && !Array.isArray(answer.data) ? answer.data as Record<string, unknown> : {};
   const applied = data.applied && typeof data.applied === 'object' ? data.applied as Record<string, unknown> : {};
-  for (const src of [args ?? {}, data, applied]) {
+  // An amount /update recorded sits one level down (applied.indicated.indicationId).
+  const indicated = applied.indicated && typeof applied.indicated === 'object' ? applied.indicated as Record<string, unknown> : {};
+  for (const src of [args ?? {}, data, applied, indicated]) {
     for (const k of IDS) if (typeof src[k] === 'string' && UUID.test(src[k] as string) && !out[k]) out[k] = src[k] as string;
   }
   return out;

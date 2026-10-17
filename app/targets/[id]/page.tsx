@@ -53,7 +53,8 @@ import { findOpenTicket } from '@/modules/governance';
 import { EmailDrafts } from '@/components/email/EmailDrafts';
 import { OutreachContext } from '@/components/outreach/OutreachContext';
 import { linearFor, traceFor } from '@/lib/comms/read';
-import { decideSuggestionAction } from '@/app/targets/actions';
+import { decideSuggestionAction, restoreSendToAction, withdrawIndicationAction } from '@/app/targets/actions';
+import { previousSendTo, sendToFor } from '@/lib/outreach/entity-reads';
 import type { Strategy } from '@/lib/enrich/strategy';
 import { Info } from '@/components/ui/Info';
 
@@ -107,11 +108,14 @@ async function TargetWorkspace({ params, searchParams }: {
     ...linear.filter((i) => i.completedAt ?? i.createdAt).map((i) => ({ key: `li:${i.id}`, at: (i.completedAt ?? i.createdAt)!, source: 'linear' as const,
       label: i.completedAt ? 'Linear issue, done' : 'Linear issue', text: [i.identifier, i.title].filter(Boolean).join(' '), by: null, href: i.url })),
   ];
-  const [docs, spvMarkMap, indicated] = await Promise.all([
+  const [docs, spvMarkMap, indicated, sendTo, sendToBefore] = await Promise.all([
     listSourceDocs([...new Set(claims.map((c) => c.provenance.source))]),
     spvMarks(await getDb(), [pursuit.entityId]),
     // What they indicated (docs/27 §1): shown beside soft and hard, never added to either.
     indicationFor(pursuit.entityId, pursuit.vehicleId),
+    // Where their mail goes To (docs/27 §5c), and the address it replaced, to put back (red team, 17 Oct 2026).
+    sendToFor([pursuit.entityId]).then((m) => m.values().next().value ?? null),
+    previousSendTo(pursuit.entityId),
   ]);
   const spvHere = spvMarkMap.get(pursuit.entityId);
   // Status changes, for the timeline (N61). Before N61 the log kept a reason only for a pass;
@@ -272,6 +276,25 @@ async function TargetWorkspace({ params, searchParams }: {
               {indicated && (
                 <span className={hd.chip} data-indicated title={`${shortDate(indicated.on)}${indicated.source === 'spv seat' ? ', IOI in the SPV war room' : indicated.recordedByName ? `, recorded by ${indicated.recordedByName}` : ''}. An indication, not a commitment: beside soft and hard, added to neither.`}>
                   Indicated: {indicated.low === indicated.high ? usdM(indicated.low) : `${usdM(indicated.low)}–${usdM(indicated.high)}`}
+                  {indicated.source === 'us' && (
+                    <form action={withdrawIndicationAction} style={{ display: 'inline' }}>
+                      <input type="hidden" name="pursuitId" value={p.pursuitId} />
+                      <button type="submit" className="linkbtn" title="Withdraw this amount, with nothing in its place. It stays on record; an SPV seat it moved to IOI goes back to where it was.">withdraw</button>
+                    </form>
+                  )}
+                </span>
+              )}
+              {(sendTo || sendToBefore) && (
+                <span className={`${hd.chip} ${hd.cm}`} data-send-to title={sendTo ? `Mail to them goes To this address, their main contact cc'd. Set by ${sendTo.setBy} ${shortDate(new Date(sendTo.setAt))}.` : 'No send-to address now.'}>
+                  {sendTo ? `Send to: ${sendTo.email}` : 'No send-to'}
+                  {sendToBefore && (
+                    <form action={restoreSendToAction} style={{ display: 'inline' }}>
+                      <input type="hidden" name="pursuitId" value={p.pursuitId} />
+                      <input type="hidden" name="email" value={sendToBefore.email} />
+                      <span className="muted" title={`Set by ${sendToBefore.setBy ?? 'someone'} ${shortDate(new Date(sendToBefore.setAt))}; replaced by ${sendToBefore.replacedBy ?? 'someone'}${sendToBefore.autonomous ? ' on its own' : ''} ${shortDate(new Date(sendToBefore.replacedAt))}.`}> · was {sendToBefore.email} </span>
+                      <button type="submit" className="linkbtn">restore</button>
+                    </form>
+                  )}
                 </span>
               )}
               {touchSummary.lastFromThem && !touchSummary.awaitingSince

@@ -8,6 +8,6 @@ export {
 } from './service';
 export { vehicleStatusCounts, vehicleCloseStatus, CLOSE_PAGE_SIZE } from './status';
 export {
-  currentIndications, indicatedTotals, indicationFor, indicationRange, recordIndication, IndicationRefused,
+  currentIndications, indicatedTotals, indicationFor, indicationRange, recordIndication, withdrawIndication, IndicationRefused,
   type Indication, type IndicatedTotals,
 } from './indication';

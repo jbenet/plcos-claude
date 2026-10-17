@@ -35,25 +35,37 @@ const words = z.string().transform((s) => s.trim().replace(/\s+/g, ' ')).pipe(z.
 
 // ── The send-to role (outreach_propose_contact role 'send-to' / 'none') ─────────────────
 
-/** Makes this address the entity's send-to, replacing any other; answers the one it replaced. */
-export async function setSendTo(tx: Queryable, a: { entityId: string; email: string; claimId: string | null; ownerId: string; tokenId: string; source: string }) {
-  const prior = await tx.query<{ entity_id: string; email: string }>(`select s.entity_id::text, s.email
-    from identity.alias_pairs(array[$1::uuid]) p join identity.send_to s on s.entity_id = p.entity_id`, [a.entityId]);
+/**
+ * Makes this address the entity's send-to, replacing any other; answers the one it replaced. The replaced address,
+ * who set it and when stay in the audit entry (red team, 17 Oct 2026: the row was deleted and the old address lost),
+ * so the LP page shows it and can put it back through this same path. `actorId` is who it is attributed to: the
+ * Mail desk actor for an autonomous call, the person otherwise.
+ */
+export async function setSendTo(tx: Queryable, a: { entityId: string; email: string; claimId: string | null; actorId: string; tokenId: string | null; autonomous: boolean; source: string }) {
+  const prior = await tx.query<{ entity_id: string; email: string; set_by: string; set_at: Date | string; source: string }>(`select s.entity_id::text, s.email,
+      s.set_by::text, s.set_at, s.source
+    from identity.alias_pairs(array[$1::uuid]) p join identity.send_to s on s.entity_id = p.entity_id order by s.set_at desc`, [a.entityId]);
   // One per entity, through merges: rows on its merged records go too.
   await tx.query('delete from identity.send_to where entity_id = any($1::uuid[])', [prior.map((p) => p.entity_id)]);
   await tx.query(`insert into identity.send_to (entity_id, email, claim_id, set_by, source) values ($1, $2, $3, $4, $5)`,
-    [a.entityId, a.email, a.claimId, a.ownerId, a.source]);
-  const replaced = prior.find((p) => p.email !== a.email)?.email ?? null;
-  await appendAudit({ actorId: a.ownerId, action: 'contact.send_to_set', subjectType: 'entity', subjectId: a.entityId,
-    detail: { claimId: a.claimId, tokenId: a.tokenId, replaced: replaced !== null, unchanged: prior.some((p) => p.email === a.email) } }, tx);
+    [a.entityId, a.email, a.claimId, a.actorId, a.source]);
+  const was = prior.find((p) => p.email !== a.email) ?? null;
+  const replaced = was?.email ?? null;
+  await appendAudit({ actorId: a.actorId, action: 'contact.send_to_set', subjectType: 'entity', subjectId: a.entityId,
+    detail: { email: a.email, claimId: a.claimId, tokenId: a.tokenId, autonomous: a.autonomous, source: a.source, replaced: replaced !== null,
+      unchanged: prior.some((p) => p.email === a.email), previous: was ? previousOf(was) : null } }, tx);
   return { replaced };
 }
 
-/** Clears the entity's send-to when it is this address; answers whether it was. */
-export async function clearSendTo(tx: Queryable, a: { entityId: string; email: string; ownerId: string; tokenId: string }) {
-  const gone = await tx.query(`delete from identity.send_to where email = $2
-    and entity_id = any(identity.alias_ids(array[$1::uuid])) returning entity_id`, [a.entityId, a.email]);
-  if (gone.length) await appendAudit({ actorId: a.ownerId, action: 'contact.send_to_cleared', subjectType: 'entity', subjectId: a.entityId, detail: { tokenId: a.tokenId } }, tx);
+const previousOf = (r: { email: string; set_by: string; set_at: Date | string; source: string }) =>
+  ({ email: r.email, setBy: r.set_by, setAt: new Date(r.set_at).toISOString(), source: r.source });
+
+/** Clears the entity's send-to when it is this address; answers whether it was. The cleared address stays in the audit entry. */
+export async function clearSendTo(tx: Queryable, a: { entityId: string; email: string; actorId: string; tokenId: string; autonomous: boolean }) {
+  const gone = await tx.query<{ email: string; set_by: string; set_at: Date | string; source: string }>(`delete from identity.send_to where email = $2
+    and entity_id = any(identity.alias_ids(array[$1::uuid])) returning email, set_by::text, set_at, source`, [a.entityId, a.email]);
+  if (gone.length) await appendAudit({ actorId: a.actorId, action: 'contact.send_to_cleared', subjectType: 'entity', subjectId: a.entityId,
+    detail: { tokenId: a.tokenId, autonomous: a.autonomous, previous: previousOf(gone[0]!) } }, tx);
   return gone.length > 0;
 }
 
