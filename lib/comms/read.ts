@@ -142,10 +142,11 @@ export async function linksFor(entityIds: string[], q?: Queryable): Promise<Map<
 
 export interface LpTrace extends Merged { messages: CommsMessage[]; links: CommsLink[] }
 
-/** One LP's whole trace, about anything (the LP page's timeline). */
-export async function traceFor(entityId: string, touches?: Touchpoint[]): Promise<LpTrace> {
+/** One LP's whole trace, about anything (the LP page's timeline). `touches` when the caller is already reading
+ * them, as a promise if still being read: the Gmail messages and links are read meanwhile. */
+export async function traceFor(entityId: string, touches?: Touchpoint[] | Promise<Touchpoint[]>): Promise<LpTrace> {
   const [t, messages, links] = await Promise.all([
-    touches ? Promise.resolve(touches) : touchpointsFor(entityId, null), commsFor([entityId]), linksFor([entityId]),
+    touches ?? touchpointsFor(entityId, null), commsFor([entityId]), linksFor([entityId]),
   ]);
   const m = messages.get(entityId) ?? [];
   const l = links.get(entityId) ?? [];

@@ -102,6 +102,15 @@ data on Juan's Mac.
 - **A W1c push with many reviews reads the inbox once.** Each review row whose grades missed the live finding listed
   enrich/inbox and read one file per earlier push, so a push cost rows × inbox runs; the inbox is now listed once per
   push and each finding's earlier versions read once, on first need (`lib/sync/push.ts`). The same answers.
+- **An LP's page with a long mail history opens about six times sooner.** Merging the Gmail messages into the
+  touchpoints tried every message against every Affinity email (450 × 300 = 135,000 tries for one heavy LP); a
+  message can only match an email on its own day or by its Message-ID, so it now tries only those, and a second
+  mailbox's copy is looked up rather than scanned for. The page's reads, which waited on seven rounds in a row, start
+  together, each waiting only for what it needs (`app/targets/[id]/load.ts`), and the Gmail read no longer waits for
+  the touchpoints. On perf4 as juan, in process, warm medians of 20: a typical LP 46–49 → 35 ms, a heavy one (40
+  contacts, 900 touchpoints, 300 messages, invented) 360–371 → 52–58 ms; all 933 LPs 38.0 → 25.9 s. The same
+  statements (56 and 59), and the same answers by hash for all 933 LPs with a frozen clock; old and new merges agree
+  on 43,000 random traces. Authorization and Dakota redaction are untouched.
 
 ### Red team
 

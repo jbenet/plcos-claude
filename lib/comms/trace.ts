@@ -102,6 +102,8 @@ export const sourceOf = (t: Pick<Touchpoint, 'source' | 'sourceRef'>): TraceSour
 
 const DAY = 86_400_000;
 const dayOf = (d: Date) => d.toISOString().slice(0, 10);
+/** The UTC day as a number: equal exactly when dayOf is. */
+const utcDay = (d: Date) => Math.floor(d.getTime() / DAY);
 const at = (t: Touchpoint) => (t.on ?? t.scheduledFor)?.getTime() ?? 0;
 const norm = (s: string | null | undefined) => (s ?? '').toLowerCase().replace(/^\s*((re|fwd?|aw|wg)\s*:\s*)+/i, '').replace(/\s+/g, ' ').trim();
 const rank: Record<Confidence, number> = { exact: 3, high: 2, medium: 1, low: 0 };
@@ -156,21 +158,46 @@ export function mergeTrace(touches: Touchpoint[], messages: CommsMessage[], link
   const flags: TraceFlag[] = [];
   const add = (id: string, s: SameAs) => sameAs.set(id, [...(sameAs.get(id) ?? []), s]);
 
-  // One row per message, even when two mailboxes reported it without a Message-ID.
+  // One row per message, even when two mailboxes reported it without a Message-ID. The twin is the first in
+  // `unique` that is the same message: the same Message-ID, or (without one) within two minutes. `unique` is in
+  // time order, so only its tail can be within two minutes and the Message-ID is looked up, not scanned for.
   const unique: CommsMessage[] = [];
+  const firstWithId = new Map<string, number>();
   for (const m of [...messages].sort(byMessage)) {
-    const twin = unique.find((u) => sameMessage(u, m));
+    let twinAt = m.hasMessageId ? firstWithId.get(m.messageId) ?? -1 : -1;
+    for (let i = unique.length - 1; i >= 0 && unique[i]!.sentAt.getTime() >= m.sentAt.getTime() - 2 * 60_000; i--) {
+      if ((twinAt < 0 || i < twinAt) && sameMessage(unique[i]!, m)) twinAt = i;
+    }
+    const twin = twinAt >= 0 ? unique[twinAt]! : null;
     if (twin) { if (twin.messageId !== m.messageId) add(`gmail:${twin.messageId}`, { source: 'gmail', ref: m.messageId, by: 'date, participants and subject', confidence: 'high' }); continue; }
+    if (m.hasMessageId && !firstWithId.has(m.messageId)) firstWithId.set(m.messageId, unique.length);
     unique.push(m);
   }
 
   const sorted = [...touches].sort(byTouch);
   const affinityEmails = sorted.filter((t) => t.source !== 'us' && t.source !== 'gmail' && t.channel === 'email');
+  // An Affinity email matches a message only on the same day or by its Message-ID (matchOf), so each message is
+  // tried against those emails alone, in the same order as before: 450 emails × 300 messages was 135,000 tries
+  // (perf, 17 Oct 2026).
+  const emailsOn = new Map<number, number[]>();
+  const emailsByRef = new Map<string, number[]>();
+  const push = <K,>(map: Map<K, number[]>, k: K, i: number) => { const list = map.get(k); if (list) list.push(i); else map.set(k, [i]); };
+  affinityEmails.forEach((t, i) => {
+    if (!t.on) return;
+    push(emailsOn, utcDay(t.on), i);
+    if (t.sourceRef?.startsWith('gmail:')) push(emailsByRef, t.sourceRef, i);
+  });
+  const candidates = (m: CommsMessage): Touchpoint[] => {
+    const day = emailsOn.get(utcDay(m.sentAt)) ?? [];
+    const byRef = emailsByRef.get(`gmail:${m.messageId}`);
+    const idx = byRef ? [...new Set([...day, ...byRef])].sort((a, b) => a - b) : day;
+    return idx.map((i) => affinityEmails[i]!);
+  };
   const taken = new Set<string>();
   const rows: Touchpoint[] = sorted.filter((t) => t.source !== 'gmail');
   for (const m of unique) {
     let best: { t: Touchpoint; s: SameAs } | null = null;
-    for (const t of affinityEmails) {
+    for (const t of candidates(m)) {
       if (taken.has(t.touchpointId)) continue;
       const s = matchOf(t, m);
       if (!s) continue;
