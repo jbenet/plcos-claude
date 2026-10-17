@@ -11,7 +11,7 @@
 //
 // Every step can fail without breaking the app: the core then sends everything to the live server.
 import { execFile, spawn } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -430,7 +430,9 @@ class LocalCopy {
     const src = await this.seedSource();
     if (!src) return;
     const bin = this.pgBin();
-    const srcEnv = { ...env, PGPASSWORD: src.password, PGCONNECT_TIMEOUT: '5' };
+    // The copy cluster is made with scram (scripts/cloud-pull.sh): a listener on its port that asks for the password in
+    // the clear is not it, and gets nothing (red team, 17 Oct 2026). libpq 16 and later honour this.
+    const srcEnv = { ...env, PGPASSWORD: src.password, PGCONNECT_TIMEOUT: '5', ...(src.password ? { PGREQUIREAUTH: 'scram-sha-256' } : {}) };
     const ping = await sh(path.join(bin, 'psql'), [src.url, '-Atc', 'select 1'], { env: srcEnv, timeout: 15_000 }).catch((e) => { throw new Error(`cannot reach ${new URL(src.url).port}: ${String(e.message).split('\n').pop()}`); });
     if (ping.trim() !== '1') return;
     const listSql = `select n.nspname || '.' || c.relname as t, array(select a.attname::text from pg_attribute a where a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped and a.attgenerated = '' order by a.attnum) as cols
@@ -882,8 +884,20 @@ class LocalCopy {
     for (let i = 0; i < 600 && !(await this.nextHealthy()); i++) await new Promise((r) => setTimeout(r, 100));
   }
 
+  /**
+   * Healthy only if our own child is still running and the answer proves this launch's secret (proxy.ts desktopProof):
+   * a server another account started on the port answers 200 too (red team, 17 Oct 2026).
+   */
   async nextHealthy() {
-    try { const r = await fetch(`${this.origin}/api/health`, { signal: AbortSignal.timeout(3000) }); return r.ok; } catch { return false; }
+    if (!this.next || this.next.exitCode !== null) return false;
+    const nonce = randomBytes(16).toString('hex');
+    try {
+      const r = await fetch(`${this.origin}/api/health`, { headers: { 'x-plcos-desktop-nonce': nonce }, signal: AbortSignal.timeout(3000) });
+      if (!r.ok) return false;
+      const proof = String((await r.json())?.proof ?? '');
+      const want = createHmac('sha256', this.secret).update(nonce).digest('hex');
+      return proof.length === want.length && timingSafeEqual(Buffer.from(proof), Buffer.from(want));
+    } catch { return false; }
   }
 
   async stopNext() {

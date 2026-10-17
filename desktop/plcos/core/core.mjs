@@ -30,6 +30,8 @@ const DEFAULT_SERVER = 'https://plcos-production.up.railway.app';
 const DATA_DIR = env.PLCOS_DESKTOP_DIR
   || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library/Application Support/PLC OS') : path.join(os.homedir(), '.local/share/plcos-desktop'));
 mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+// The shell may have made it first with the default mode; its logs and settings are this user's only (red team, 17 Oct 2026).
+try { chmodSync(DATA_DIR, 0o700); } catch { /* not ours to change: a folder named by PLCOS_DESKTOP_DIR */ }
 // Spotlight would index the copy's build, dependencies and database files (hundreds of MB) and slow the Mac while
 // it does: these markers ask it not to.
 for (const sub of ['', 'builds', 'deps', 'cache']) { // pg/ is marked after initdb, which wants an empty folder

@@ -166,6 +166,13 @@ data on Juan's Mac.
 - **A rung taken back stays back under a new reference.** A retraction blocked only the exact record behind it, so
   Affinity's copy of the same email, or an older message ingested later, recorded the rung again. A record dated
   before the retraction is no longer used for that rung.
+- **The Mac app checks it is talking to its own copy.** The core took any 200 from the local copy's port as its server,
+  so another account on the Mac holding that port while the app was closed would have been served as the app, with
+  the session. The health check now sends a nonce and needs the launch secret's HMAC back (proxy.ts), and its own
+  child must still be running.
+- **The copy cluster's password never goes out in the clear.** Connections to it now require scram
+  (`PGREQUIREAUTH`), so a listener on its port while it is down gets nothing. The app's data folder is made
+  owner-only even when the shell created it first.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -230,6 +237,10 @@ data on Juan's Mac.
   it is about. Mailboxes report the same message with different directions, so refusing a mismatch would refuse real
   mail; credit still goes only to the LP who sent it.
 - A rung taken back still blocks a later genuine record of that rung while the retracted record remains the earliest.
+- Astra's main window loads the server page with the global Tauri object. Tauri 2 refuses commands from a remote
+  origin unless a capability lists it, and Astra's lists only its bundled feedback window, so no change; a
+  navigation guard would need a Rust build to verify, which the cloud can't do.
+- The launch key cookie goes to every port on 127.0.0.1; nothing in the app's pages points elsewhere on the loopback.
 - A token for one vehicle may set where an LP's mail goes when that LP is also pursued on another vehicle. An address
   is the person's, not a vehicle's, and Juan wants the desk to do more on its own; the audit row records who changed it.
 - A push identical to an earlier one answers that push's run and job ids, whoever pushed it; the job itself answers

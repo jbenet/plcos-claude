@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { internalRoutingHeaders, routingContext, stripRoutingHeaders } from '@/lib/internal-routing';
 import { config as deployment } from '@/config/deployment';
@@ -88,10 +89,23 @@ function foreignName(req: NextRequest): boolean {
   return !(!host.includes('.') || host.endsWith('.local') || /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || /^\[[0-9a-f:.]+\]$/.test(host));
 }
 
+/**
+ * The desktop core's health check proves the copy is the one it started (red team, 17 Oct 2026): another account on the
+ * Mac holding the port could answer a plain 200 and be served as the app. The core sends a nonce, never the secret; only
+ * a server holding this launch's secret can answer with its HMAC.
+ */
+function desktopProof(nonce: string, secret: string): NextResponse {
+  return NextResponse.json({ ok: true, proof: createHmac('sha256', secret).update(nonce).digest('hex') });
+}
+
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (foreignName(req)) return new NextResponse('This server answers only its own addresses.', { status: 421 });
   if (pathname === '/health') return rewrite(req, '/api/health');
+  const nonce = req.headers.get('x-plcos-desktop-nonce');
+  if (pathname === '/api/health' && nonce && /^[0-9a-f]{32}$/.test(nonce) && process.env['PLCOS_DESKTOP_COPY'] === '1' && process.env['PLCOS_DESKTOP_SECRET']) {
+    return desktopProof(nonce, process.env['PLCOS_DESKTOP_SECRET']);
+  }
   // A rewrite can reenter the proxy. Only our signed, request-bound context can bypass
   // canonical redirects; arbitrary client markers and modified contexts are discarded.
   const routed = routingContext(req.headers);
