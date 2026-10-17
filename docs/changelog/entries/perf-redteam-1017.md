@@ -411,6 +411,10 @@ data on Juan's Mac.
   redirect hop, with the host name (TLS name and certificate check) unchanged. A page with no length is read only up
   to the size cap, not whole first. Dakota's requests no longer follow a redirect and stop after 30 seconds.
 
+- **"Sign out everywhere" can take the person's tokens too.** It left their MCP, desk and sync tokens working for up
+  to a year, so a token made from a stolen session outlived the cookie. An Admin may now tick "and their tokens" to
+  revoke them in the same step (off by default, so the mail desk does not stop by surprise).
+
 ### Juan's calls, 17 Oct 2026
 
 - **JuanMail does more on its own.** Juan: "we should remove the rules that only people can change settings. It's
@@ -519,3 +523,5 @@ data on Juan's Mac.
 - A Team member with all-vehicle access may undo anyone's "bad terms" mark (audited); limiting it to the marker or an
   Admin would be a new refusal, so it waits for Juan. An ask's owner may be anyone active, even without access to
   that vehicle. Pinning a stand-up day works for any unpinned day by design (the button shows on each).
+- A desk token is not re-checked for Admin access on each use: only making one in Preferences is Admin only, and
+  Team members' vehicle-limited desk tokens are relied on (outreach scopes stay non-Admin).

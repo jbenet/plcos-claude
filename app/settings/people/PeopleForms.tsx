@@ -122,6 +122,9 @@ export function PersonControls({ p, vehicles, readOnly }: { p: PersonRow; vehicl
       {!readOnly && p.active && (
         <form action={signOut}>
           <input type="hidden" name="userId" value={p.id} />
+          <label className="muted" title="Also revoke every MCP, desk and sync token they hold. Their devices and the mail desk stop until a new token is made.">
+            <input type="checkbox" name="tokens" /> and their tokens
+          </label>
           <button className="btn" disabled={signing}>Sign out everywhere</button>
         </form>
       )}
