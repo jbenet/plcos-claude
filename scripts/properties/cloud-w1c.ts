@@ -2,7 +2,10 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { factReviewProblems } from '../../lib/enrich/fact-review';
-import { normalise, pageText, publicAddress, quoteOnPage } from '../../lib/workflows/cited-pages';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { config } from '../../config/deployment';
+import { normalise, pageText, PageReader, pinnedFetch, publicAddress, quoteOnPage, urlRefusal } from '../../lib/workflows/cited-pages';
 import { runCloudFactCheck, type ModelRequest } from '../../lib/workflows/cloud-w1c';
 import { readRuns } from '../../lib/workflows/ledger';
 import { WorkflowRefusal } from '../../lib/workflows/refusal';
@@ -170,6 +173,56 @@ export async function cloudW1cProperties(check: Check) {
       && !pageText('<script>secret()</script><p>Hi</p>', 'text/html').includes('secret')
       && quoteOnPage('“Partner” at Invented—Capital', 'He is a "partner" at invented - capital.') && !quoteOnPage('Founder', 'He is a partner')
       && normalise('A  B') === 'a b', 'unit checks');
+
+    // IPv6 spellings of private IPv4 addresses, and the IPv6 ranges that carry or reach one.
+    const v6Private = ['::ffff:7f00:1', '::ffff:a9fe:a9fe', '::ffff:0a00:0001', new URL('http://[::ffff:169.254.169.254]/').hostname.replace(/^\[|\]$/g, ''),
+      '0:0:0:0:0:ffff:127.0.0.1', '::7f00:1', '::127.0.0.1', '::ffff:0:a00:1', 'fec0::1', 'feff::1', 'fe80::1%eth0', '2002:7f00:1::1',
+      '64:ff9b::a9fe:a9fe', '64:ff9b::169.254.169.254', '2001:0:4136:e378::1', '100::1', '2001:db8::1', 'fc00::1', 'ff02::1', '::', '::1'];
+    const v6Public = ['::ffff:93.184.215.14', '::ffff:5db8:d70e', '2606:2800:220:1::1', '2a00:1450:4001:80b::200e'];
+    const literalRefusal = await urlRefusal('http://[::ffff:169.254.169.254]/latest/meta-data', async () => [{ address: '93.184.215.14' }]);
+    check('IPv4-mapped IPv6 in hex form, IPv4-compatible, site-local, 6to4, NAT64 and Teredo addresses are not public',
+      v6Private.every((a) => !publicAddress(a)) && v6Public.every((a) => publicAddress(a)) && literalRefusal === 'not a public address',
+      `wrongly public: ${v6Private.filter((a) => publicAddress(a)).join(', ')}; wrongly private: ${v6Public.filter((a) => !publicAddress(a)).join(', ')}; literal: ${literalRefusal}`);
+
+    // DNS rebinding: the connection itself goes through the address check, so a second answer cannot differ.
+    let hits = 0;
+    const server = createServer((req, res) => {
+      hits++;
+      if (req.url === '/hop') { res.writeHead(302, { location: 'http://elsewhere.example.org/' }); res.end(); return; }
+      res.writeHead(200, { 'content-type': 'text/html' }); res.end(`<p>host ${req.headers.host}</p>`);
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    try {
+      const port = (server.address() as AddressInfo).port;
+      const toLoopback = async () => [{ address: '127.0.0.1' }];
+      const refused = await pinnedFetch(toLoopback)(`http://rebind.example.org:${port}/`).then(() => 'connected', (e: Error) => e.message);
+      const hitsAfterRefusal = hits;
+      const allowAll = pinnedFetch(toLoopback, () => true);
+      const page = await allowAll(`http://rebind.example.org:${port}/`);
+      const body = await page.text();
+      const hop = await allowAll(`http://rebind.example.org:${port}/hop`, { redirect: 'manual' });
+      let answers = 0;
+      const flipping = async () => [{ address: answers++ === 0 ? '93.184.215.14' : '127.0.0.1' }];
+      const reader = new PageReader({ lookup: flipping, sleep: async () => undefined });
+      const rebound = await reader.read('http://rebind.example.org/');
+      check('A fetched page connects only to the address the check passed: a rebinding answer at connect time is refused, every hop',
+        refused.includes('not public') && hitsAfterRefusal === 0 && page.status === 200 && body.includes(`rebind.example.org:${port}`)
+        && hop.status === 302 && hop.headers.get('location') === 'http://elsewhere.example.org/' && hits === 2
+        && answers === 2 && rebound.state === 'unavailable' && /did not load/.test(rebound.why ?? ''),
+        `refused ${refused}; hits ${hitsAfterRefusal}/${hits}; page ${page.status} ${body}; hop ${hop.status}; answers ${answers}; rebound ${rebound.state} ${rebound.why}`);
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
+
+    // A body with no length header is read up to the cap and no further.
+    const max = config.cloudWorkflows.pages.maxBytes;
+    let pulled = 0;
+    const endless = () => new Response(new ReadableStream<Uint8Array>({ pull(c) { pulled += 65_536; c.enqueue(new Uint8Array(65_536).fill(0x61)); } }),
+      { status: 200, headers: { 'content-type': 'text/html' } });
+    const capped = await new PageReader({ fetch: (async () => endless()) as typeof fetch, lookup: async () => [{ address: '93.184.215.14' }], sleep: async () => undefined })
+      .read('https://big.example.org/');
+    check('A page without a length is read only up to the size cap, never whole',
+      capped.state === 'unavailable' && /larger/.test(capped.why ?? '') && pulled <= max + 4 * 65_536, `${capped.state} ${capped.why}; pulled ${pulled}`);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

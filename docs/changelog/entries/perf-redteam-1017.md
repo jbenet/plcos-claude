@@ -381,6 +381,14 @@ data on Juan's Mac.
 
 - **A play is handed only to someone active on the team.** Assigning took any user id, the system's actor or a
   deactivated person included, and the Linear handoff then named them (`modules/plays/service.ts`).
+- **The fact check's page reader reaches only public addresses, at connect time too.** It took `::ffff:7f00:1` and
+  `::ffff:a9fe:a9fe` (how Node spells `[::ffff:169.254.169.254]`) for public, so a cited link could read the
+  server's own loopback or the cloud metadata address. IPv6 is now read byte by byte: a mapped address is judged by
+  its IPv4 part, and IPv4-compatible, site-local, 6to4, NAT64 and Teredo addresses are refused with the private
+  ranges. The host was also checked by one DNS answer and connected by another (rebinding); the reader now connects
+  through its own lookup, which runs the same check, so the address connected to is the one checked, on every
+  redirect hop, with the host name (TLS name and certificate check) unchanged. A page with no length is read only up
+  to the size cap, not whole first. Dakota's requests no longer follow a redirect and stop after 30 seconds.
 
 ### Juan's calls, 17 Oct 2026
 
