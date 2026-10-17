@@ -19,6 +19,8 @@ import { getDb, type Queryable } from '@/lib/db';
 export interface TableInfo { t: string; pk: string[] | null; counter: string; rows: number }
 
 const ident = (s: string) => `"${s.replaceAll('"', '""')}"`;
+const lit = (s: string) => `'${s.replaceAll("'", "''")}'`;
+const chunks = <T>(a: T[], n: number): T[][] => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
 /**
  * Tables the app never copies: its own schema bookkeeping, which the build's migrations write locally, and
  * people's own secrets (their mailguard keys, calendar addresses), which not even an Admin may read
@@ -34,8 +36,20 @@ const STAND_IN: Record<string, string> = {
   'platform.setting': `case when t.secret then jsonb_build_object('value', 'withheld') else '{}'::jsonb end`,
   'platform.mcp_token': `jsonb_build_object('token_hash', encode(sha256(convert_to('withheld:' || t.token_id::text, 'UTF8')), 'hex'))`,
 };
-/** A row as the copy gets it. */
+/** A row as the copy gets it, as jsonb: what the digest hashes, on both ends. */
 const rowJson = (table: string) => (STAND_IN[table] ? `(to_jsonb(t) || ${STAND_IN[table]})` : 'to_jsonb(t)');
+/**
+ * A row as `rows` sends it, as text. row_to_json writes the text directly, about twice as fast as building a jsonb and
+ * printing it (route_cache: 300 → 150 ms) and 5% shorter; the copy reads it into jsonb either way, so it gets the same
+ * values (17 Oct 2026).
+ */
+const rowText = (table: string) => (STAND_IN[table] ? `${rowJson(table)}::text` : 'row_to_json(t)::text');
+/**
+ * The key a thinned row carries (syncRows' `thin`): {column: md5 of its value as text} for each wide value left out.
+ * GUESS: a value over 1 KB stored is worth a hash; route_cache's searches are 4-60 KB each.
+ */
+export const THIN_KEY = '__plcos_thin';
+const THIN_BYTES = 1024;
 
 export async function syncState(q?: Queryable): Promise<{ horizon: string; tables: TableInfo[] }> {
   const db = q ?? await getDb();
@@ -57,7 +71,7 @@ export async function syncState(q?: Queryable): Promise<{ horizon: string; table
   return { horizon: h!.horizon, tables: rows.filter((r) => !SKIP.has(r.t)) };
 }
 
-interface Shape { schema: string; name: string; pk: { name: string; type: string }[] }
+interface Shape { schema: string; name: string; pk: { name: string; type: string }[]; cols: string[]; wide: string[] }
 
 async function shape(db: Queryable, table: string): Promise<Shape | null> {
   const m = /^([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)$/.exec(table);
@@ -65,14 +79,18 @@ async function shape(db: Queryable, table: string): Promise<Shape | null> {
   const [, schema, name] = m as unknown as [string, string, string];
   const found = await db.one<{ ok: boolean }>(`select true as ok from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = $1 and c.relname = $2 and c.relkind = 'r'`, [schema, name]);
   if (!found) return null;
-  const pk = await db.query<{ name: string; type: string }>(`
-    select a.attname::text as name, format_type(a.atttypid, a.atttypmod) as type
-      from pg_index i
-      cross join lateral unnest(i.indkey) with ordinality as k(attnum, ord)
-      join pg_attribute a on a.attrelid = i.indrelid and a.attnum = k.attnum
-     where i.indrelid = format('%I.%I', $1::text, $2::text)::regclass and i.indisprimary
-     order by k.ord`, [schema, name]);
-  return { schema, name, pk };
+  // Its columns: the primary key's in order, and the ones that can hold a wide value (jsonb, json, text).
+  const cols = await db.query<{ name: string; type: string; ord: number | null; wide: boolean }>(`
+    select a.attname::text as name, format_type(a.atttypid, a.atttypmod) as type, k.ord::int as ord,
+           a.atttypid in ('jsonb'::regtype, 'json'::regtype, 'text'::regtype) and a.attgenerated = '' as wide
+      from pg_attribute a
+      left join (select k.attnum, k.ord from pg_index i cross join lateral unnest(i.indkey) with ordinality as k(attnum, ord)
+                  where i.indrelid = format('%I.%I', $1::text, $2::text)::regclass and i.indisprimary) k on k.attnum = a.attnum
+     where a.attrelid = format('%I.%I', $1::text, $2::text)::regclass and a.attnum > 0 and not a.attisdropped
+     order by k.ord nulls last, a.attnum`, [schema, name]);
+  const pk = cols.filter((c) => c.ord !== null).map((c) => ({ name: c.name, type: c.type }));
+  const wide = cols.some((c) => c.name === THIN_KEY) ? [] : cols.filter((c) => c.ord === null && c.wide).map((c) => c.name);
+  return { schema, name, pk, cols: cols.map((c) => c.name), wide };
 }
 
 const PAGE_BYTES = 16 * 1024 * 1024;
@@ -81,8 +99,13 @@ const xid8 = (s: string | null): string | null => (s && /^\d{1,20}$/.test(s) ? s
 /**
  * One page of a table's rows changed since `since` (an xid8 horizon from an earlier page or state; null for all),
  * after the primary key `after` (the last page's `next`). Rows come back as one JSON array text, untouched.
+ *
+ * `thin` (a copy that already holds the table, reading what changed): a wide value (over THIN_BYTES stored) is left out
+ * and its hash sent under THIN_KEY instead. The copy keeps its own value when its hash matches, and asks for the rows
+ * whole when one does not. A stored route whose input revision moved sent its whole 4-60 KB search again for one
+ * number (17 Oct 2026). A copy that does not ask gets whole rows, as before.
  */
-export async function syncRows(table: string, since: string | null, after: string[] | null, limit: number, upTo: string[] | null = null): Promise<
+export async function syncRows(table: string, since: string | null, after: string[] | null, limit: number, upTo: string[] | null = null, thin = false): Promise<
   { ok: false; error: string } | { ok: true; horizon: string; rowsJson: string; n: number; next: string[] | null; count: number | null }
 > {
   const db = await getDb();
@@ -113,9 +136,19 @@ export async function syncRows(table: string, since: string | null, after: strin
     const order = s.pk.length ? `order by ${s.pk.map((c) => `t.${ident(c.name)}`).join(', ')}` : '';
     // A table with no primary key is read whole, in one page: the app replaces it.
     const pageLimit = s.pk.length ? `limit ${lim + 1}` : '';
+    // Thinned only for a read since a horizon, by key, of a table with wide columns and no stand-ins.
+    const wide = thin && sinceX && s.pk.length && !STAND_IN[table] ? s.wide : [];
+    const hashes = wide.length ? chunks(wide, 50).map((part) => `jsonb_build_object(${part.map((c) => `${lit(c)}, case when pg_column_size(t.${ident(c)}) > ${THIN_BYTES} then md5(t.${ident(c)}::text) end`).join(', ')})`).join(' || ') : '';
+    // A thinned row is written as text too, its wide values null, with the hashes added at the end. (Rebuilding it as
+    // jsonb copied every 60 KB value it was leaving out.) `offset 0` works the hashes out once a row, not at every use.
+    const thinned = `(select left(row_to_json(r)::text, -1) from (select ${s.cols.map((c) => (wide.includes(c) ? `case when th.h ? ${lit(c)} then null else t.${ident(c)} end` : `t.${ident(c)}`) + ` as ${ident(c)}`).join(', ')}) r)`;
+    const json = wide.length
+      ? `case when th.h = '{}'::jsonb then ${rowText(table)} else ${thinned} || ',${JSON.stringify(THIN_KEY)}:' || th.h::text || '}' end`
+      : rowText(table);
     const rows = await tx.query<{ j: string; k: string[] | null }>(
-      `select ${rowJson(table)}::text as j, ${s.pk.length ? `array[${s.pk.map((c) => `t.${ident(c.name)}::text`).join(', ')}]` : 'null'} as k
-         from ${from} t ${where.length ? `where ${where.join(' and ')}` : ''} ${order} ${pageLimit}`, params);
+      `select ${json} as j, ${s.pk.length ? `array[${s.pk.map((c) => `t.${ident(c.name)}::text`).join(', ')}]` : 'null'} as k
+         from ${from} t ${wide.length ? `cross join lateral (select jsonb_strip_nulls(${hashes}) as h offset 0) th` : ''}
+         ${where.length ? `where ${where.join(' and ')}` : ''} ${order} ${pageLimit}`, params);
     // A page stops at about 16 MB of rows, so wide rows (long notes, big JSON) never make one huge response.
     let kept = 0, bytes = 0;
     while (kept < Math.min(rows.length, lim) && (kept === 0 || bytes + rows[kept]!.j.length <= PAGE_BYTES)) bytes += rows[kept++]!.j.length;

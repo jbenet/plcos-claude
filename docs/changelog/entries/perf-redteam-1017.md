@@ -158,6 +158,18 @@ data on Juan's Mac.
   5 fresh copies), outreach_check_parties 46 → 31 ms, the calendar's guest people 72 → 5 ms and firms by domain
   50 → 16 ms, one address's people 18 → 5 ms, a SEND ticket's 20-recipient restriction check 600 → 150 ms.
   comms_trace does not read claims and is unchanged. Answers and the resulting database hash the same, clock frozen.
+- **The Mac copy stops downloading stored routes again for one changed number.** After an identity write the route
+  warm-up gives most stored routes a new input revision and leaves their 4–60 KB search as it was, and the sync sent
+  every one of them whole again. A sync of what changed now asks for wide values (over 1 KB stored) as hashes
+  (`thin=1`, `lib/desktop/sync.ts`): the Mac keeps its own value where the hash matches and updates the row in place;
+  a value that differs, or a row it lacks, is read whole for just that run of rows, or for the page when much of it
+  differs. A server or app without it sends or gets whole rows, as before. Rows are also written with
+  `row_to_json` rather than built as jsonb first (route_cache's encoding 300 → 150 ms, 5% fewer bytes). On the
+  invented perf data, in process, after bumping all 929 routes' input revision and changing 5: 1,170–1,315 → 535–570 ms,
+  31 → 2.6 MB of JSON (2.25 → 0.12 MB gzipped), peak memory about 190 → under 10 MB. When a fifth of the routes really
+  changed, it falls back to whole rows and costs more than before (1,405 → 1,766 ms, 5% more bytes). A full copy and a
+  small write's sync are unchanged (about 2.7 s and 110–145 ms). The copy's tables hash the same as the server's after
+  every sync (147 of 147), and the same before and after the change. The Mac's half reaches the Mac with its next build.
 
 ### Red team
 

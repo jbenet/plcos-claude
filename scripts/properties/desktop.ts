@@ -85,6 +85,11 @@ export async function desktopProperties(check: Check) {
   const split = splitRowsPage(page(['a,"rows":[', 'x'], tricky));
   check('desktop sync page keeps its rows as text, exactly',
     Boolean(split) && JSON.stringify(JSON.parse(split!.rows)) === JSON.stringify(tricky) && JSON.stringify(split!.next) === JSON.stringify(['a,"rows":[', 'x']) && split!.n === 2, JSON.stringify(split?.next));
+  // A changed row's wide values come as hashes under one key (lib/desktop/sync.ts syncRows' `thin`, 17 Oct 2026): the
+  // core must look for the key the server writes, or it would keep the nulls the server sent in their place.
+  const { THIN_KEY: coreThin } = await import(core) as { THIN_KEY: string };
+  const { THIN_KEY: serverThin } = await import('../../lib/desktop/sync');
+  check('desktop sync: the core reads thinned rows by the key the server writes', coreThin === serverThin && /^__/.test(coreThin), `${coreThin} ${serverThin}`);
   const { buildName } = await import(core) as { buildName: (s: unknown) => string | null };
   check('desktop build folder is named only by a plain name: a header naming anything else is refused (no ../ out of builds/)',
     buildName('5bcf0b12') === '5bcf0b12' && buildName('5bcf0b120b4b7515777986080f06a225cf446afb') !== null

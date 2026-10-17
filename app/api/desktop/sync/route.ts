@@ -3,7 +3,8 @@ import { withRoute } from '@/lib/authz/route';
 export const dynamic = 'force-dynamic';
 
 /**
- * The desktop app's sync down (docs/31 §3, lib/desktop/sync.ts): `op=state`, `op=rows` and `op=keys`. Admins only,
+ * The desktop app's sync down (docs/31 §3, lib/desktop/sync.ts): `op=state`, `op=rows` (with `thin=1`, wide values
+ * sent as hashes for the copy to keep its own), `op=keys` and `op=digest`. Admins only,
  * as the whole-database snapshot is, refused where it is refused, and audited (lib/desktop/guard.ts). The copy holds
  * every table but people's own secrets, whose ciphertext and token hashes stay here (lib/desktop/sync.ts). Read-only.
  */
@@ -37,7 +38,7 @@ export const GET = withRoute('app/api/desktop/sync/route.ts#GET', async (request
     return send(JSON.stringify({ ok: true, commit: builtFrom() ?? process.env.GIT_COMMIT?.slice(0, 12) ?? null, ...s }));
   }
   if (op === 'rows') {
-    const r = await syncRows(p.get('t') ?? '', p.get('since'), cursor(), Number(p.get('limit') ?? 2000), cursor('upto'));
+    const r = await syncRows(p.get('t') ?? '', p.get('since'), cursor(), Number(p.get('limit') ?? 2000), cursor('upto'), p.get('thin') === '1');
     if (!r.ok) return new Response(JSON.stringify(r), { status: 404, headers });
     // The rows are spliced in as the database wrote them, never parsed and re-encoded here.
     return send(`{"ok":true,"horizon":${JSON.stringify(r.horizon)},"n":${r.n},"next":${JSON.stringify(r.next)},"count":${JSON.stringify(r.count)},"rows":${r.rowsJson}}`);

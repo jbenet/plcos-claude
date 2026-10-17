@@ -70,6 +70,31 @@ export function splitRowsPage(text) {
 const rowCount = (page) => (typeof page.rows === 'string' ? page.n : page.rows.length);
 const quoteIdent = (s) => `"${String(s).replace(/"/g, '""')}"`;
 const quoteTable = (t) => t.split('.').map(quoteIdent).join('.');
+const quoteLit = (s) => `'${String(s).replace(/'/g, "''")}'`;
+/**
+ * The key a thinned row carries (lib/desktop/sync.ts, THIN_KEY), and how it shows in a page's text: inside a JSON string
+ * its quotes would be escaped, so only a key matches (a nested one only sends the page through checkThin, which is safe).
+ */
+export const THIN_KEY = '__plcos_thin';
+const THIN_MARK = `"${THIN_KEY}"`;
+/** GUESS — runs of rows read again whole one by one after a thinned page; more read the page's range whole. */
+const THIN_RUNS = 32;
+/** A thinned page's rows from checkThin, as runs of neighbours: from the key before the run (`after`: the page's) to its last. */
+function thinRuns(miss, after) {
+  const runs = [];
+  for (const m of miss) {
+    const last = runs.at(-1);
+    if (last && last.i === m.i - 1) { last.i = m.i; last.upTo = m.k; } else runs.push({ i: m.i, from: m.i === 1 ? after : m.prev, upTo: m.k });
+  }
+  return runs;
+}
+/** A thinned page's rows beside this copy's (`left`: rows not here too), for checkThin and writeThin. */
+function thinSource(table, mine, left = true) {
+  const join = mine.pk.map((c) => `l.${quoteIdent(c)} = p.${quoteIdent(c)}`).join(' and ');
+  const src = `(select x, i, x -> '${THIN_KEY}' as h from jsonb_array_elements($1::jsonb) with ordinality e(x, i)) s
+      cross join lateral jsonb_populate_record(null::${table}, s.x) p`;
+  return left ? `${src} left join ${table} l on ${join}` : `${src} where ${join}`;
+}
 /** Never seeded from this Mac: what the server's sync never sends either (people's secrets, migration bookkeeping). */
 const SEED_SKIP = new Set(['platform.migration', 'platform.person_secret']);
 /** The server's stand-ins (lib/desktop/sync.ts), so a seeded row hashes like the server's. */
@@ -760,12 +785,16 @@ export class LocalCopy {
       await client.query("set session_replication_role = 'replica'");
       await client.query('begin');
       if (whole) await client.query(`delete from ${table}`);
+      // Wide values sent as hashes while reading what changed (checkThin); not for a table with an identity column
+      // always generated, whose update could not set it.
+      let thin = !whole && !mine.ident_always;
       // Pages shrink when the server is slow to answer them (wide rows, a busy server) and grow back when it is quick.
       let limit = PAGE;
       const fetchPage = (from) => {
         const qs = new URLSearchParams({ op: 'rows', t: info.t, limit: String(limit) });
         const asked = Date.now();
-        if (!whole) qs.set('since', since);
+        // A read of what changed asks for wide values as hashes (checkThin); a server without it sends whole rows.
+        if (!whole) { qs.set('since', since); if (thin) qs.set('thin', '1'); }
         if (from) qs.set('after', JSON.stringify(from));
         const p = this.remoteRows(`/api/desktop/sync?${qs}`).then((page) => {
           const ms = Date.now() - asked;
@@ -784,7 +813,20 @@ export class LocalCopy {
         if (page.next && this.background.has(info.t)) await this.yieldToPerson();
         pending = page.next ? fetchPage(page.next) : null;
         const got = rowCount(page);
-        if (got) { await this.apply(client, table, mine, page.rows, keyed); n += got; onRows(n); }
+        if (got && !whole && typeof page.rows === 'string' && page.rows.includes(THIN_MARK)) {
+          // A wide value that differs here (or a row not here yet): this page's key range again, whole.
+          const miss = await this.checkThin(client, table, mine, page.rows);
+          const runs = thinRuns(miss, after);
+          if (runs.length > THIN_RUNS) {
+            // Much of the page differs: its range whole, and whole rows for the rest of the table.
+            thin = false;
+            await this.pullRange(client, info, table, mine, since, after, page.next);
+          } else {
+            await this.writeThin(client, table, mine, page.rows, miss);
+            if (runs.length) await this.fillThin(client, info, table, mine, since, after, page.next, page.rows, miss, runs);
+          }
+          n += got; onRows(n);
+        } else if (got) { await this.apply(client, table, mine, page.rows, keyed); n += got; onRows(n); }
         if (!page.next) { count = page.count; break; }
         after = page.next;
       }
@@ -891,6 +933,62 @@ export class LocalCopy {
        select ${cols.join(', ')} from jsonb_populate_recordset(null::${table}, $1::jsonb)${conflict}`,
       [typeof rows === 'string' ? rows : JSON.stringify(rows)],
     );
+  }
+
+  /**
+   * A thinned page (lib/desktop/sync.ts, syncRows' `thin`): the rows whose left-out values cannot be kept from this
+   * copy, in page order (a value that hashes differently here, or a row not here yet), each with its key and the key
+   * before it. `only`: check just these rows (by place in the page).
+   */
+  async checkThin(client, table, mine, rows, only = null) {
+    const pk = mine.pk.map(quoteIdent);
+    const key = (r) => `array[${pk.map((c) => `${r}.${c}::text`).join(', ')}]`;
+    const hash = `md5(case e.k ${mine.cols.map((c) => `when ${quoteLit(c)} then l.${quoteIdent(c)}::text`).join(' ')} end)`;
+    const { rows: miss } = await client.query(`select i::int, k, prev from (
+        select s.i, ${key('p')} as k, lag(${key('p')}) over (order by s.i) as prev,
+               s.h is not null and (l.${pk[0]} is null or exists (select 1 from jsonb_each_text(s.h) e(k, v) where ${hash} is distinct from e.v)) as bad
+          from ${thinSource(table, mine)}${only ? ' where s.i = any($2::int[])' : ''}) q
+      where bad order by i`, only ? [rows, only] : [rows]);
+    return miss;
+  }
+
+  /**
+   * The other rows of a thinned page. One sent whole (nothing left out) is written as apply writes it; one with values
+   * left out is updated in place, keeping those as they are here, never rewritten (checkThin passed it, so it is here).
+   */
+  async writeThin(client, table, mine, rows, miss) {
+    const cols = mine.cols.map(quoteIdent);
+    const pk = mine.pk.map(quoteIdent);
+    const rest = cols.filter((c) => !pk.includes(c));
+    const conflict = rest.length ? ` on conflict (${pk.join(', ')}) do update set ${rest.map((c) => `${c} = excluded.${c}`).join(', ')}` : ` on conflict (${pk.join(', ')}) do nothing`;
+    await client.query(`insert into ${table} (${cols.join(', ')})
+      select ${cols.map((c) => `p.${c}`).join(', ')} from (select x from jsonb_array_elements($1::jsonb) x where not x ? '${THIN_KEY}') s
+        cross join lateral jsonb_populate_record(null::${table}, s.x) p${conflict}`, [rows]);
+    if (!rest.length) return;
+    await client.query(`update ${table} l set ${mine.cols.filter((c) => !mine.pk.includes(c)).map((c) => `${quoteIdent(c)} = case when s.h ? ${quoteLit(c)} then l.${quoteIdent(c)} else p.${quoteIdent(c)} end`).join(', ')}
+      from ${thinSource(table, mine, false)} and s.h is not null and s.i <> all($2::int[])`, [rows, miss.map((m) => m.i)]);
+  }
+
+  /**
+   * The rows checkThin turned down, read again whole: each run of neighbouring rows, from the key before it to its last
+   * key. Should one still not match (a key read back differently here), the page's whole range is read again.
+   */
+  async fillThin(client, info, table, mine, since, after, next, rows, miss, runs) {
+    for (const r of runs) await this.pullRange(client, info, table, mine, since, r.from, r.upTo);
+    if ((await this.checkThin(client, table, mine, rows, miss.map((m) => m.i))).length) await this.pullRange(client, info, table, mine, since, after, next);
+  }
+
+  /** Rows changed since `since` with keys after `after` up to `upTo` (none: to the end), whole. */
+  async pullRange(client, info, table, mine, since, after, upTo) {
+    for (let from = after; ;) {
+      const qs = new URLSearchParams({ op: 'rows', t: info.t, limit: String(PAGE), since });
+      if (from) qs.set('after', JSON.stringify(from));
+      if (upTo) qs.set('upto', JSON.stringify(upTo));
+      const page = await this.remoteRows(`/api/desktop/sync?${qs}`);
+      if (rowCount(page)) await this.apply(client, table, mine, page.rows, true);
+      if (!page.next) return;
+      from = page.next;
+    }
   }
 
   async dropDeleted(client, info, mine, table) {
