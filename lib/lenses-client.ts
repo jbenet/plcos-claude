@@ -8,6 +8,8 @@
  * today.**
  */
 
+import { packRows, unpackRows, type PackedRows } from '@/lib/packed-rows';
+
 export type LinkState = 'confirmed' | 'unconfirmed' | 'restricted';
 
 export const LINK_STATE_LABEL: Record<LinkState, string> = {
@@ -183,3 +185,26 @@ export interface Lenses {
   radar: Radar;
   strip: Strip;
 }
+
+/**
+ * The lenses as the page sends them: their long lists packed (lib/packed-rows), as the floor's items are. Sent as they
+ * were, coverage's rows were 4.6 MB of the 5.5 MB its view sent, the radar's 1.6 of 2.5 and the network's nodes 1.3 of
+ * 2.2; packed, 0.5, 0.4 and 0.5 (all of PL Capital, 17 Oct 2026).
+ */
+export type PackedLenses = Omit<Lenses, 'network' | 'coverage' | 'radar'> & {
+  network: Omit<Network, 'nodes'> & { nodes: PackedRows };
+  coverage: Omit<Coverage, 'rows'> & { rows: PackedRows };
+  radar: Omit<Radar, 'dots' | 'offRadar'> & { dots: PackedRows; offRadar: PackedRows };
+};
+export const packLenses = (l: Lenses): PackedLenses => ({
+  ...l,
+  network: { ...l.network, nodes: packRows(l.network.nodes) },
+  coverage: { ...l.coverage, rows: packRows(l.coverage.rows) },
+  radar: { ...l.radar, dots: packRows(l.radar.dots), offRadar: packRows(l.radar.offRadar) },
+});
+export const unpackLenses = (p: PackedLenses): Lenses => ({
+  ...p,
+  network: { ...p.network, nodes: unpackRows<NetNode>(p.network.nodes) },
+  coverage: { ...p.coverage, rows: unpackRows<CoverageRow>(p.coverage.rows) },
+  radar: { ...p.radar, dots: unpackRows<RadarDot>(p.radar.dots), offRadar: unpackRows<RadarDot>(p.radar.offRadar) },
+});

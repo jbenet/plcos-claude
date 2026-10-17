@@ -6,6 +6,7 @@ import { Page } from '@/components/shell/Page';
 import { boardState } from '@/lib/board';
 import { floorState } from '@/lib/floor';
 import { lenses, emptyLenses } from '@/lib/lenses';
+import { packLenses } from '@/lib/lenses-client';
 import { moduleCrumbs } from '@/lib/nav';
 import { vehicleSelection } from '@/lib/session';
 import { shortDate } from '@/lib/time';
@@ -152,7 +153,7 @@ async function Visualizations({ params, searchParams }: { params: Promise<{ vehi
         </div>
       </div>
 
-      <FloorTabs state={{ ...state, items: packRows(state.items) }} board={{ ...board, territories: packRows(board.territories) }} lenses={lens} />
+      <FloorTabs state={{ ...state, items: packRows(state.items) }} board={{ ...board, territories: packRows(board.territories) }} lenses={packLenses(lens)} />
 
       <p className="note">
         Read as of {shortDate(state.asOf)}. {state.coverage.corpus}.
