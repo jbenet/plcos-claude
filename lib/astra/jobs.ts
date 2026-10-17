@@ -25,6 +25,11 @@ export const RUNNER_STALE_MS = 3 * 60_000;
 export interface PlanStep { workflow: AstraWorkflow; size: number; focus: string[] }
 /** Most steps a plan holds, and most vehicles a step focuses on. */
 export const PLAN_MAX = 20, FOCUS_MAX = 8;
+/**
+ * One focus vehicle (a slug or name), 1–60 characters starting with a word character, so it can never read as a flag
+ * ("--tighten") on the batch cutter's command line (red team, 17 Oct 2026). The runner checks it again before use.
+ */
+export const FOCUS_PATTERN = /^\w[\w .&'()-]{0,59}$/;
 /** A step is done for the night when a run of it finds nobody, or its last this many runs all wrote nothing. */
 const STEP_BARREN = 3;
 
@@ -118,7 +123,7 @@ export function readPlan(value: unknown): PlanStep[] {
   return value.slice(0, PLAN_MAX).flatMap((x) => {
     const workflow = ASTRA_WORKFLOWS.find((w) => w === x?.workflow);
     const size = Math.trunc(Number(x?.size));
-    const focus = Array.isArray(x?.focus) ? x.focus.filter((f: unknown) => typeof f === 'string' && /^[\w .&'()-]{1,60}$/.test(f)).slice(0, FOCUS_MAX) : [];
+    const focus = Array.isArray(x?.focus) ? x.focus.filter((f: unknown) => typeof f === 'string' && FOCUS_PATTERN.test(f)).slice(0, FOCUS_MAX) : [];
     return workflow && size >= 1 && size <= 20 ? [{ workflow, size, focus }] : [];
   });
 }
@@ -134,7 +139,7 @@ export function parsePlan(text: string): PlanStep[] {
     const focus = (m?.[3] ?? '').split(',').map((f) => f.trim()).filter(Boolean);
     if (!m || !workflow) throw new Error(`Step ${i + 1}: start with a workflow (${ASTRA_WORKFLOWS.join(', ')}).`);
     if (!(size >= 1 && size <= 20)) throw new Error(`Step ${i + 1}: LPs per run is 1 to 20.`);
-    if (focus.length > FOCUS_MAX || focus.some((f) => !/^[\w .&'()-]{1,60}$/.test(f))) throw new Error(`Step ${i + 1}: up to ${FOCUS_MAX} vehicles, comma-separated.`);
+    if (focus.length > FOCUS_MAX || focus.some((f) => !FOCUS_PATTERN.test(f))) throw new Error(`Step ${i + 1}: up to ${FOCUS_MAX} vehicles, comma-separated.`);
     return { workflow, size, focus };
   });
 }
@@ -153,6 +158,8 @@ export async function saveSettings(db: Queryable, actor: string, s: Partial<Pick
 
 export interface Poll {
   host: string; inWindow: boolean; night: string; free: number; held: string[]; workflows?: readonly AstraWorkflow[];
+  /** A random id the runner makes once per process (migration 030); runners from before it send none. */
+  instance?: string | null;
   /** Runner features beyond the first: `focus` = it can cut a batch for named vehicles. */
   features?: readonly string[];
   commands?: readonly AstraCommandOp[]; code?: string | null; codeStartedAt?: string | null;
@@ -176,12 +183,15 @@ const RUNNER_ALIVE = '3 minutes';
 
 export async function poll(db: Db, p: Poll): Promise<PollAnswer> {
   return db.transaction(async (tx) => {
-    const live = await tx.one<{ host: string }>(`select host from platform.astra_runner where id = 1 and host is not null and host <> $1
-      and heartbeat_at > clock_timestamp() - interval '${RUNNER_ALIVE}' for update`, [p.host]);
+      // One runner at a time, told apart by its per-process instance when both it and the live one send one (two runners
+    // on one Mac share a host name: red team, 17 Oct 2026), else by host, as before 030.
+    const live = await tx.one<{ host: string }>(`select host from platform.astra_runner where id = 1 and host is not null
+      and heartbeat_at > clock_timestamp() - interval '${RUNNER_ALIVE}'
+      and (case when $2::text is not null and instance is not null then instance <> $2 else host <> $1 end) for update`, [p.host, p.instance ?? null]);
     if (live) throw new AstraRunnerBusy(`Another runner (${live.host}) is polling; one runner at a time.`);
     await tx.query(`update platform.astra_runner set heartbeat_at = clock_timestamp(), host = $1, slots = $2::jsonb, in_window = $3,
-      capacity_until = $4, note = $5, code = $6, code_started_at = $7 where id = 1`,
-      [p.host, JSON.stringify(p.slots), p.inWindow, p.capacityUntil, p.note, p.code ?? null, p.codeStartedAt ?? null]);
+      capacity_until = $4, note = $5, code = $6, code_started_at = $7, instance = $8 where id = 1`,
+      [p.host, JSON.stringify(p.slots), p.inWindow, p.capacityUntil, p.note, p.code ?? null, p.codeStartedAt ?? null, p.instance ?? null]);
     const r = await readRunner(tx);
     if (r.autoOn && p.inWindow && !r.paused) {
       const owner = await tx.one<{ updated_by: string | null }>('select updated_by::text from platform.astra_runner where id = 1');
@@ -199,10 +209,10 @@ export async function poll(db: Db, p: Poll): Promise<PollAnswer> {
       message = 'The runner no longer holds this run (it restarted or lost it).' where status in ('claimed','running') and not (id::text = any($1::text[]))`, [p.held]);
     const focusing = (p.features ?? []).includes('focus');
     const jobs = r.paused || p.free <= 0 ? [] : (await tx.query<{ id: string; workflow: AstraWorkflow; size: number; focus: string[] | null }>(
-      `update platform.astra_job set status = 'claimed', claimed_at = clock_timestamp(), updated_at = clock_timestamp()
+      `update platform.astra_job set status = 'claimed', claimed_at = clock_timestamp(), updated_at = clock_timestamp(), claimed_by = $5
        where id in (select id from platform.astra_job where status = 'queued' and (run_now or $1) and workflow = any($3::text[])
          and ($4 or coalesce(cardinality(focus), 0) = 0) order by created_at limit $2)
-       returning id::text, workflow, size, focus`, [p.inWindow, Math.min(p.free, 12), [...(p.workflows ?? FIRST_WORKFLOWS)], focusing]))
+       returning id::text, workflow, size, focus`, [p.inWindow, Math.min(p.free, 12), [...(p.workflows ?? FIRST_WORKFLOWS)], focusing, p.instance ?? null]))
       .map((j) => ({ id: j.id, workflow: j.workflow, size: j.size, focus: j.focus ?? [] }));
     await tx.query(`update platform.astra_command set status = 'failed', finished_at = clock_timestamp(), message = 'The runner took it but never answered.'
       where status = 'sent' and sent_at < clock_timestamp() - interval '${COMMAND_STALE}'`);
@@ -250,17 +260,24 @@ async function topUp(tx: Queryable, r: AstraRunner, p: Poll): Promise<void> {
   }
 }
 
-export interface Report { id: string; status: 'running' | 'done' | 'failed'; batch?: string; slot?: string; model?: string; counts?: Record<string, unknown>; message?: string }
+export interface Report { id: string; status: 'running' | 'done' | 'failed'; batch?: string; slot?: string; model?: string; counts?: Record<string, unknown>; message?: string;
+  /** The reporting runner's per-process id (migration 030); when sent, it must be the one that claimed the job. */
+  instance?: string | null }
 
-/** The runner reports one job's progress. Counts only: unknown keys and non-numbers are dropped, messages are cut short. */
+/**
+ * The runner reports one job's progress. Counts only: unknown keys and non-numbers are dropped, messages are cut short.
+ * A report naming an instance lands only on a job that instance claimed; one naming none (a runner from before 030) is
+ * taken as before.
+ */
 export async function report(db: Queryable, r: Report): Promise<boolean> {
   const counts = Object.fromEntries(COUNT_KEYS.flatMap((k) => (Number.isSafeInteger(r.counts?.[k]) && (r.counts![k] as number) >= 0 ? [[k, r.counts![k]]] : [])));
   const rows = await db.query(`update platform.astra_job set status = $2, batch = coalesce($3, batch), slot = coalesce($4, slot), model = coalesce($5, model),
       counts = counts || $6::jsonb, message = coalesce($7, message), updated_at = clock_timestamp(),
       started_at = case when $2 = 'running' then coalesce(started_at, clock_timestamp()) else started_at end,
       finished_at = case when $2 in ('done','failed') then clock_timestamp() else finished_at end
-    where id::text = $1 and status in ('claimed','running') returning id`,
-    [r.id, r.status, r.batch?.slice(0, 80) ?? null, r.slot?.slice(0, 40) ?? null, r.model?.slice(0, 40) ?? null, JSON.stringify(counts), r.message?.slice(0, 300) ?? null]);
+    where id::text = $1 and status in ('claimed','running') and ($8::text is null or claimed_by is not distinct from $8) returning id`,
+    [r.id, r.status, r.batch?.slice(0, 80) ?? null, r.slot?.slice(0, 40) ?? null, r.model?.slice(0, 40) ?? null, JSON.stringify(counts), r.message?.slice(0, 300) ?? null,
+      r.instance ?? null]);
   return rows.length > 0;
 }
 

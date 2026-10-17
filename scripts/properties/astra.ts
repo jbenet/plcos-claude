@@ -1,12 +1,14 @@
+import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { researchExport, RESEARCH_FRESH_MS } from '../../lib/astra/research';
+import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
+import { researchExport, RESEARCH_FRESH_MS, RESEARCH_RETRY_MS } from '../../lib/astra/research';
 import { syncGuard } from '../../lib/sync/auth';
 import { SYNC_ADMIN, SYNC_PUSH } from '../../lib/sync/scopes';
 import { astraCall } from '../../lib/sync/astra';
-import { ASTRA_WORKFLOWS, cancel, cancelQueued, enqueue, inWindow, parsePlan, planText, readRunner, recentJobs, saveSettings } from '../../lib/astra/jobs';
-import { batchPrefix, codexArgs, fill, nightOf, RUN_LIMIT_MS, shouldFallBack, WEB_WORKFLOWS } from '../../lib/astra/runner';
+import { ASTRA_WORKFLOWS, cancel, cancelQueued, enqueue, FOCUS_PATTERN, inWindow, parsePlan, planText, readPlan, readRunner, recentJobs, saveSettings } from '../../lib/astra/jobs';
+import { acceptJob, batchPrefix, codexArgs, fill, nightOf, RUN_LIMIT_MS, shouldFallBack, WEB_WORKFLOWS } from '../../lib/astra/runner';
 import { createMcpToken, type AppUser } from '../../modules/platform';
 import { freshDb, type Check } from './harness';
 
@@ -33,7 +35,29 @@ export async function astraProperties(check: Check) {
   check('astra has a brief for every workflow; the search pass searches and revising strategies does not',
     templates.every(Boolean) && WEB_WORKFLOWS.includes('w1s') && !WEB_WORKFLOWS.includes('w5r'), ASTRA_WORKFLOWS.join(' '));
   check('astra falls back only on capacity with no final message', shouldFallBack('', 'model is at capacity') && !shouldFallBack('done', 'model is at capacity') && !shouldFallBack('', 'error'), 'fallback');
-  check('astra batch prefix is short and the runner\'s', batchPrefix('0123456789abcdef') === 'astra-01234567-', batchPrefix('0123456789abcdef'));
+  const jobA = '01234567-89ab-cdef-0123-456789abcdef', jobB = '01234567-0000-0000-0000-000000000000';
+  check('astra batch prefix is the runner\'s and holds the whole job id, so two jobs sharing 8 hex characters never share a batch',
+    batchPrefix(jobA) === 'astra-0123456789abcdef0123456789abcdef-' && batchPrefix(jobA) !== batchPrefix(jobB) && /^astra-[\w-]+\.txt$/.test(`${batchPrefix(jobA)}01.txt`),
+    batchPrefix(jobA));
+  // The runner checks what the server hands it before building a path or argument (red team, 17 Oct 2026).
+  const runnerFlows = ['w1w5', 'w1', 'w5', 'w5t', 'w1s', 'w5r'] as const;
+  const good = acceptJob({ id: jobA, workflow: 'w5', size: 5, focus: ['neurotech', 'spv-netholabs'] }, runnerFlows);
+  const bad = [{ id: '../../etc', workflow: 'w5', size: 5 }, { id: jobA, workflow: 'w9', size: 5 }, { id: jobA, workflow: 'w5', size: 50 },
+    { id: jobA, workflow: 'w5', size: 5, focus: ['--tighten'] }, { id: jobA, workflow: 'w5', size: 5, focus: ['-x'] }, { id: jobA, workflow: 'w5', size: 5, focus: 'neurotech' },
+    { id: `${jobA}/x`, workflow: 'w5', size: 5 }, null, 'w5'].map((j) => acceptJob(j, runnerFlows));
+  check('astra runner drops a job with a bad id, an unknown workflow, a size out of range or a focus that could read as a flag',
+    good?.id === jobA && good.focus?.length === 2 && acceptJob({ id: jobA, workflow: 'w1', size: 3 }, runnerFlows)?.focus?.length === 0 && bad.every((j) => j === null),
+    JSON.stringify(bad));
+  let dashFocus = '';
+  try { parsePlan('w5 5 --tighten'); } catch (e) { dashFocus = e instanceof Error ? e.message : ''; }
+  check('astra refuses a focus starting with -- in a plan line and in a stored plan', /Step 1/.test(dashFocus)
+    && readPlan([{ workflow: 'w5', size: 5, focus: ['--tighten', '-x', 'neurotech'] }])[0]!.focus.join() === 'neurotech'
+    && !FOCUS_PATTERN.test('--vehicle') && FOCUS_PATTERN.test("Invented Fund (II) & Co."), dashFocus);
+  // enrich-batch.ts reads the word after --vehicle as its value only, never as a flag (and refuses one that starts with -).
+  const cutter = await promisify(execFile)(process.execPath, ['--import', import.meta.resolve('tsx'), resolve('scripts/enrich-batch.ts'), 'w5', 'astra-props-', '5', '--vehicle', '--tighten'])
+    .then(() => ({ code: 0, err: '' }), (e: { code?: number; stderr?: string }) => ({ code: e.code ?? -1, err: e.stderr ?? '' }));
+  check('astra batch cutter reads the word after --vehicle as its value, never as a flag, and refuses one starting with -',
+    cutter.code === 2 && /--vehicle takes vehicle slugs/.test(cutter.err), JSON.stringify(cutter));
 
   const db = await freshDb();
   const sel = 'id::text, handle, name, initials, role, email, access::text, vehicles, approves';
@@ -47,7 +71,7 @@ export async function astraProperties(check: Check) {
     return astraCall(guard.caller, req(), { db }) as Promise<{ status: number; body: Record<string, any> }>;
   };
   const poll = (o: Partial<{ inWindow: boolean; free: number; held: string[]; night: string; workflows: string[]; commands: string[]; commit: string; startedAt: string;
-    features: string[]; slots: Array<{ slot: string; job: string | null }> }> = {}) =>
+    features: string[]; instance: string; slots: Array<{ slot: string; job: string | null }> }> = {}) =>
     call(admin.secret, { op: 'poll', host: 'props', inWindow: false, night: '2026-10-10', free: 4, held: [], slots: [{ slot: 's1', job: null }], ...o });
 
   check('astra refuses a push-only token', (await call(pushOnly.secret, { op: 'poll' })).status === 403, 'push-only');
@@ -74,6 +98,29 @@ export async function astraProperties(check: Check) {
   check('astra fails a run the runner no longer holds', lost?.status === 'failed', String(lost?.status));
   const late2 = await call(admin.secret, { op: 'report', id: nowId, status: 'done', counts: { selected: 6 } });
   check('astra refuses a report on a run that already ended', late2.status === 409, String(late2.status));
+
+  // Two runners on one Mac share a host name: each sends a per-process instance, and the server tells them apart
+  // (migration 030; red team, 17 Oct 2026). A runner that sends none is told apart by host, as before.
+  const instA = '11111111-1111-4111-8111-111111111111', instB = '22222222-2222-4222-8222-222222222222';
+  await enqueue(db, juan.id, { workflow: 'w5', size: 2, count: 1, runNow: true });
+  const pollA = await poll({ free: 1, instance: instA });
+  const aJob = pollA.body.jobs[0]?.id as string;
+  const pollB = await poll({ free: 4, instance: instB });
+  const aHeld = (await recentJobs(db)).find((j) => j.id === aJob);
+  const bReport = await call(admin.secret, { op: 'report', id: aJob, instance: instB, status: 'running' });
+  const junkReport = await call(admin.secret, { op: 'report', id: aJob, instance: '; drop', status: 'running' });
+  const aReport = await call(admin.secret, { op: 'report', id: aJob, instance: instA, status: 'running', slot: 's1' });
+  const oldReport = await call(admin.secret, { op: 'report', id: aJob, status: 'running' });
+  check('astra refuses a second runner on the same host by its instance, keeps the first one\'s runs, and takes reports only from the claimer',
+    pollA.status === 200 && Boolean(aJob) && pollB.status === 409 && aHeld?.status === 'claimed' && bReport.status === 409 && junkReport.status === 422
+      && aReport.status === 200 && oldReport.status === 200,
+    `${pollA.status} ${pollB.status} ${aHeld?.status} ${bReport.status} ${junkReport.status} ${aReport.status} ${oldReport.status}`);
+  const sameA = await poll({ free: 0, instance: instA, held: [aJob] });
+  const legacy = await poll({ free: 0, held: [aJob] });
+  check('astra takes the same instance again, and a runner that sends no instance is judged by host as before', sameA.status === 200 && legacy.status === 200,
+    `${sameA.status} ${legacy.status}`);
+  await cancel(db, aJob);
+  await poll({ free: 0, held: [] });
 
   await saveSettings(db, juan.id, { autoOn: true, autoWorkflow: 'w1', autoBatches: 3, batchSize: 4 });
   await saveSettings(db, juan.id, { paused: true });
@@ -178,16 +225,36 @@ export async function astraProperties(check: Check) {
   try {
     let queued = 0;
     const queue = async () => { queued++; return { id: '00000000-0000-0000-0000-000000000001' }; };
+    const status = (at: Date) => writeFile(join(dir, 'export-status.json'), JSON.stringify({ at: at.toISOString(), identityReviewError: null }) + '\n');
     const none = await researchExport(db, juan.id, { dir, queue });
     await writeFile(join(dir, 'candidates.jsonl'), '{"key":"invented-1"}\n');
     await writeFile(join(dir, 'team.json'), '[]\n');
     await writeFile(join(dir, 'notes.json'), '{}\n');
-    const fresh = await researchExport(db, juan.id, { dir, queue });
+    const unstamped = await researchExport(db, juan.id, { dir, queue });
+    await status(new Date());
     const old = new Date(Date.now() - RESEARCH_FRESH_MS - 60_000);
+    // Freshness is export-status.json's (written last), not candidates.jsonl's own time.
     await utimes(join(dir, 'candidates.jsonl'), old, old);
+    const fresh = await researchExport(db, juan.id, { dir, queue });
+    await status(old);
     const stale = await researchExport(db, juan.id, { dir, queue });
-    check('astra research export: none or stale queues a fresh export; a fresh one hands out only the export files, hashed',
-      none.pending && stale.pending && queued === 2 && !fresh.pending && Object.keys(fresh.files).sort().join() === 'candidates.jsonl,team.json'
+    check('astra research export: none, unstamped or stale queues a fresh export; a fresh one (by export-status.json) hands out only the export files, hashed',
+      none.pending && unstamped.pending && stale.pending && queued === 3 && !fresh.pending && Object.keys(fresh.files).sort().join() === 'candidates.jsonl,team.json'
         && fresh.files['candidates.jsonl']!.sha256.length === 64, JSON.stringify({ queued, files: fresh.pending ? null : Object.keys(fresh.files) }));
+    // A failing export is not re-queued on every poll: within the hour, its error is the answer (red team, 17 Oct 2026).
+    const failed = (await db.one<{ id: string }>(`insert into platform.import_job(kind, actor, status, error, finished_at)
+      values ('export', $1, 'failed', 'Invented failure.', clock_timestamp()) returning id::text`, [juan.id]))!.id;
+    const held = await researchExport(db, juan.id, { dir, queue });
+    const later = await researchExport(db, juan.id, { dir, queue, now: Date.now() + RESEARCH_RETRY_MS + 60_000 });
+    check('astra research export: a failed export is not re-queued within the hour, and its error is answered; after the hour it is',
+      held.pending && held.job === failed && held.error === 'Invented failure.' && queued === 4 && later.pending && later.job !== failed,
+      JSON.stringify({ queued, held }));
+    await db.query('delete from platform.import_job where id = $1', [failed]);
+    // The export writes each file whole (temporary name, then rename) and export-status.json last, so its time is the export's.
+    const src = await readFile('lib/enrich/candidates.ts', 'utf8');
+    const body = src.slice(src.indexOf('export async function exportResearchSet'));
+    const writes = [...body.matchAll(/await (writeWhole|writeFile)\(join\(dir, '([^']+)'/g)].map((m) => [m[1], m[2]]);
+    check('astra research export writes every file whole and export-status.json last', writes.length >= 6 && writes.every(([fn]) => fn === 'writeWhole')
+      && writes.at(-1)![1] === 'export-status.json' && /rename\(temp, file\)/.test(src), JSON.stringify(writes));
   } finally { await rm(dir, { recursive: true, force: true }); }
 }
