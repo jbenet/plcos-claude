@@ -128,6 +128,9 @@ data on Juan's Mac.
   such records today: this closes the gap before something does.
 - **Searches say what they covered.** The MCP routes answer with no route now names what was searched, as of when,
   and that none found is not none (rule 7); the name search adds its date.
+- **Only the app itself and LabOS may frame it.** No page sent a framing policy, so any site could put an approval
+  button in a frame (the session cookie limits this to same-site pages). Every response now says `frame-ancestors
+  'self' https://os.pl.xyz`, `nosniff` and a strict referrer policy.
 - **The feedback form has an overall size limit.** The browser route read the whole body before checking each
   picture; it now stops reading past 42 MB (the pictures' 40 MB plus text) and answers 413, as the token route does.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.

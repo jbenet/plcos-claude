@@ -41,6 +41,17 @@ const config: NextConfig = {
     staleTimes: { dynamic: 30, static: 30 },
   },
   allowedDevOrigins: ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '*.local', 'localhost', '127.0.0.1'],
+  /**
+   * Framed only by itself and LabOS (scripts/kit-contract.ts holds that LabOS may frame it), never sniffed, and no full
+   * address sent to another site (red team, 17 Oct 2026: approval buttons could be framed by any page).
+   */
+  async headers() {
+    return [{ source: '/:path*', headers: [
+      { key: 'Content-Security-Policy', value: "frame-ancestors 'self' https://os.pl.xyz" },
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+    ] }];
+  },
 };
 
 export default config;
