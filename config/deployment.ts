@@ -63,7 +63,9 @@ function databaseUrl(): string | null {
   if (process.env.POSTGRES_REHEARSAL === '1' && !url) throw new Error('Postgres rehearsal requires DATABASE_URL.');
   if (url && PROFILE === 'real' && !signInProviderOn()) {
     const parsed = new URL(url);
-    if (!['postgres:', 'postgresql:'].includes(parsed.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname) || parsed.search || parsed.hash) {
+    // Or a socket on this machine: `?host=/its/folder` and nothing else (the Mac app's copy, 17 Oct 2026).
+    const socket = [...parsed.searchParams.keys()].join() === 'host' && (parsed.searchParams.get('host') ?? '').startsWith('/');
+    if (!['postgres:', 'postgresql:'].includes(parsed.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname) || (parsed.search && !socket) || parsed.hash) {
       throw new Error('DATABASE_URL is set in the real profile: only local Postgres is approved (docs/21-postgres.md).');
     }
   }

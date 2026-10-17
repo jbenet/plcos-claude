@@ -108,20 +108,20 @@ export async function outreachAddLpProperties(check: Check, db: Db) {
     && JSON.stringify(before3) === JSON.stringify(after3) && pm?.n === 0,
     `${t1.status}: ${String(t1.json?.error).slice(0, 160)}; counts ${JSON.stringify(before3)} → ${JSON.stringify(after3)}; possible matches ${pm?.n}`);
 
-  // ── Autonomous: the system's status, an unconfirmed address, no amount ─────────────────
-  const auto400 = await agent(add({ name: 'Invented Mail Auto Amount', email: 'amount@invented-auto.example' }, { indicated: { low: 100000 } }));
+  // ── Autonomous: the system's status, an unconfirmed address, an amount marked as the desk's (Juan, 17 Oct 2026) ──
+  const autoAmount = await agent(add({ name: 'Invented Mail Auto Amount', email: 'amount@invented-auto.example' }, { indicated: { low: 100000 } }));
   const autoBody = add({ name: 'Invented Mail Autoperson', email: 'auto@invented-autofirm.example' });
   const au = await agent(autoBody);
   const idA = au.json?.data?.pursuitId as string | undefined;
   const pA = idA ? await db.one<{ status: string; status_source: string; set_by: string; reason: string; human: boolean; entity: string }>(`select status::text, status_source, status_set_by::text set_by,
     status_reason reason, strategy.pursuit_has_human_status(pursuit_id) human, entity_id::text entity from strategy.pursuit where pursuit_id = $1`, [idA]) : null;
   const claimA = pA ? await db.one<{ verifier: string | null; verified: string | null }>(`select last_verified_by::text verifier, last_verified_at::text verified from research.claim where entity_id = $1 and field = 'email'`, [pA.entity]) : null;
-  const noAmount = await db.one<{ n: number }>(`select count(*)::int n from identity.entity where display_name = 'Invented Mail Auto Amount'`);
-  check('Outreach add-LP: an autonomous call may add, but its status is the system\'s (rule, set by the Mail desk actor, no person\'s), its address unconfirmed and marked as the desk\'s own; an amount is refused (400) and nothing written',
-    auto400.status === 400 && noAmount?.n === 0 && au.status === 200 && au.json.data.autonomous === true && au.json.data.status === 'connecting'
+  const amount = await db.one<{ n: number; body: string }>(`select count(*)::int n, min(u.body) body from pipeline.indication i join strategy.pursuit_update u on u.update_id = i.update_id where i.pursuit_id = $1`, [autoAmount.json?.data?.pursuitId]);
+  check('Outreach add-LP: an autonomous call may add, its status the system\'s (rule, set by the Mail desk actor, no person\'s), its address unconfirmed and marked as the desk\'s own; an amount is recorded, its update marked as the desk\'s',
+    autoAmount.status === 200 && amount?.n === 1 && /mail desk on its own/.test(amount.body) && au.status === 200 && au.json.data.autonomous === true && au.json.data.status === 'connecting'
     && pA?.status === 'connecting' && pA.status_source === 'rule' && pA.set_by === desk.id && pA.human === false && /mail desk on its own/.test(pA.reason)
     && claimA?.verifier === null && claimA.verified === null,
-    `amount ${auto400.status}: ${String(auto400.json?.error).slice(0, 80)}; add ${au.status}${au.json?.error ? ` (${au.json.error})` : ''}; pursuit ${JSON.stringify(pA)}; claim ${JSON.stringify(claimA)}`);
+    `amount ${autoAmount.status}${autoAmount.json?.error ? ` (${autoAmount.json.error})` : ''}, ${amount?.n} recorded; add ${au.status}${au.json?.error ? ` (${au.json.error})` : ''}; pursuit ${JSON.stringify(pA)}; claim ${JSON.stringify(claimA)}`);
 
   // ── Undo ──────────────────────────────────────────────────────────────────────────────
   const u1 = idA ? await undo(idA) : null;

@@ -17,6 +17,13 @@ data on Juan's Mac.
 - **The all-vehicles pipeline rebuilds sooner after a write.** It is now built from each vehicle's own list, and
   each vehicle's plans and touches start as soon as that list arrives, rather than after every list. On the real
   data: 495 → 430 ms. The strategic filter reads each profile's kept text once, not the whole profile.
+- **LP profiles are read once per version.** Every rebuild after a write read each public profile whole (about
+  8 MB) for the plans and the strategic marks. A 12 ms read of note keys and row versions now says which changed, and
+  only those are read (`modules/strategy/profile-parts.ts`). On the real data, the same 3,255 profiles with no
+  differences; all/pipeline after a write 430 → 390 ms.
+- **Id columns stay compact when some ids repeat.** A packed column of ids is sent in the 22-character form unless
+  a shared dictionary would be shorter; the floor's LP ids (5,037 distinct in 6,039 rows) went from 236 to 133 KB.
+  On the real data: all/visualizations 1,058 → 956 KB, coverage 1.51 → 1.32 MB, all/pipeline 2.61 → 2.44 MB.
 
 ### Red team
 
@@ -33,9 +40,7 @@ data on Juan's Mac.
 - **A Viewer's mail-desk token writes nothing.** `outreach_add_research` had no permission check, and `comms_ingest`
   (which runs Reconciliation) checked one only when a message named its LP. Both now ask what the desk's other
   writes ask: that the token's owner may change records on their vehicles.
-- **An amount is a person's to record, on `/update` too.** `outreach_add_lp` refuses an indicated amount from a
-  call no person clicked and says "a person adds it with outreach_update"; `outreach_update` took one from the same
-  autonomous call. It now refuses it the same way.
+- ~~**An amount is a person's to record, on `/update` too.**~~ Reversed the same day: see "Juan's calls" below.
 - **Affinity writes: what was approved is what is written.** Proposing an address again replaced the mail and
   plan of an item already in the batch under the same id, so an Admin with Approvals open could approve mail they
   never saw, and the note named the first proposer for another person's mail. A changed item now gets a new id
@@ -74,9 +79,44 @@ data on Juan's Mac.
 - **An intro ask's ticket covers mail to its connector.** A message linked under an INTRO_ASK ticket was accepted
   whoever it went to, the LP included. At least one recipient must now be the connector, by an address on record.
   And no ticket is spent on a sent message that names no recipients: it said nothing of who got the mail.
-- **The mail desk can't confirm an address on its own.** An autonomous `outreach_propose_contact` could store an
-  address as confirmed by the token's owner and make it where the LP's mail goes. Both are refused when no person
-  clicked; an unconfirmed address read from a signature is still added, as `outreach_add_lp` adds one.
+- ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
+
+### Juan's calls, 17 Oct 2026
+
+- **JuanMail does more on its own.** Juan: "we should remove the rules that only people can change settings. It's
+  just getting in the way, I want a lot of automated actions, specially from JuanMail". A call no person clicked may
+  now record an indicated amount (`outreach_add_lp`, `outreach_update`), confirm an address as the token's owner and
+  make it where an LP's mail goes (`outreach_propose_contact`). Each is marked as the mail desk's: an update's words
+  start "By the mail desk on its own" (or "From mail, by the mail desk on its own"), and a status it sets is the
+  system's (rule), so a person's later choice still wins. Send tickets for autonomous sends are unchanged.
+- **Mailguard keys are tied to their address** ("Tie keys"). A key pasted in Preferences is kept with the mailguard
+  address it was checked against. If an Admin changes the address, the keys are not sent to the new one: each person
+  sees "The mailguard address changed since this token was checked" and pastes theirs again. Keys kept before today
+  are tied to the current address on their next good check. The Keychain key and `MAILGUARD_URL` both come from the
+  Mac's own environment and stay as they are.
+- **The Mac's real-data server and the preview listen on the Mac only** ("Mac only"). `npm run dev:real`,
+  `start:real`, `preview` and `cloud-pull.sh` bind 127.0.0.1; the demo still binds 0.0.0.0 for the iPad. They have no
+  sign-in, so anyone on the network was anyone there.
+- **The Mac app's security review** ("Fix all four"):
+  - Its local database listens on no TCP port, only on its socket in the app's own folder. With trust sign-in, the
+    port let any program or account on the Mac in as superuser, able to run commands through `COPY TO PROGRAM`. An
+    existing copy is closed once, with a restart of its database, at the app's next start; a folder whose socket
+    path would be too long for macOS puts the socket in the user's own temporary folder. The address is
+    `localhost` with `?host=<folder>`, which the build's own checks now accept (that parameter and nothing else).
+  - Pairing sends its grant only to the app's own port (47100), and only to a browser at the address that started
+    the pairing; one allowed from elsewhere is refused and forgotten, and says so. The page already said the device
+    name is what the app says it is.
+  - A downloaded build's folder is named only by a commit (7–40 hex digits); before, the server's header went into
+    the path, and that folder is deleted first. `npm ci` runs without the app's keys and secrets in its environment.
+  - The copy's launch secret is compared in constant time.
+  - Not done, with reasons: the session stays in a Keychain item made by `/usr/bin/security`, which any program
+    running as Juan can read; the whole real-data copy sits in the same user's Library, so locking the item down
+    would not change what such a program reaches. Explore mode refuses only writes other than GET; none of the 27
+    GET route handlers writes.
+    "Sign Out of This Mac" still does not end the session on the server: sessions have no table, and the only
+    revoke (raising the person's epoch) would sign them out of every browser too. Install scripts still run in
+    `npm ci`, since Next's native packages need them; a hash of the build download would come from the same server
+    the app already trusts with everything, so it is not checked either.
 
 ### Left as is
 

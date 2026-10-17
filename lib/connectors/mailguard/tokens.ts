@@ -20,21 +20,44 @@ import { KEY_FORMAT } from './allowlist';
 
 export interface TokenStore {
   readonly kind: 'keychain' | 'file' | 'memory' | 'database';
+  /** The key alone. */
   get(handle: string): Promise<string | null>;
-  put(handle: string, key: string): Promise<void>;
+  /** The key and the mailguard origin it was checked against (null for a key stored before 17 Oct 2026). */
+  bound(handle: string): Promise<BoundKey | null>;
+  put(handle: string, key: string, origin?: string): Promise<void>;
   delete(handle: string): Promise<void>;
 }
 
+/**
+ * A key is kept with the mailguard origin it was checked against (Juan, 17 Oct 2026: "Tie keys"), so a changed
+ * mailguard address never receives the keys people pasted for the old one: each person pastes theirs again.
+ * Stored as `<key>|<origin>`; a bare key is one kept before then.
+ */
+export interface BoundKey { key: string; origin: string | null }
+const ORIGIN = /^https?:\/\/[A-Za-z0-9.\-[\]:]+$/;
 const HANDLE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const checkHandle = (h: string) => { if (!HANDLE.test(h)) throw new Error('Not a user handle.'); };
 const checkKey = (k: string) => { if (!KEY_FORMAT.test(k)) throw new Error('That is not a mailguard token; nothing was stored.'); };
+const encode = (k: string, origin?: string) => {
+  checkKey(k);
+  if (origin === undefined) return k;
+  if (!ORIGIN.test(origin)) throw new Error('Not a mailguard origin; nothing was stored.');
+  return `${k}|${origin}`;
+};
+const decode = (raw: string | null | undefined): BoundKey | null => {
+  if (!raw) return null;
+  const [key, origin, ...rest] = raw.trim().split('|');
+  if (rest.length || !key || !KEY_FORMAT.test(key) || (origin !== undefined && !ORIGIN.test(origin))) return null;
+  return { key, origin: origin ?? null };
+};
 
 export function memoryStore(): TokenStore {
   const m = new Map<string, string>();
   return {
     kind: 'memory',
-    async get(h) { return m.get(h) ?? null; },
-    async put(h, k) { checkHandle(h); checkKey(k); m.set(h, k); },
+    async get(h) { return decode(m.get(h))?.key ?? null; },
+    async bound(h) { return decode(m.get(h)); },
+    async put(h, k, origin) { checkHandle(h); m.set(h, encode(k, origin)); },
     async delete(h) { m.delete(h); },
   };
 }
@@ -50,8 +73,9 @@ export function fileStore(path: string): TokenStore {
   };
   return {
     kind: 'file',
-    async get(h) { return (await read())[h] ?? null; },
-    async put(h, k) { checkHandle(h); checkKey(k); const all = await read(); all[h] = k; await write(all); },
+    async get(h) { return decode((await read())[h])?.key ?? null; },
+    async bound(h) { return decode((await read())[h]); },
+    async put(h, k, origin) { checkHandle(h); const v = encode(k, origin); const all = await read(); all[h] = v; await write(all); },
     async delete(h) { const all = await read(); delete all[h]; await write(all); },
   };
 }
@@ -74,20 +98,21 @@ function security(args: string[], stdin?: string): Promise<{ code: number; out: 
  * each time; anyone who can run commands as Juan can too, which is already true of the database.
  */
 export function keychainStore(): TokenStore {
+  const bound = async (h: string) => {
+    checkHandle(h);
+    const r = await security(['find-generic-password', '-s', SERVICE, '-a', h, '-w']);
+    return r.code === 0 ? decode(r.out) : null;
+  };
   return {
     kind: 'keychain',
-    async get(h) {
+    async get(h) { return (await bound(h))?.key ?? null; },
+    bound,
+    async put(h, k, origin) {
       checkHandle(h);
-      const r = await security(['find-generic-password', '-s', SERVICE, '-a', h, '-w']);
-      const key = r.out.trim();
-      return r.code === 0 && KEY_FORMAT.test(key) ? key : null;
-    },
-    async put(h, k) {
-      checkHandle(h);
-      checkKey(k);
+      const v = encode(k, origin);
       // -U replaces an older item. The command is read from standard input, never argv; the key's format
-      // (letters, digits, underscores) leaves nothing to quote.
-      const r = await security(['-i'], `add-generic-password -U -s ${SERVICE} -a ${h} -l "PLC Raise Tools — mailguard (${h})" -w "${k}"\n`);
+      // (letters, digits, underscores) and the origin's (no quotes, spaces or backslashes) leave nothing to quote.
+      const r = await security(['-i'], `add-generic-password -U -s ${SERVICE} -a ${h} -l "PLC Raise Tools — mailguard (${h})" -w "${v}"\n`);
       if (r.code !== 0) throw new Error('The Keychain refused the token.');
     },
     async delete(h) {
@@ -114,15 +139,15 @@ export function databaseStore(): TokenStore {
   };
   return {
     kind: 'database',
-    async get(h) {
+    async get(h) { return (await this.bound(h))?.key ?? null; },
+    async bound(h) {
       const { personSecret } = await import('@/lib/settings/person-secrets');
-      const key = await personSecret(await idOf(h), MAILGUARD_PURPOSE);
-      return key && KEY_FORMAT.test(key) ? key : null;
+      return decode(await personSecret(await idOf(h), MAILGUARD_PURPOSE));
     },
-    async put(h, k) {
-      checkKey(k);
+    async put(h, k, origin) {
+      const v = encode(k, origin);
       const { setPersonSecret } = await import('@/lib/settings/person-secrets');
-      await setPersonSecret(await idOf(h), MAILGUARD_PURPOSE, k);
+      await setPersonSecret(await idOf(h), MAILGUARD_PURPOSE, v);
     },
     async delete(h) {
       const { clearPersonSecret } = await import('@/lib/settings/person-secrets');

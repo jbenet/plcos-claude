@@ -59,7 +59,7 @@ deploy() {
   deploy && exit 0 || exit 3
 }
 restart() {
-  kill $(pgrep -f "npm run dev:real") $(pgrep -f "next dev --hostname 0.0.0.0 --port 3000") \
+  kill $(pgrep -f "npm run dev:real") $(pgrep -f "next dev --hostname [0-9.]* --port 3000") \
     $(pgrep -f "^next-server" | while read p; do lsof -a -p $p -iTCP:3000 -sTCP:LISTEN >/dev/null 2>&1 && echo $p; done) 2>/dev/null
   # Relaunch it here when nothing else does (28 Sep: a rollback restart left live down). A terminal loop
   # that relaunches on its own gets 15 s first.

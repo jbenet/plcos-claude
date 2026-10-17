@@ -8,8 +8,9 @@
  *   npm run start:real   the real data, from its production build (npm run build:real)
  *
  * Ports come from this folder's row in .ports.json (config/ports.ts); PORT overrides the port,
- * never what the folder may serve. Every server binds 0.0.0.0, so the local network and Juan's
- * iPad reach it (next.config.ts), and a dev server polls for file changes. The npm scripts raise
+ * never what the folder may serve. The demo binds 0.0.0.0, so the local network and Juan's iPad reach
+ * it (next.config.ts); the real data and the preview bind 127.0.0.1, this Mac only (Juan, 17 Oct 2026: they
+ * have no sign-in, so anyone on the network was anyone here). A dev server polls for file changes. The npm scripts raise
  * the open-file limit for the real data and the preview, as they always have.
  */
 import { spawn, spawnSync } from 'node:child_process';
@@ -152,7 +153,7 @@ async function main() {
     say(`${layout.folder}: ${serve === 'demo' ? 'the demo' : 'the real data'} on :${port}${production ? ', production build' : ''}`);
   }
 
-  const next = ['next', production ? 'start' : 'dev', '--hostname', '0.0.0.0', '--port', String(port), ...extra];
+  const next = ['next', production ? 'start' : 'dev', '--hostname', serve === 'demo' ? '0.0.0.0' : '127.0.0.1', '--port', String(port), ...extra];
   // The live server reads both keys, each from its own Keychain item (docs/15, docs/24-linear.md), and
   // the Google OAuth client for Gmail drafts when it has been stored (docs/25).
   const command = serve === 'real' ? [join(layout.root, 'scripts', 'with-affinity-key.sh'), join(layout.root, 'scripts', 'with-linear-key.sh'), join(layout.root, 'scripts', 'with-mailguard-token.sh'), ...next] : next;

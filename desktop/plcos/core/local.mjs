@@ -33,6 +33,11 @@ const DIGEST_RUN = 5000;
  * shape: {"ok":true,…fields…,"n":N,…,"rows":[…]} with the rows last. A literal ,"rows":[ cannot occur inside a JSON
  * string (its quotes are escaped), so the first one is the field.
  */
+/** A build's folder name under builds/: a plain name (a commit), or null, so `../..` cannot leave the folder. */
+export function buildName(s) {
+  return typeof s === 'string' && /^[0-9A-Za-z][0-9A-Za-z_-]{0,63}$/.test(s) ? s : null;
+}
+
 export function splitRowsPage(text) {
   if (!text.startsWith('{"ok":true,') || !text.endsWith(']}')) return null;
   const cut = text.indexOf(',"rows":[');
@@ -103,7 +108,9 @@ class LocalCopy {
     // system's 103-character limit puts the socket in this user's own temporary folder instead.
     const pgDir = path.join(DATA_DIR, 'pg');
     this.pgSocket = `${pgDir}/.s.PGSQL.${PG_PORT}`.length <= 100 ? pgDir : path.join(os.tmpdir(), 'plcos-pg');
-    this.dbUrl = env.PLCOS_DESKTOP_DATABASE_URL || `postgres://plcos@${encodeURIComponent(this.pgSocket)}:${PG_PORT}/${DB_NAME}`;
+    // localhost with `?host=<socket folder>`: node-pg and psql both take the folder from it, and the build's own checks
+    // (config/deployment.ts, scripts/desktop-migrate.ts) accept a loopback name with only that parameter.
+    this.dbUrl = env.PLCOS_DESKTOP_DATABASE_URL || `postgres://plcos@localhost:${PG_PORT}/${DB_NAME}?host=${encodeURIComponent(this.pgSocket)}`;
     this.secret = randomBytes(24).toString('hex');
     this.cookiePrefix = `capitalos_real_${NEXT_PORT}_`;
     this.origin = `http://127.0.0.1:${NEXT_PORT}`;
@@ -348,7 +355,7 @@ class LocalCopy {
     mkdirSync(builds, { recursive: true });
     // A build's name is a folder under builds/, from the server's answer: only a plain name (a commit), so a name like
     // `../..` cannot point the delete and rename below outside it (red-team pass, 17 Oct 2026).
-    const plain = (name) => typeof name === 'string' && /^[0-9A-Za-z][0-9A-Za-z_-]{0,63}$/.test(name);
+    const plain = (name) => buildName(name) !== null;
     let dir = plain(commit) ? path.join(builds, commit) : null;
     if (!dir || !existsSync(path.join(dir, '.next', 'BUILD_ID'))) {
       this.detail = 'Downloading the server’s build';
@@ -488,7 +495,7 @@ class LocalCopy {
       const npm = path.join(path.dirname(process.execPath), 'npm');
       await sh(existsSync(npm) ? npm : 'npm', ['ci', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: deps, timeout: 20 * 60_000,
         // The packages' install scripts run with this: not the app's own keys (PLCOS_DESKTOP_KEY and the like).
-        env: { ...Object.fromEntries(Object.entries(env).filter(([k]) => !k.startsWith('PLCOS_'))), NODE_ENV: 'production' } });
+        env: { ...Object.fromEntries(Object.entries(env).filter(([k]) => !/^PLCOS_|KEY|SECRET|TOKEN|PASSWORD|COOKIE/i.test(k))), NODE_ENV: 'production' } });
       this.log('installed dependencies', hash);
     }
     const link = path.join(dir, 'node_modules');
