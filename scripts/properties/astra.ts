@@ -26,7 +26,8 @@ export async function astraProperties(check: Check) {
   check('astra codex runs sandboxed with web search and the brief on stdin', args.includes('workspace-write') && args.includes('tools.web_search=true')
     && args.at(-1) === '-' && !args.includes('danger-full-access'), args.join(' '));
   const local = codexArgs({ model: 'gpt-6-astra', worker: '/w', enrich: '/d/enrich', last: '/l.md', web: false });
-  check('astra strategy-only runs get no web search, and every workflow has a time limit', local.includes('tools.web_search=false')
+  check('astra strategy-only runs get no web search or network, and every workflow has a time limit', local.includes('tools.web_search=false') && local.includes('sandbox_workspace_write.network_access=false')
+    && args.includes('sandbox_workspace_write.network_access=true')
     && !WEB_WORKFLOWS.includes('w5t') && ASTRA_WORKFLOWS.every((w) => RUN_LIMIT_MS[w]! > 0 && RUN_LIMIT_MS[w]! <= 2 * 3600_000), local.join(' '));
   const templates = await Promise.all(ASTRA_WORKFLOWS.map((w) => readFile(`scripts/astra/templates/${w}.md`, 'utf8').then(() => true, () => false)));
   check('astra has a brief for every workflow; the search pass searches and revising strategies does not',

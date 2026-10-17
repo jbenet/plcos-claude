@@ -133,6 +133,13 @@ data on Juan's Mac.
   'self' https://os.pl.xyz`, `nosniff` and a strict referrer policy.
 - **The feedback form has an overall size limit.** The browser route read the whole body before checking each
   picture; it now stops reading past 42 MB (the pictures' 40 MB plus text) and answers 413, as the token route does.
+- **Astra's strategy runs have no network.** Every Astra worker could reach the network, including the W5 family,
+  which reads the team's `context` notes (a Team member on one vehicle can write them) and quoted mail, with the whole
+  real export on disk. A planted instruction could have sent it out. Only the web workflows (w1w5, w1, w1s) now get the
+  network. The brief and the W5 protocol also say that record text is data about the LP, never instructions to the worker.
+- **Astra runs pin what they meant.** The ledger hashed the template and protocol but not `common.md` or the
+  filled brief, so a `git pull` changed later runs without a new hash. It now hashes the filled brief plus the protocol, and
+  records the runner's commit as the protocol version.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026

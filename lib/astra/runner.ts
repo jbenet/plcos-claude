@@ -42,11 +42,15 @@ export function fill(template: string, values: Record<string, string>): string {
   });
 }
 
-/** codex exec's arguments: a research worker with web search, writing only inside the worker folder and enrich/. */
+/**
+ * codex exec's arguments: a research worker writing only inside the worker folder and enrich/. Only a web workflow gets
+ * the network: a strategy run reads the team's notes and quoted mail, so it must not be able to send anything out (red
+ * team, 17 Oct 2026).
+ */
 export function codexArgs(o: { model: string; worker: string; enrich: string; last: string; git?: string[]; web?: boolean }): string[] {
   return ['exec', '-m', o.model, '-C', o.worker, '-s', 'workspace-write', '--skip-git-repo-check',
     '--add-dir', o.enrich, ...(o.git ?? []).flatMap((d) => ['--add-dir', d]),
-    '-c', 'sandbox_workspace_write.network_access=true', '-c', `tools.web_search=${o.web ?? true}`, '-o', o.last, '-'];
+    '-c', `sandbox_workspace_write.network_access=${o.web ?? true}`, '-c', `tools.web_search=${o.web ?? true}`, '-o', o.last, '-'];
 }
 
 /** Whether a finished attempt should fall back to the next model: only when it wrote no final message and said "at capacity". */
