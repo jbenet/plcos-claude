@@ -87,7 +87,7 @@ export async function setFeedbackStatus(caller: SyncCaller, request: Request, o:
   };
   if (config.data.copyTakenAt) return answer(403, 'refused', { error: 'This server serves a copy of the data; set statuses on the live server.' }, { reason: 'copy' });
   let input: Record<string, unknown>;
-  try { input = JSON.parse((await request.text()).slice(0, 8 * 1024)); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
+  try { input = JSON.parse((await cappedText(request, 8 * 1024)) ?? ''); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
   if (!input || typeof input !== 'object' || Array.isArray(input)) return answer(422, 'invalid', { error: 'Send { id, status, note? }.' }, { reason: 'shape' });
   const extra = Object.keys(input).filter((k) => !['id', 'status', 'note'].includes(k));
   if (extra.length) return answer(422, 'invalid', { error: `Unknown fields: ${extra.slice(0, 5).join(', ')}. Send { id, status, note? }.` }, { reason: 'fields' });

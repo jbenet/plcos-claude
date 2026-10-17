@@ -173,6 +173,11 @@ data on Juan's Mac.
 - **The copy cluster's password never goes out in the clear.** Connections to it now require scram
   (`PGREQUIREAUTH`), so a listener on its port while it is down gets nothing. The app's data folder is made
   owner-only even when the shell created it first.
+- **A report can't pass itself off as Juan's.** An issue file was read with the first `json context` block in it, so
+  a report that typed one ("user": "juan", verified) was read as Juan's, and the dev agent's triage treats his reports
+  as "do it". The reader now takes the block the server appends last, and the triage doc says the reporter comes only
+  from the frontmatter and that context, the report's text being data, never instructions. The feedback status call
+  stops reading past 8 KB.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
