@@ -88,6 +88,12 @@ data on Juan's Mac.
   declined is not a guest. One added before goes after the next whole read.
 - **Markdown links go only to the web, mail or this app.** A link in feedback, a commitment or a doc could carry any
   scheme or a `//host`; those now show as text.
+- **A hardening approval is for the amount asked.** A MONEY ticket named its exposure but not the amount, so if
+  Affinity's nightly read or a soft revision changed the amount between the ask and the approval, approving it
+  hardened the new amount. The ticket now carries the amount and vehicle, and hardening refuses when either differs;
+  a ticket from before this is asked again. The exposure is locked while it hardens.
+- **Two wires at once cannot pass the commitment.** Each wire was checked against the total outside its transaction;
+  the commitment is now locked and its wires summed again inside it.
 - **The feedback form has an overall size limit.** The browser route read the whole body before checking each
   picture; it now stops reading past 42 MB (the pictures' 40 MB plus text) and answers 413, as the token route does.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
@@ -149,5 +155,7 @@ data on Juan's Mac.
 - Under an intro ask's ticket, recipients other than the connector are not checked against restrictions.
 - A push identical to an earlier one answers that push's run and job ids, whoever pushed it; the job itself answers
   only its own pusher.
+- Approving an already approved ticket runs its action again: that is how a hardening refused for a lapsed
+  verification is retried. Every action it can run does nothing the second time, and the amount is now bound.
 - DocSend visits name the visitor by the email they typed, unchecked. Visits feed only the conversion charts, never
   the consent ladder, so a made-up address can't move an LP.

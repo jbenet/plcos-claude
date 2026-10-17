@@ -299,7 +299,7 @@ export async function calendarProperties(check: Check) {
       attendees: [{ email: juan.email, self: true, organizer: true, responseStatus: 'accepted' }, { email: 'lena@invented-cal.example', responseStatus: 'declined' }] });
     await fakeCalendar(dir, juan.email, { id: 'primary' }, [lenaAt('inv1', '2026-09-20', 'needsAction'), lenaAt('inv2', '2026-09-21', 'declined'), lenaAt('inv3', '2026-09-22', 'accepted'), declinedGuest]);
     await sync();
-    const invites = async () => db.query<{ day: string }>(`select held_on::text "day" from meetings.meeting where source = 'calendar' and held_on between '2026-09-20' and '2026-09-23' order by 1`);
+    const invites = async () => db.query<{ day: string }>(`select held_on::text "day" from meetings.meeting where source = 'calendar' and held_on between '2026-09-20' and '2026-09-23' and entity_id = any($1::uuid[]) order by 1`, [[lena, firm]]);
     const inv = await invites();
     await fakeCalendar(dir, juan.email, { id: 'primary' }, [lenaAt('inv3', '2026-09-22', 'needsAction')]);
     const unaccepted = await sync();
