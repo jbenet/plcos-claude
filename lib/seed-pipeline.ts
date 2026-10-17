@@ -91,8 +91,8 @@ export async function seedPipeline(db: Db): Promise<{ exposures: number; pools: 
 
     // The MONEY ticket points at the real Fernhollow Umberfield exposure, and its scope carries the
     // bounded action as data. Approving it is the only thing that moves the headline.
-    const fernhollowUmberfield = await tx.one<{ exposure_id: string }>(
-      `select x.exposure_id from pipeline.exposure x
+    const fernhollowUmberfield = await tx.one<{ exposure_id: string; amount: string; vehicle_id: string }>(
+      `select x.exposure_id, x.amount::text, x.vehicle_id::text from pipeline.exposure x
          join identity.entity e on e.entity_id = x.entity_id
          join platform.vehicle v on v.id = x.vehicle_id
         where e.display_name = 'Fernhollow Umberfield Trust' and v.slug = 'neurotech'`,
@@ -123,7 +123,8 @@ export async function seedPipeline(db: Db): Promise<{ exposures: number; pools: 
             ],
             apply: {
               command: 'pipeline.harden',
-              args: { exposureId: fernhollowUmberfield.exposure_id, evidenceRef: 'sub-doc:fernhollow-umberfield-v3' },
+              args: { exposureId: fernhollowUmberfield.exposure_id, evidenceRef: 'sub-doc:fernhollow-umberfield-v3',
+                amount: Number(fernhollowUmberfield.amount), vehicleId: fernhollowUmberfield.vehicle_id },
             },
           }),
           v('neurotech'), u('sam'),

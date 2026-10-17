@@ -22,6 +22,8 @@ export async function applyApprovedTicket(
         exposureId: String(apply.args['exposureId']),
         evidenceRef: String(apply.args['evidenceRef']),
         ticketId: ticket.id,
+        amount: typeof apply.args['amount'] === 'number' ? apply.args['amount'] : null,
+        vehicleId: typeof apply.args['vehicleId'] === 'string' ? apply.args['vehicleId'] : null,
       });
       return { ran: 'pipeline.harden' };
     }

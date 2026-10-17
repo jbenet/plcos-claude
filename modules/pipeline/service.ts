@@ -49,7 +49,8 @@ export async function requestHardening(
         { label: 'Moves', value: 'soft → hard' },
         { label: 'Cash received', value: 'No — a separate state' },
       ],
-      apply: { command: 'pipeline.harden', args: { exposureId: exposure.exposureId, evidenceRef: args.evidenceRef } },
+      // The amount and vehicle approved, as data: what is hardened is what was approved (red team, 17 Oct 2026).
+      apply: { command: 'pipeline.harden', args: { exposureId: exposure.exposureId, evidenceRef: args.evidenceRef, amount: exposure.amount, vehicleId: exposure.vehicleId } },
     },
     vehicleId: exposure.vehicleId,
     expiresInDays: 7,
@@ -58,16 +59,28 @@ export async function requestHardening(
 
 /** Fails closed without an approved MONEY ticket for exactly this exposure. */
 export async function harden(
-  actorId: string, args: { exposureId: string; evidenceRef: string; ticketId: string | null },
+  actorId: string, args: { exposureId: string; evidenceRef: string; ticketId: string | null; amount: number | null; vehicleId: string | null },
 ): Promise<void> {
   const db = await getDb();
   await db.transaction(async (tx) => {
     await requireApprovedTicket(tx, {
       kind: 'MONEY', subjectType: 'exposure', subjectId: args.exposureId, ticketId: args.ticketId,
     });
+    await tx.query('select 1 from pipeline.exposure where exposure_id = $1 for update', [args.exposureId]);
     const exposure = await getExposure(args.exposureId, tx);
     if (!exposure) throw new Error(`No exposure ${args.exposureId}`);
     if (exposure.track === 'hard') return; // idempotent
+    // Bounded: the amount can change after the ask (an Affinity read, a revision), and an approval of $1M is not one
+    // of $10M. A ticket that names no amount predates this and is asked again.
+    if (args.amount === null || !Number.isFinite(args.amount)) {
+      throw new Error('Refused: this ticket does not say which amount it approves. Nothing was recorded; ask for the hardening again.');
+    }
+    if (Math.abs(exposure.amount - args.amount) > 0.5 || (args.vehicleId !== null && args.vehicleId !== exposure.vehicleId)) {
+      throw new Error(
+        `Refused: the commitment is now ${usdM(exposure.amount)}, and the ticket approved ${usdM(args.amount)}. ` +
+        'Nothing was recorded; ask for the hardening again at the current amount.',
+      );
+    }
 
     // Re-checked inside the transaction: an approval from three days ago does not survive
     // a verification that expired yesterday.
@@ -205,6 +218,14 @@ export async function recordWire(
   }
   const db = await getDb();
   await db.transaction(async (tx) => {
+    // Locked and summed again: two wires at once cannot both fit under the commitment (red team, 17 Oct 2026).
+    const now = await tx.one<{ amount: string; wired: string }>(
+      `select x.amount::text, (select coalesce(sum(ce.amount), 0) from pipeline.commitment_event ce
+          where ce.exposure_id = x.exposure_id and ce.step = 'wired' and ce.source = 'us')::text wired
+         from pipeline.exposure x where x.exposure_id = $1 for update`, [exposureId]);
+    if (!now || Number(now.wired) + args.amount > Number(now.amount) + 0.5) {
+      throw new CloseRefused(`That would make more wired than the ${usdM(Number(now?.amount ?? 0), 2)} committed. More than committed is a new commitment, or a mistake.`);
+    }
     await event(tx, actorId, exposureId, { step: 'wired', on: dated(args.on), amount: args.amount, reference: args.reference.trim() });
     // The first wire is when cash started arriving; kept for everything that reads it.
     await tx.query(`update pipeline.exposure set cash_received_at = coalesce(cash_received_at, $2) where exposure_id = $1`, [exposureId, args.on]);
