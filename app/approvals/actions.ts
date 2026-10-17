@@ -18,6 +18,8 @@ export async function decide(formData: FormData): Promise<{ error?: string } | v
 
   if (decision === 'approve') {
     const ticket = await getTicket(ticketId);
+    // A page read before someone else rejected it: say so, rather than "Approved, but…".
+    if (ticket && ticket.decision !== 'approve') return { error: `This ticket was already ${ticket.decision === 'reject' ? 'rejected' : 'decided'}; nothing ran.` };
     if (ticket) {
       try {
         await applyApprovedTicket(user.id, ticket);

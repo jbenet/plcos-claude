@@ -58,6 +58,15 @@ export async function securityGovernanceProperties(check: Check, db: Db) {
       await refused(() => decideTicket(inactive.id, pending, 'approve', null)) &&
       await refused(() => decideTicket(randomUUID(), pending, 'approve', null)) && beforeInactive === await snapshot(),
       'The command itself validates an active app_user.');
+    const lapsed = await ticket('SEND');
+    await db.query("update governance.approval_ticket set expires_at = now() - interval '1 hour' where id = $1", [lapsed]);
+    const lateApprove = await refused(() => decideTicket(approver, lapsed, 'approve', null));
+    const lateRow = await db.one<{ decision: string | null }>('select decision::text from governance.approval_ticket where id = $1', [lapsed]);
+    await decideTicket(approver, lapsed, 'reject', 'Invented: expired');
+    check('SECURITY an expired ticket cannot be approved late; it can still be rejected',
+      lateApprove && lateRow?.decision === null && (await db.one<{ decision: string }>(
+        'select decision::text from governance.approval_ticket where id = $1', [lapsed]))?.decision === 'reject',
+      `approve refused ${lateApprove}, then ${lateRow?.decision ?? 'undecided'}`);
 
     const audit = (await db.one<{ id: string }>(`insert into platform.audit_log (actor_id, action, subject_type, detail)
       values ($1, 'security.fixture', 'invented', '{"immutable":true}') returning id::text`, [requester]))!;

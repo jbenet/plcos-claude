@@ -147,7 +147,7 @@ async function Orgs({
         {q && <Link href={`/orgs/g/${group}`}>Clear</Link>}
       </form>
 
-      <p className="cover">{q ? <>{total} {total === 1 ? 'record matches' : 'records match'} &ldquo;{q}&rdquo;. </> : null}{total <= RELATIONSHIP_PAGE_SIZE ? 'Showing all of them' : pageNumber === 0 ? `Showing the first ${RELATIONSHIP_PAGE_SIZE} of ${total} records` : `Showing ${pageNumber * RELATIONSHIP_PAGE_SIZE + 1}–${pageNumber * RELATIONSHIP_PAGE_SIZE + rows.length} of ${total} records`}, ordered by hard money then name.
+      <p className="cover">{q ? <>{total} {total === 1 ? 'record matches' : 'records match'} &ldquo;{q}&rdquo;. </> : null}{total <= RELATIONSHIP_PAGE_SIZE ? 'Showing all of them' : pageNumber === 0 ? `Showing the first ${RELATIONSHIP_PAGE_SIZE} of ${total} records` : `Showing ${pageNumber * RELATIONSHIP_PAGE_SIZE + 1}–${pageNumber * RELATIONSHIP_PAGE_SIZE + rows.length} of ${total} records`}, ordered by the largest hard commitment on one vehicle, then name.
         {pageNumber > 0 && <> · <Link href={more(pageNumber - 1)}>Previous</Link></>}
         {(pageNumber + 1) * RELATIONSHIP_PAGE_SIZE < total && <> · <Link href={more(pageNumber + 1)}>Next {RELATIONSHIP_PAGE_SIZE}</Link></>}
         {affiliations.length === 2000 && <> · Showing the first 2,000 affiliations for these records.</>}
@@ -232,10 +232,12 @@ async function Orgs({
                         </span>
                       ))}
                     </td>
-                    <td className="right mono" style={{ color: r.hard > 0 ? 'var(--green)' : undefined }}>
-                      {r.hard > 0 ? usdM(r.hard) : '—'}
+                    <td className="right mono" style={{ color: r.hardBy.length ? 'var(--green)' : undefined }}>
+                      {r.hardBy.length ? r.hardBy.map((h) => <div key={h.vehicle} title={h.vehicle}>{usdM(h.amount)}{r.hardBy.length > 1 && <span className="muted" style={{ fontSize: 11 }}> {h.vehicle}</span>}</div>) : '—'}
                     </td>
-                    <td className="right mono muted">{r.soft > 0 ? usdM(r.soft) : '—'}</td>
+                    <td className="right mono muted">
+                      {r.softBy.length ? r.softBy.map((h) => <div key={h.vehicle} title={h.vehicle}>{usdM(h.amount)}{r.softBy.length > 1 && <span style={{ fontSize: 11 }}> {h.vehicle}</span>}</div>) : '—'}
+                    </td>
                     <td className="muted" style={{ fontSize: 11.5 }}>
                       {r.status ? <span style={{ color: 'var(--ink)' }}>{STATUS_LABEL[r.status as PursuitStatus]}</span> : '—'}
                       {r.rung && <div style={{ fontSize: 11 }}>{RUNG_LABEL[r.rung as LadderRung]} on the ladder</div>}

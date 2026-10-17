@@ -126,7 +126,8 @@ export async function poolChecks(): Promise<PoolCheck[]> {
        join identity.entity e on e.entity_id = identity.canonical_entity_id(x.entity_id)
        join platform.vehicle v on v.id = x.vehicle_id
        left join budgets p on p.entity_id = e.entity_id
-      where x.closed_at is null
+      -- The pool is fund and SPV money; grants are a funder's own budget, not this LP's capital (invariant 10).
+      where x.closed_at is null and v.kind <> 'grant_rail' and x.instrument <> 'grant'
       order by e.display_name, v.sort_order`,
   );
 

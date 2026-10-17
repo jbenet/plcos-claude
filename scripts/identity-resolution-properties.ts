@@ -188,7 +188,7 @@ export async function identityResolutionProperties(check: Check, db: Db) {
       assertion.rule==='identity:v1:affiliation' && Boolean(assertion.signals) && undone && !twice && await root(undo[0]!)!==await root(undo[1]!),
       'An audited correction reverses its pointer once and prevents the next build from repeating that merge.');
     const actor=(await db.one<{id:string}>(`select id::text from platform.app_user where active order by handle limit 1`))!.id;
-    const vehicleIds=await db.query<{id:string}>(`select id::text from platform.vehicle where phase<>'historical' order by slug limit 2`);
+    const vehicleIds=await db.query<{id:string}>(`select id::text from platform.vehicle where phase<>'historical' and kind<>'grant_rail' order by slug limit 2`);
     for(const [i,entity] of [affinity,research].entries())await db.query(
       `insert into pipeline.exposure(entity_id,vehicle_id,instrument,track,amount,owner_id)
        values($1,$2,'lp_commitment','soft',$3,$4)`,[entity,vehicleIds[i]!.id,i+1,actor]);

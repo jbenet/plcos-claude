@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { can } from '@/lib/authz';
 import { licensedAccess } from '@/lib/authz/read/r3';
+import { needsScopedProjection } from '@/lib/authz/read/projection';
 import { projectRoutes } from '@/lib/authz/read/sections-data';
 import { planRoutes, throughNode, redactLicensedRoutes } from '@/lib/authz/read/network';
 import { getPursuit, listPursuits, STATUSES, RUNG_LABEL, type PursuitStatus } from '@/lib/authz/read/strategy';
@@ -360,8 +361,9 @@ export async function feedbackIssues(user: AppUser, a: { id?: string; status?: '
     return { link: `/developer/issues/${issue.id}`, data: {
       id: issue.id, title: issue.title, status: issue.status, kind: issue.kind, priority: issue.priority, created: issue.created,
       closedAt: issue.closedAt ?? null, page: issue.page, reporter: issue.reporter, labels: issue.labels, fixedIn: issue.fixedIn,
-      // A Viewer reads titles, not bodies: a body filed on real data can quote it.
-      body: user.access === 'viewer' ? 'Withheld at your access.' : issue.body,
+      // A Viewer, or a token kept to some vehicles, reads titles, not bodies: a body filed on real data can quote
+      // records on any vehicle, and the app shows such a user no issue body either.
+      body: needsScopedProjection(user) ? 'Withheld at your access.' : issue.body,
     } };
   }
   const open = ['open', 'triaged', 'agent-ready', 'in-progress'] as const;
