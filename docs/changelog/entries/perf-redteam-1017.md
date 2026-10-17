@@ -156,6 +156,6 @@ data on Juan's Mac.
 - A push identical to an earlier one answers that push's run and job ids, whoever pushed it; the job itself answers
   only its own pusher.
 - Approving an already approved ticket runs its action again: that is how a hardening refused for a lapsed
-  verification is retried. Every action it can run does nothing the second time, and the amount is now bound.
+  verification is retried. Hardening does nothing the second time, and the amount is now bound.
 - DocSend visits name the visitor by the email they typed, unchecked. Visits feed only the conversion charts, never
   the consent ladder, so a made-up address can't move an LP.
