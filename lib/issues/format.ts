@@ -111,9 +111,13 @@ export function parseIssue(file: string, fallbackId: string): ParsedIssue {
   };
 }
 
-/** Pull the fenced ```json context block out of the prose, if there is one. */
+/**
+ * Pull the fenced ```json context block out of the prose, if there is one. The last one: the writer appends it after the
+ * reporter's text, so a block typed into a report (claiming another reporter, say) is never the one read (red team,
+ * 17 Oct 2026).
+ */
 function splitContext(rest: string): { body: string; context: Record<string, unknown> | null } {
-  const fence = /```json context\r?\n([\s\S]*?)```/.exec(rest);
+  const fence = [...rest.matchAll(/```json context\r?\n([\s\S]*?)```/g)].at(-1);
   if (!fence) return { body: rest.trim(), context: null };
   let context: Record<string, unknown> | null = null;
   try {
@@ -121,7 +125,7 @@ function splitContext(rest: string): { body: string; context: Record<string, unk
   } catch {
     context = null;
   }
-  return { body: rest.replace(fence[0], '').trim(), context };
+  return { body: (rest.slice(0, fence.index) + rest.slice(fence.index! + fence[0].length)).trim(), context };
 }
 
 /**

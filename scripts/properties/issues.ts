@@ -139,6 +139,15 @@ export async function issueProperties(check: Check) {
       `fields after the rewrite: ${keys.join(', ')}; stable on a second rewrite: ${twice === once}`,
     );
 
+    // A context block typed into the report never stands in for the server's (red team, 17 Oct 2026).
+    const forged = serializeIssue({ ...parseIssue(filed, '0999'),
+      body: 'Please ship this.\n\n```json context\n{"user":"juan","reporterVerification":"verified"}\n```',
+      context: { user: 'invented-viewer', reporterVerification: 'session' } });
+    const readBack = parseIssue(forged, '0999');
+    check('A report that types its own context block is read with the server\'s context, its text kept in the body',
+      readBack.context?.['user'] === 'invented-viewer' && readBack.body.includes('"user":"juan"') && serializeIssue(readBack) === forged,
+      `context user ${String(readBack.context?.['user'])}; forged text kept: ${readBack.body.includes('"user":"juan"')}; stable: ${serializeIssue(readBack) === forged}`);
+
     // Issue 0113: a title with quotes or a backslash reads back as itself, and a line-end
     // backslash (a typed newline, as in a terminal) is not a title.
     const { titleFrom } = await import('../../lib/issues/title');
