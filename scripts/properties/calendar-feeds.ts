@@ -50,6 +50,17 @@ export async function calendarFeedProperties(check: Check) {
   const t0 = Date.now(), far = parseIcs(huge, window);
   check('Calendar feeds: a repeat that runs past the last representable date ends, with its first occurrence',
     Date.now() - t0 < 2000 && far.length === 3, `${far.length} events in ${Date.now() - t0} ms`);
+  // Red-team pass, 17 Oct 2026: thousands of daily repeats from year 1 walked 200,000 steps each on every view.
+  // A daily or weekly repeat starts at the window; the whole file has one step budget.
+  const ancient = CAL(EV(['UID:ancient-weekly', 'SUMMARY:Invented weekly since 1900', 'DTSTART:19000102T170000Z', 'DTEND:19000102T180000Z', 'RRULE:FREQ=WEEKLY;INTERVAL=2'])
+    + Array.from({ length: 3000 }, (_, i) =>
+      EV([`UID:ancient-${i}`, 'SUMMARY:Invented old repeat', 'DTSTART:00010101T170000Z', 'DTEND:00010101T180000Z', 'RRULE:FREQ=DAILY'])).join(''));
+  const t1 = Date.now(), old = parseIcs(ancient, window), took = Date.now() - t1;
+  const fortnightly = old.filter((e) => e.uid === 'ancient-weekly' && e.start >= window.from);
+  const daily = old.filter((e) => e.uid === 'ancient-0' && e.start >= window.from);
+  check('Calendar feeds: thousands of daily repeats from year 1 parse in well under a second (past one budget a repeat keeps its first date), and a repeat from long ago still shows in the window',
+    took < 1000 && daily.length === 121 && fortnightly.length >= 8 && fortnightly.every((e) => e.start.getUTCDay() === 2),
+    `${old.length} events in ${took} ms; daily in window ${daily.length}; fortnightly ${fortnightly.length}`);
   const { fetchIcs, IcsError } = await import('../../lib/connectors/ics/fetch');
   const dropped: IcsFetch = async () => ({ status: 200, text: async () => { throw Object.assign(new Error('aborted'), { name: 'TimeoutError' }); } });
   let readErr: unknown = null;

@@ -102,8 +102,10 @@ async function IssueDetail({ params }: { params: Promise<{ id: string }> }) {
               reporter saw before filing is what the issue shows afterwards. */}
           <Markdown
             source={issue.body}
+            // Only the issue's own attachments: a picture from another address would tell its host who opened the
+            // issue, and when (red-team pass, 17 Oct 2026). Anything else shows as not attached.
             resolveImage={(href) =>
-              href.startsWith('attachments/') ? `/issues/shot/${href}` : href}
+              href.startsWith('attachments/') ? `/issues/shot/${href}` : ''}
           />
         </div>
       </div>

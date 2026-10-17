@@ -25,7 +25,10 @@ export function Spans({
         if (s.kind === 'strong') return <b key={i}>{s.text}</b>;
         if (s.kind === 'em') return <i key={i}>{s.text}</i>;
         if (s.kind === 'image') {
-          const href = resolveImage ? resolveImage(s.href ?? '') : s.href ?? '';
+          // Without a resolver, only this site's own pictures: one from another address tells its host who read the
+          // text, and when (red-team pass, 17 Oct 2026).
+          const own = (h: string) => (h.startsWith('/') && !h.startsWith('//') && !h.startsWith('/\\') ? h : '');
+          const href = resolveImage ? resolveImage(s.href ?? '') : own(s.href ?? '');
           if (!href) {
             return (
               <span key={i} className="mdmissing">
