@@ -38,6 +38,10 @@ associate with the LP in PLCOS".
 - **The SPV seat's "IOI given" stays in step.** Recording an indication on an SPV moves an invited seat to IOI, with
   the date and the low end as the seat's amount (`close.syncIoi`); a seat at IOI with nothing recorded here reads as
   an indication, sourced "spv seat".
+- **A person can withdraw it** (red team, 17 Oct 2026): "withdraw" beside the amount on the LP page supersedes it with
+  nothing in its place, and a seat it moved to IOI goes back to the stage and amount it had (kept in the
+  `pursuit.indication_recorded` audit entry), unless the room moved it since. An autonomous amount is the Mail desk
+  actor's, its audit entries carrying `autonomous` and `tokenId`.
 - **The LP page's update box records it.** The words are read (reader v2 reads "$3M", "$3M–4M", "3 to 5 million" as a
   range) and offered as an "Indicated" row with a checkbox, unticked: it is saved only when ticked. Ticked with a
   touchpoint, the indication is sourced to it. `outreach_update` does the same with `applied.indicated`.
@@ -505,7 +509,7 @@ and answers, per address, read-only and without calling Affinity:
 |---|---|---|
 | `outreach_update` | `POST /api/outreach/update` | write-guarded |
 | `outreach_request_ticket` | `POST /api/outreach/tickets` | propose, opens a ticket — for an autonomous call only |
-| `outreach_propose_contact` | `POST /api/outreach/contacts` | propose |
+| `outreach_propose_contact` | `POST /api/outreach/contacts` | write-guarded; applies at once, a replaced send-to stays restorable |
 | `outreach_link_message` | `POST /api/outreach/link` | send-adjacent; an autonomous send needs an approved ticket (`agent-only`) |
 | `comms_ingest` | `POST /api/outreach/comms` | send-adjacent; metadata only, no ticket |
 | `outreach_add_lp` | `POST /api/outreach/lps` | write-guarded; no ticket — an autonomous call gets the system's status (9 Oct 2026) |
@@ -813,7 +817,9 @@ creates them only when Juan presses its button.
 
 - `send-to`: mail to this LP goes To this address (an investments@ inbox, say), its main contact cc'd. One per entity:
   a new one replaces the old. The address is also recorded as an email claim, as any address is. The answer adds
-  `sendTo: { email, setBy, setAt, replaced }`, where `replaced` is the address it replaced or null.
+  `sendTo: { email, setBy, setAt, replaced }`, where `replaced` is the address it replaced or null. The replaced
+  address, who set it and when stay in the `contact.send_to_set` audit entry; the LP page shows it beside the current
+  one with "restore", which sets it again as that person. An autonomous call's send-to is the Mail desk actor's.
 - `none`: if this address is the send-to, it no longer is. The answer adds `sendToCleared: true | false`.
 - Omitted: the send-to is unchanged.
 

@@ -127,6 +127,8 @@ export const actionRules = {
   'app/targets/actions.ts#requestLadderAdvance': { action: 'mutate', scope: 'pursuit' },
   'app/targets/actions.ts#setPursuitStatus': { action: 'mutate', scope: 'pursuit' },
   'app/targets/actions.ts#retractRungAction': { action: 'mutate', scope: 'pursuit' },
+  'app/targets/actions.ts#withdrawIndicationAction': { action: 'mutate', scope: 'pursuit' },
+  'app/targets/actions.ts#restoreSendToAction': { action: 'mutate', scope: 'pursuit' },
   'app/targets/actions.ts#addUpdateAction': { action: 'mutate', scope: 'pursuit' },
   'app/targets/actions.ts#addContextAction': { action: 'mutate', scope: 'context' },
   'app/targets/actions.ts#decideSuggestionAction': { action: 'mutate', scope: 'suggestion' },

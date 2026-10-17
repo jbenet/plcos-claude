@@ -46,6 +46,41 @@ export async function outreachWriteProperties(check: Check, db: Db) {
   check('Outreach writes: an autonomous /update carrying an indicated amount records it, its update marked as the mail desk\'s (17 Oct 2026)',
     uAgent.status === 200 && indAfter?.n === 2 && !!indAfter.body, `autonomous ${uAgent.status}${uAgent.json?.error ? ` (${uAgent.json.error})` : ''}; ${indAfter?.n} indications`);
 
+  // Attributed (red team, 17 Oct 2026): an autonomous write is the Mail desk actor's, its audit entries carrying
+  // autonomous and the token; a person's call stays theirs, marked not autonomous.
+  const auditOf = async (action: string, id: string) => db.one<{ actor: string; detail: any }>(`select actor_id::text actor, detail from platform.audit_log
+    where action = $1 and (detail->>'indicationId' = $2 or detail->>'updateId' = $2) order by id desc limit 1`, [action, id]);
+  const agentInd = await auditOf('pursuit.indication_recorded', uAgent.json?.data?.applied?.indicated?.indicationId ?? '');
+  const agentUpd = await auditOf('pursuit.update_added', uAgent.json?.data?.updateId ?? '');
+  const recordedBy = await db.one<{ by: string }>('select recorded_by::text by from pipeline.indication where indication_id = $1', [uAgent.json?.data?.applied?.indicated?.indicationId ?? null]);
+  const personInd = await auditOf('pursuit.indication_recorded', u1.json?.data?.applied?.indicated?.indicationId ?? '');
+  const { affectedIds } = await import('../../lib/mcp/audit');
+  const nested = affectedIds({}, { data: { applied: { indicated: { indicationId: '00000000-0000-4000-8000-000000000001' } } } } as any);
+  check('Outreach writes: an autonomous indication and update are the Mail desk actor\'s, their audit entries carrying autonomous and the token; a person\'s stay theirs; the MCP audit picks up a nested indicationId',
+    agentInd?.actor === desk.id && agentInd.detail.autonomous === true && typeof agentInd.detail.tokenId === 'string' && recordedBy?.by === desk.id
+    && agentUpd?.actor === desk.id && agentUpd.detail.autonomous === true && personInd?.actor === juan.id && personInd.detail.autonomous === false
+    && nested.indicationId === '00000000-0000-4000-8000-000000000001',
+    `agent indication: actor ${agentInd?.actor === desk.id ? 'desk' : agentInd?.actor}, autonomous ${agentInd?.detail?.autonomous}, token ${typeof agentInd?.detail?.tokenId}, recorded_by ${recordedBy?.by === desk.id ? 'desk' : recordedBy?.by}; update actor ${agentUpd?.actor === desk.id ? 'desk' : agentUpd?.actor}; person actor ${personInd?.actor === juan.id ? 'juan' : personInd?.actor}; nested ${JSON.stringify(nested)}`);
+
+  // Withdraw (red team, 17 Oct 2026): a person takes back the desk's amount, nothing in its place, and the SPV seat
+  // it moved invited → IOI goes back to its stage and amount.
+  const { withdrawIndication } = await import('../../modules/pipeline');
+  const spvLp = await entity('Invented Outreach Withdraw Org');
+  const onSpvW = await pursuit(spvLp, spv.id, 'connecting');
+  await db.query(`insert into close.spv_seat (vehicle_id, entity_id, stage, owner_id) values ($1, $2, 'invited', $3)`, [spv.id, spvLp, juan.id]);
+  const wAgent = await agent('update', { pursuitId: onSpvW, words: 'They said $400k.', idempotencyKey: 'props-desk-withdraw-1', applied: { indicated: { low: 400_000 } } });
+  const seatAt = await db.one<{ stage: string; amount: string | null }>('select stage::text, amount::text from close.spv_seat where entity_id = $1', [spvLp]);
+  const w = await withdrawIndication(juan.id, { pursuitId: onSpvW });
+  const seatBack = await db.one<{ stage: string; amount: string | null; ioi: boolean }>('select stage::text, amount::text, ioi_at is not null ioi from close.spv_seat where entity_id = $1', [spvLp]);
+  const { indicationFor } = await import('../../modules/pipeline');
+  const nowInd = await indicationFor(spvLp, spv.id);
+  const kept = await db.one<{ n: number }>('select count(*)::int n from pipeline.indication where pursuit_id = $1 and superseded_at is not null', [onSpvW]);
+  const wAudit = await db.one<{ actor: string }>(`select actor_id::text actor from platform.audit_log where action = 'pursuit.indication_withdrawn' and subject_id = $1`, [onSpvW]);
+  check('Outreach writes: withdrawing an indication leaves none in its place, keeps it on record, and puts the SPV seat it moved to IOI back to its stage and amount',
+    wAgent.status === 200 && seatAt?.stage === 'ioi' && Number(seatAt.amount) === 400_000 && w.seatsRestored === 1
+    && seatBack?.stage === 'invited' && seatBack.amount === null && seatBack.ioi === false && nowInd === null && kept?.n === 1 && wAudit?.actor === juan.id,
+    `agent ${wAgent.status}${wAgent.json?.error ? ` (${wAgent.json.error})` : ''}; seat after amount ${seatAt?.stage} ${seatAt?.amount}; restored ${w.seatsRestored}; seat now ${seatBack?.stage} ${seatBack?.amount} ioi ${seatBack?.ioi}; current ${nowInd ? 'STILL' : 'none'}; kept ${kept?.n}`);
+
   // ── tickets: none for a person; opened for an agent, for a person to approve, never approved by the desk ──
   const sendBody = (pursuitId: string, extra: Record<string, unknown> = {}) =>
     ({ kind: 'SEND', pursuitId, scope: { recipients: ['Partner@Invented-Writer.example'], purpose: 'invite' }, ...extra });

@@ -23,6 +23,26 @@ export async function sendToFor(ids: string[], q?: Queryable): Promise<Map<strin
   return out;
 }
 
+/**
+ * The send-to address the latest change replaced or cleared, from the audit log (red team, 17 Oct 2026): who set it and
+ * when, and who replaced it, so a person can put it back. Null when nothing was replaced, or it is the current one again.
+ */
+export interface PreviousSendTo { email: string; setBy: string | null; setAt: string; replacedBy: string | null; replacedAt: string; autonomous: boolean }
+export async function previousSendTo(entityId: string, q?: Queryable): Promise<PreviousSendTo | null> {
+  const db = q ?? (await getDb());
+  const r = await db.one<{ previous: { email: string; setBy: string; setAt: string }; autonomous: boolean | null; at: Date | string; by: string | null; set_by: string | null }>(`
+    select a.detail->'previous' previous, (a.detail->>'autonomous')::boolean autonomous, a.at, u.name by, su.name set_by
+      from platform.audit_log a left join platform.app_user u on u.id = a.actor_id
+      left join platform.app_user su on su.id::text = a.detail->'previous'->>'setBy'
+     where a.action in ('contact.send_to_set', 'contact.send_to_cleared') and a.subject_type = 'entity'
+       and a.subject_id = any(select x::text from unnest(identity.alias_ids(array[$1::uuid])) x)
+     order by a.id desc limit 1`, [entityId]);
+  if (!r?.previous?.email) return null;
+  const now = (await sendToFor([entityId], db)).values().next().value;
+  if (now?.email === r.previous.email) return null;
+  return { email: r.previous.email, setBy: r.set_by, setAt: r.previous.setAt, replacedBy: r.by, replacedAt: new Date(r.at).toISOString(), autonomous: !!r.autonomous };
+}
+
 /** What each canonical entity is to us: a relation set here, else a portfolio company, else an LP, else nothing known. */
 export async function relationsFor(ids: string[], q?: Queryable): Promise<Map<string, Relation | 'lp'>> {
   const out = new Map<string, Relation | 'lp'>();

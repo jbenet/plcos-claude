@@ -108,8 +108,10 @@ export async function update(ctx: DeskContext, raw: Record<string, unknown>) {
   const t = a.applied;
   const at = (d: string, hour: string) => new Date(`${d}T${hour}:00:00Z`);
   try {
-    // The LP page's update box, exactly (lib/updates.ts): one transaction, once per key, each ticked box.
-    const r = await addUpdate(ctx.env.owner.id, {
+    // The LP page's update box, exactly (lib/updates.ts): one transaction, once per key, each ticked box. A call no
+    // person clicked is the Mail desk actor's, its token in the audit entries (red team, 17 Oct 2026).
+    const actor = ctx.env.autonomous ? await deskActor(db) : ctx.env.owner.id;
+    const r = await addUpdate(actor, {
       // A call no person clicked may tick every box (Juan, 17 Oct 2026: "I want a lot of automated actions, specially
       // from JuanMail"); its words say it was the mail desk's.
       pursuitId: p.pursuit_id, body: ctx.env.autonomous ? `By the mail desk on its own: ${a.words}` : a.words, idempotencyKey: `desk:${ctx.env.owner.id}:${p.pursuit_id}:${a.idempotencyKey}`,
@@ -118,7 +120,7 @@ export async function update(ctx: DeskContext, raw: Record<string, unknown>) {
       touch: t.touch ? { channel: t.touch.channel, direction: t.touch.direction ?? (t.touch.channel === 'meeting' || t.touch.channel === 'call' ? 'both' : 'ours'), on: at(t.touch.on, '12'), read: t.touch.read ?? null } : null,
       nextStep: t.nextStep ? { step: t.nextStep.step, on: t.nextStep.on ? at(t.nextStep.on, '00') : null } : null,
       indicated: t.indicated ? { low: t.indicated.low, high: t.indicated.high ?? null, on: t.indicated.on ? at(t.indicated.on, '12') : null, touchpointId: t.indicated.touchpointId ?? null } : null,
-    });
+    }, { via: { autonomous: ctx.env.autonomous, tokenId: ctx.env.tokenId } });
     return { data: { pursuitId: p.pursuit_id, updateId: r.updateId, created: r.created, applied: r.applied, ladderProposed: r.proposed,
       next: r.proposed ? 'A ladder rung the logged touchpoint supports is waiting on Approvals; nothing was recorded on the ladder.' : null } };
   } catch (e) {
@@ -334,6 +336,9 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
     if (at.getTime() > Date.now() + 5 * 60_000) throw new OutreachRefused(400, 'confirmedAt is in the future.');
     const asOf = !confirmed && a.seenOn ? a.seenOn : at.toISOString().slice(0, 10);
     if (asOf > new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)) throw new OutreachRefused(400, 'seenOn is in the future.');
+    // Who it is attributed to (red team, 17 Oct 2026): the Mail desk actor when no person clicked, as outreach_add_lp.
+    const autonomous = ctx.env.autonomous;
+    const actor = autonomous ? await deskActor(db) : owner.id;
     return db.transaction(async (tx) => {
       const entity = (await tx.one<{ id: string }>('select identity.canonical_entity_id($1::uuid)::text id', [a.entityId]))!.id;
       const doc = confirmed ? `gmail:${owner.handle}` : `gmail-signature:${owner.handle}`;
@@ -365,8 +370,8 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
       };
       if (a.email) {
         const r = await put('email', a.email, '(^|\\.)email$', true);
-        await appendAudit({ actorId: owner.id, action: 'contact.confirmed', subjectType: 'entity', subjectId: entity,
-          detail: { source: a.source, claimId: r.claim, tokenId: ctx.env.tokenId, superseded: r.mine.length, agrees: r.agree.length, disagrees: r.disagree.length } }, tx);
+        await appendAudit({ actorId: actor, action: 'contact.confirmed', subjectType: 'entity', subjectId: entity,
+          detail: { source: a.source, claimId: r.claim, tokenId: ctx.env.tokenId, autonomous, superseded: r.mine.length, agrees: r.agree.length, disagrees: r.disagree.length } }, tx);
         emailAnswer = {
           claimId: r.claim, email: a.email,
           kept: r.disagree.filter((e) => sourceOf(e) !== 'licensed').map((e) => ({ email: e.value, source: sourceOf(e) })),
@@ -375,19 +380,19 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
         // The send-to role (JuanMail 0173, 15 Oct 2026): where mail to this LP goes To.
         if (a.role === 'send-to') {
           const { setSendTo } = await import('./entities');
-          const { replaced } = await setSendTo(tx, { entityId: entity, email: a.email, claimId: r.claim, ownerId: owner.id, tokenId: ctx.env.tokenId, source: a.source });
-          emailAnswer.sendTo = { email: a.email, setBy: owner.handle, setAt: new Date().toISOString(), replaced };
+          const { replaced } = await setSendTo(tx, { entityId: entity, email: a.email, claimId: r.claim, actorId: actor, tokenId: ctx.env.tokenId, autonomous, source: a.source });
+          emailAnswer.sendTo = { email: a.email, setBy: autonomous ? 'mail-desk' : owner.handle, setAt: new Date().toISOString(), replaced };
         } else if (a.role === 'none') {
           const { clearSendTo } = await import('./entities');
-          emailAnswer.sendToCleared = await clearSendTo(tx, { entityId: entity, email: a.email, ownerId: owner.id, tokenId: ctx.env.tokenId });
+          emailAnswer.sendToCleared = await clearSendTo(tx, { entityId: entity, email: a.email, actorId: actor, tokenId: ctx.env.tokenId, autonomous });
         }
       }
       for (const f of CONTACT_FIELDS) {
         const v = a[f];
         if (!v) continue;
         const r = await put(CLAIM_FIELD[f], v.trim(), `^${CLAIM_FIELD[f]}$`, false);
-        await appendAudit({ actorId: owner.id, action: 'contact.detail', subjectType: 'entity', subjectId: entity,
-          detail: { source: a.source, field: CLAIM_FIELD[f], claimId: r.claim, tokenId: ctx.env.tokenId, superseded: r.mine.length, disagrees: r.disagree.length, message: a.messageId ? true : false } }, tx);
+        await appendAudit({ actorId: actor, action: 'contact.detail', subjectType: 'entity', subjectId: entity,
+          detail: { source: a.source, field: CLAIM_FIELD[f], claimId: r.claim, tokenId: ctx.env.tokenId, autonomous, superseded: r.mine.length, disagrees: r.disagree.length, message: a.messageId ? true : false } }, tx);
       }
       const kept = claims.reduce((n, c) => n + c.kept, 0);
       return { data: {

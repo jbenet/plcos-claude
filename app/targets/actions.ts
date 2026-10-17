@@ -29,6 +29,41 @@ export async function retractRungAction(formData: FormData): Promise<void> {
   revalidatePath('/targets');
 }
 
+/**
+ * Withdraw the indicated amount on an LP, with nothing in its place (red team, 17 Oct 2026: the mail desk records
+ * amounts on its own). An SPV seat it moved to IOI goes back to where it was.
+ */
+export async function withdrawIndicationAction(formData: FormData): Promise<void> {
+  const user = await requireAction('app/targets/actions.ts#withdrawIndicationAction', formData);
+  const pursuitId = String(formData.get('pursuitId'));
+  const { withdrawIndication, IndicationRefused } = await import('@/modules/pipeline');
+  try {
+    await withdrawIndication(user.id, { pursuitId });
+  } catch (err) {
+    if (!(err instanceof IndicationRefused)) throw err;
+  }
+  revalidatePath(`/targets/${pursuitId}`);
+  revalidatePath('/targets');
+}
+
+/** Put back the send-to address the latest change replaced (red team, 17 Oct 2026), as a person setting it. */
+export async function restoreSendToAction(formData: FormData): Promise<void> {
+  const user = await requireAction('app/targets/actions.ts#restoreSendToAction', formData);
+  const pursuitId = String(formData.get('pursuitId'));
+  const { getDb } = await import('@/lib/db');
+  const { previousSendTo } = await import('@/lib/outreach/entity-reads');
+  const { setSendTo } = await import('@/lib/outreach/entities');
+  const db = await getDb();
+  const p = await db.one<{ entity_id: string }>(`select identity.canonical_entity_id(entity_id)::text entity_id from strategy.pursuit
+    where pursuit_id = strategy.canonical_pursuit_id($1::uuid)`, [pursuitId]);
+  const previous = p ? await previousSendTo(p.entity_id, db) : null;
+  // Only the address on record as replaced, never one typed into the form.
+  if (p && previous && previous.email === String(formData.get('email'))) {
+    await db.transaction((tx) => setSendTo(tx, { entityId: p.entity_id, email: previous.email, claimId: null, actorId: user.id, tokenId: null, autonomous: false, source: 'restored' }));
+  }
+  revalidatePath(`/targets/${pursuitId}`);
+}
+
 export async function requestLadderAdvance(
   formData: FormData,
 ): Promise<{ error?: string; ticketId?: string }> {

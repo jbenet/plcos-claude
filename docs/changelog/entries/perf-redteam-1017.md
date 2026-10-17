@@ -308,6 +308,11 @@ data on Juan's Mac.
 - **A grants funder who declined is invited anew.** Any invitation on file opened the gate, whatever the funder's
   status; now only an invited or applied funder's does, and a declined one's needs a new reference (invariant 12).
 - **A collision's follow-up for the losing vehicle is a real date, today or later** (invariant 5).
+- **The mail desk's writes read as the desk's, and a person can undo them.** Amounts, statuses and updates the desk
+  wrote on its own showed as the token owner's, and a replaced send-to address was deleted with no trace. Now they are
+  recorded as the Mail desk's with the token in the audit, the LP page shows the previous send-to with a restore
+  button, and an indicated amount can be withdrawn, which also puts an SPV seat the amount moved back to invited.
+  `outreach_propose_contact`'s policy label now says it applies at once.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -413,6 +418,6 @@ data on Juan's Mac.
   a later pass; routing itself ranks every tier.
 - The mail desk may still set any status from mail, passing an LP included, over a status a person chose earlier, and
   even with money on file. Juan wants many automated actions from JuanMail and no new blocking rules without asking;
-  the desk's writes are being made attributable and undoable instead.
+  the desk's writes are attributable and undoable instead (see Red team).
 - The circuit breaker still gates only drafts. It cannot trip today (nothing records corrections), so wiring it into
   every autonomous write would block nothing; it waits until corrections are recorded.
