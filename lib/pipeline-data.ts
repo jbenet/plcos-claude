@@ -53,8 +53,16 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
   const history = new Set(vehicles.filter(v => v.phase === 'historical').map(v => v.id));
   const lists = (vehicleId ? [vehicleId] : vehicles.map(v => v.id)).map(id => ({ id, list: pursuitsOn(id) }));
   const shown = lists.filter(l => vehicleId || !history.has(l.id));
+  // One vehicle's plan and touchpoints start beside its pursuits, not after them: each asks the revision and then the
+  // same pursuits (shared while they load), and waiting put those asks in the pool's queue behind every other read of a
+  // rebuild (17 Oct 2026). Still only used when the vehicle has pursuits. Every vehicle's list keeps waiting, so an
+  // empty vehicle's plan is never built.
   const sideBySide = <T,>(each: (id: string) => Promise<T>) =>
-    Promise.all(shown.map(l => l.list.then(list => (list.length ? each(l.id) : null))));
+    Promise.all(shown.map(l => {
+      const early = vehicleId ? each(l.id) : null;
+      early?.catch(() => undefined); // used below, or not at all when the vehicle has no pursuits
+      return l.list.then(list => (list.length ? early ?? each(l.id) : null));
+    }));
   // Plans, people and touchpoints each need only the pursuits: they load side by side, and the plans
   // (the slowest, through each vehicle's strategy) are awaited last (performance pass, 8 Oct 2026).
   const planned = Promise.all([listAssessments(vehicleId || null), sideBySide(id => strategyFor(id))]);
@@ -99,16 +107,23 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
         where a.ended_on is null
         order by name, id`, [entityIds]),
     db.query<{ pursuit_id: string; id: string; name: string; role: string }>(
+      // Each person by key (lateral … offset 0), not a hash of every entity twice: the planner chose that for 40 contacts
+      // (17 Oct 2026, Neurotech: 8.6 → 0.6 ms). The same goes for the firms below (6.6 → 3.0 ms).
       `select c.pursuit_id::text, e.entity_id::text id, e.display_name name, coalesce(c.role, '') role
-         from strategy.pursuit_contact c join identity.entity c_e on c_e.entity_id=c.person_entity
-         join identity.entity e on e.entity_id=case when c_e.merged_into is null then c.person_entity else identity.canonical_entity_id(c.person_entity) end
+         from strategy.pursuit_contact c
+         cross join lateral (select case when c_e.merged_into is null then c_e.entity_id else identity.canonical_entity_id(c_e.entity_id) end person
+           from identity.entity c_e where c_e.entity_id=c.person_entity offset 0) p
+         join identity.entity e on e.entity_id=p.person
         where c.pursuit_id=any($1::uuid[]) order by c.created_at, name, id`, [pursuits.map(p => p.pursuitId)]),
     db.query<{ person: string; id: string; name: string; role: string | null }>(
       `select p.canonical_id::text person, o.entity_id::text id, o.display_name name, a.role
-         from identity.alias_pairs($1::uuid[]) p join identity.affiliation a on a.person_entity=p.entity_id
-         join identity.entity a_o on a_o.entity_id=a.org_entity
-         join identity.entity o on o.entity_id=case when a_o.merged_into is null then a.org_entity else identity.canonical_entity_id(a.org_entity) end
-        where a.ended_on is null and o.entity_type<>'person' and o.retired_at is null
+         from identity.alias_pairs($1::uuid[]) p
+         cross join lateral (select a.org_entity, a.role, a.is_primary, a.as_of from identity.affiliation a
+           where a.person_entity=p.entity_id and a.ended_on is null offset 0) a
+         cross join lateral (select case when a_o.merged_into is null then a_o.entity_id else identity.canonical_entity_id(a_o.entity_id) end org
+           from identity.entity a_o where a_o.entity_id=a.org_entity offset 0) x
+         join identity.entity o on o.entity_id=x.org
+        where o.entity_type<>'person' and o.retired_at is null
         order by 1, a.is_primary desc, a.as_of desc nulls last, o.entity_id`, [entityIds]),
   ]);
   linked.catch(() => undefined); // awaited below

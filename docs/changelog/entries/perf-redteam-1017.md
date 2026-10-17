@@ -111,6 +111,17 @@ data on Juan's Mac.
   contacts, 900 touchpoints, 300 messages, invented) 360–371 → 52–58 ms; all 933 LPs 38.0 → 25.9 s. The same
   statements (56 and 59), and the same answers by hash for all 933 LPs with a frozen clock; old and new merges agree
   on 43,000 random traces. Authorization and Dakota redaction are untouched.
+- **Pipeline rebuilds after a write do less database work; Overview drops its serial reads.** The pipeline read
+  each pursuit's contacts and each person's firms by hashing every entity twice; the records are now looked up by
+  key (8.6 → 0.6 ms and 6.6 → 3.0 ms on Neurotech). A vehicle's pursuits were behind two caches, each of which
+  asked for the revision before answering. The plan's sort made a new collator for each comparison. And one
+  vehicle's plan and touchpoints now start beside its pursuits. On Overview, open conflicts read their two asks
+  per case, one case after another, and each close cycle read the calendar again; both are now one read beside
+  the rest. Workstreams counts its suggested projects beside the linked ones, and the calendar's last read is two
+  reads at once. On perf4 for juan, interleaved, medians of five rounds after a write: Neurotech's pipeline
+  154 → 135 ms (55 → 51 statements), Discussing 138 → 127 ms, all vehicles 144 → 140 ms (132 → 126). Overview
+  is unchanged at about 25 ms after a write, with one statement fewer. Warm views were already at 5–11 ms and
+  stay there. Every pipeline status filter and both overviews hash the same as before, with the clock frozen.
 
 ### Red team
 

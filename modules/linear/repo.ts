@@ -184,7 +184,17 @@ const PROJECT_ORDER = `case p.status_type when 'started' then 0 when 'planned' t
 /** A vehicle's Linear projects, by accepted link, with the next open issues and the latest done. */
 export async function vehicleWorkstreams(vehicleId: string, opts: { upcoming?: number; done?: number } = {}): Promise<Workstreams> {
   const db = await getDb();
-  const [freshness, projects, vehicle, any] = await Promise.all([
+  const vehicleRow = db.one<{ slug: string; name: string; aliases: string[] | null }>('select slug, name, aliases from platform.vehicle where id = $1', [vehicleId]);
+  // Projects named like the vehicle, counted beside the linked ones rather than after their issues (17 Oct 2026).
+  const suggestedP = vehicleRow.then(async (vehicle) => {
+    const re = vehicle ? termsPattern(vehicleTerms(vehicle)) : null;
+    if (!re) return 0;
+    const r = await db.one<{ n: string }>(`select count(*) n from linear.project p where p.archived_at is null and p.name ~* $1 and p.team_ids && array${TEAMS(3)}
+        and not exists (select 1 from linear.link k where k.target_kind = 'vehicle' and k.target_id = $2 and k.linear_kind = 'project' and k.linear_id = p.id)`, [re, vehicleId, teamKeys()]);
+    return n(r?.n);
+  });
+  suggestedP.catch(() => undefined); // awaited below
+  const [freshness, projects, any] = await Promise.all([
     linearFreshness(db),
     db.query<Record<string, unknown>>(`select p.id, p.name, p.url, p.color, p.status_name, p.status_type, p.start_date::text start, p.target_date::text target, p.health,
         m.name lead_name, m.display_name lead_display, ou.name our_name, ou.initials our_initials,
@@ -200,7 +210,6 @@ export async function vehicleWorkstreams(vehicleId: string, opts: { upcoming?: n
         and p.team_ids && array${TEAMS(3)}
       group by p.id, m.name, m.display_name, ou.name, ou.initials
       order by ${PROJECT_ORDER}, p.target_date nulls last, p.name`, [vehicleId, OPEN_TYPES, teamKeys()]),
-    db.one<{ slug: string; name: string; aliases: string[] | null }>('select slug, name, aliases from platform.vehicle where id = $1', [vehicleId]),
     db.one<{ n: string }>(`select count(*) n from linear.issue where archived_at is null and team_id in ${TEAMS(1)}`, [teamKeys()]),
   ]);
   const ids = projects.map((p) => String(p.id));
@@ -213,15 +222,7 @@ export async function vehicleWorkstreams(vehicleId: string, opts: { upcoming?: n
     issues(db, `i.project_id = any($1::text[]) and s.type = 'completed'`, [ids], 'i.completed_at desc nulls last', doneN),
   ]) : [[], null, []];
 
-  let suggested = 0;
-  if (vehicle) {
-    const re = termsPattern(vehicleTerms(vehicle));
-    if (re) {
-      const r = await db.one<{ n: string }>(`select count(*) n from linear.project p where p.archived_at is null and p.name ~* $1 and p.team_ids && array${TEAMS(3)}
-        and not exists (select 1 from linear.link k where k.target_kind = 'vehicle' and k.target_id = $2 and k.linear_kind = 'project' and k.linear_id = p.id)`, [re, vehicleId, teamKeys()]);
-      suggested = n(r?.n);
-    }
-  }
+  const suggested = await suggestedP;
   return {
     freshness,
     projects: projects.map((p): Workstream => ({

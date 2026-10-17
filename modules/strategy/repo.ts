@@ -92,7 +92,7 @@ async function eventsFor(ids: string[], q?: Queryable): Promise<Map<string, Ladd
  * array; the pursuits in it are shared, so never change one. `fresh` reads the database directly, for the code that
  * writes from what it reads (reconciliation, enrichment, MCP).
  */
-const cachedPursuits = buildCache((vehicleId: string, status: string) =>
+export const cachedPursuits = buildCache((vehicleId: string, status: string) =>
   queryPursuits(vehicleId || null, { status: (status || undefined) as PursuitStatus | undefined }));
 
 export async function listPursuits(vehicleId?: string | null, opts: { status?: PursuitStatus; entityId?: string; fresh?: boolean } = {}): Promise<Pursuit[]> {

@@ -8,7 +8,11 @@ const DAY = 86_400_000;
 
 /** Working days between now and `to`, minus anything the calendar says is suppressed. */
 export async function workingDaysUntil(to: Date, now = new Date()): Promise<number> {
-  const periods = (await listPeriods()).filter((p) => p.suppressUrgency);
+  return workingDaysBetween(to, now, await listPeriods());
+}
+
+function workingDaysBetween(to: Date, now: Date, all: Awaited<ReturnType<typeof listPeriods>>): number {
+  const periods = all.filter((p) => p.suppressUrgency);
   let days = 0;
   for (let t = now.getTime(); t <= to.getTime(); t += DAY) {
     const d = new Date(t);
@@ -22,7 +26,8 @@ export async function workingDaysUntil(to: Date, now = new Date()): Promise<numb
 
 export async function listCycles(): Promise<Cycle[]> {
   const db = await getDb();
-  const rows = await db.query<{
+  // The calendar's periods once, beside the cycles: they were read again for each cycle, after the cycles (17 Oct 2026).
+  const [rows, periods] = await Promise.all([db.query<{
     cycle_id: string; vehicle_id: string; vehicle_name: string; exemption: string;
     label: string; target_date: Date | string; target_amount: string | null; status: string;
   }>(
@@ -30,19 +35,17 @@ export async function listCycles(): Promise<Cycle[]> {
             c.target_date, c.target_amount, c.status
        from close.cycle c join platform.vehicle v on v.id = c.vehicle_id
       order by c.target_date`,
-  );
-  return Promise.all(
-    rows.map(async (r) => {
-      const targetDate = new Date(r.target_date);
-      return {
-        cycleId: r.cycle_id, vehicleId: r.vehicle_id, vehicleName: r.vehicle_name,
-        exemption: r.exemption, label: r.label, targetDate,
-        targetAmount: r.target_amount === null ? null : Number(r.target_amount),
-        status: r.status,
-        workingDaysLeft: await workingDaysUntil(targetDate),
-      };
-    }),
-  );
+  ), listPeriods()]);
+  return rows.map((r) => {
+    const targetDate = new Date(r.target_date);
+    return {
+      cycleId: r.cycle_id, vehicleId: r.vehicle_id, vehicleName: r.vehicle_name,
+      exemption: r.exemption, label: r.label, targetDate,
+      targetAmount: r.target_amount === null ? null : Number(r.target_amount),
+      status: r.status,
+      workingDaysLeft: workingDaysBetween(targetDate, new Date(), periods),
+    };
+  });
 }
 
 export async function conditionsFor(cycleId: string): Promise<Condition[]> {
