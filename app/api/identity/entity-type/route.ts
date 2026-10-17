@@ -6,6 +6,7 @@ import { config } from '@/config/deployment';
 import { isLiveServer } from '@/config/ports';
 import { correctEntityType, reverseEntityTypeCorrection } from '@/modules/identity/entity-type';
 import { isEntityKey } from '@/lib/enrich/connection-check';
+import { appendAudit } from '@/modules/platform';
 
 /** Local identity correction only. Real mutations run in the live server's existing DB handle. */
 export const POST = withRoute('app/api/identity/entity-type/route.ts#POST', async function(request: Request, _context, user) {
@@ -28,6 +29,9 @@ export const POST = withRoute('app/api/identity/entity-type/route.ts#POST', asyn
       ? { reversed: await reverseEntityTypeCorrection(db, input.correctionId, user.id, input.reason) }
       : { correctionId: await correctEntityType(db, { entityId: input.entityId, type: input.type, by: user.id,
         reason: input.reason, rule: 'human:entity-type', requestKey: input.requestKey }) };
+    // On the audit log, as the sync route's are (red team, 17 Oct 2026).
+    await appendAudit({ actorId: user.id, action: reversal ? 'entity.type_reversed' : 'entity.type_corrected', subjectType: 'entity',
+      subjectId: reversal ? null : input.entityId, detail: { ...result, reason: input.reason ?? null, ...(reversal ? { correctionId: input.correctionId } : { type: input.type }) } }, db);
     revalidatePath('/dev/enrich');
     revalidatePath('/orgs', 'layout');
     revalidatePath('/targets', 'layout');

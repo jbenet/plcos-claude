@@ -24,9 +24,9 @@ export async function listSourceDocs(ids?: string[]): Promise<SourceDoc[]> {
 export async function sourceDocPage(offset: number, limit: number, withoutOrigin: string | null = null): Promise<{ docs: SourceDoc[]; total: number }> {
   const db = await getDb();
   const rows = await db.query<DocRow & { total: string }>(`select *, count(*) over () as total from research.source_doc
-    where $3::text is null or origin <> $3 order by doc_id offset $1 limit $2`, [offset, limit, withoutOrigin]);
+    where $3::text is null or (coalesce(origin, '') !~* $3 and doc_id !~* ('^' || $3)) order by doc_id offset $1 limit $2`, [offset, limit, withoutOrigin]);
   const total = rows[0] ? Number(rows[0].total) : offset > 0
-    ? Number((await db.one<{ n: string }>(`select count(*) n from research.source_doc where $1::text is null or origin <> $1`, [withoutOrigin]))!.n) : 0;
+    ? Number((await db.one<{ n: string }>(`select count(*) n from research.source_doc where $1::text is null or (coalesce(origin, '') !~* $1 and doc_id !~* ('^' || $1))`, [withoutOrigin]))!.n) : 0;
   return { docs: rows.map(toDoc), total };
 }
 

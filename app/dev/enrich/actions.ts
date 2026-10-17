@@ -179,7 +179,10 @@ export async function reverseIdentitySeparationAction(assertionId: string, reaso
   try {
     const user = authorizedUser;
     const { reverseIdentitySeparation } = await import('@/lib/enrich/identity-decisions');
-    await reverseIdentitySeparation(await getDb(), assertionId, user.id, reason);
+    const db = await getDb();
+    if (await reverseIdentitySeparation(db, assertionId, user.id, reason)) {
+      await appendAudit({ actorId: user.id, action: 'identity.separation_reversed', subjectType: 'match_assertion', subjectId: assertionId, detail: { reason } }, db);
+    }
     revalidatePath('/dev/enrich');
     return {};
   } catch (error) { return { error: error instanceof Error ? error.message : 'Reversal failed.' }; }
