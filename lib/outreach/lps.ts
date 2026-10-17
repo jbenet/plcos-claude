@@ -133,7 +133,7 @@ export async function addLp(ctx: DeskContext, raw: Record<string, unknown>) {
   // Before the request key is reserved: a server that is not the live one writes nothing at all.
   requireMutationProfile();
   const autonomous = ctx.env.autonomous;
-  return once(ctx, 'lps', a.idempotencyKey, async () => {
+  return once(ctx, 'lps', a.idempotencyKey, raw, async () => {
     const owner = ctx.env.owner;
     const v = await deskVehicle(ctx.env.principal, a.vehicle);
     if (!can(ctx.env.principal, 'mutate', { vehicle: v.id })) throw new OutreachRefused(404, `No vehicle "${a.vehicle.slice(0, 80)}" among yours that you may change.`);

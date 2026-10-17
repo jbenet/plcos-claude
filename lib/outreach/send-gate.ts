@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { emailBars } from '@/lib/outreach/addresses';
+import { emailBars } from './addresses';
 import { grantGate } from '@/modules/grants';
 
 /** Each vehicle kind's own instrument, when the LP holds nothing on it yet (as the mail desk's queue reads it). */

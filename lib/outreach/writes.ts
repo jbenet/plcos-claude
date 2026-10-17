@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { config } from '@/config/deployment';
 import { AuthorizationError, can } from '@/lib/authz';
@@ -18,6 +18,7 @@ import type { Envelope } from '@/lib/mcp/envelope';
 /** Who is calling: the token's envelope. */
 export interface DeskContext { env: Envelope }
 import { barredRecipients } from './addresses';
+import { sendGate } from './send-gate';
 import { FUND_FIRST_CHOICES, OutreachRefused, outreachQueue, type Check } from './reads';
 
 /**
@@ -56,19 +57,25 @@ async function deskPursuit(ctx: DeskContext, pursuitId: string, q: Queryable) {
 }
 
 /** A request key, used once: a retry gets the first answer back. Reserved before the work, filled after. */
-export async function once<T>(ctx: DeskContext, op: string, requestKey: string | undefined, work: () => Promise<T>): Promise<T | { data: unknown; replayed: true }> {
+export async function once<T>(ctx: DeskContext, op: string, requestKey: string | undefined, args: unknown, work: () => Promise<T>): Promise<T | { data: unknown; replayed: true }> {
   if (!requestKey) return work();
   const db = await getDb();
   const k = `desk:${ctx.env.owner.id}:${op}:${requestKey}`;
   const reserved = await db.one(`insert into email.outreach_request (request_key, op, token_id) values ($1, $2, $3) on conflict do nothing returning request_key`, [k, op, ctx.env.tokenId]);
+  // A replay answers only the same token asking the same thing (red team, 17 Oct 2026: a narrower token reusing a key
+  // read the wider token's answer, and a key reused for other arguments silently answered the first call).
+  const asked = createHash('sha256').update(JSON.stringify(args)).digest('hex');
   if (!reserved) {
-    const prior = await db.one<{ result: unknown }>('select result from email.outreach_request where request_key = $1', [k]);
+    const prior = await db.one<{ result: unknown; token_id: string | null }>('select result, token_id::text from email.outreach_request where request_key = $1', [k]);
+    if (prior?.token_id && prior.token_id !== ctx.env.tokenId) throw new OutreachRefused(409, 'That request key was used by another token. Use a new key.');
     if (prior?.result == null) throw new OutreachRefused(409, 'That request is still being handled. Try again in a moment.');
-    return { ...(prior.result as { data: unknown }), replayed: true };
+    const { argsHash, ...answer } = prior.result as { data: unknown; argsHash?: string };
+    if (argsHash && asked && argsHash !== asked) throw new OutreachRefused(409, 'That request key was used for a different request. Use a new key.');
+    return { ...answer, replayed: true };
   }
   try {
     const result = await work();
-    await db.query('update email.outreach_request set result = $2 where request_key = $1', [k, JSON.stringify(result)]);
+    await db.query('update email.outreach_request set result = $2 where request_key = $1', [k, JSON.stringify(asked ? { ...result as object, argsHash: asked } : result)]);
     return result;
   } catch (e) {
     await db.query('delete from email.outreach_request where request_key = $1', [k]);
@@ -105,7 +112,7 @@ export async function update(ctx: DeskContext, raw: Record<string, unknown>) {
     const r = await addUpdate(ctx.env.owner.id, {
       // A call no person clicked may tick every box (Juan, 17 Oct 2026: "I want a lot of automated actions, specially
       // from JuanMail"); its words say it was the mail desk's.
-      pursuitId: p.pursuit_id, body: ctx.env.autonomous ? `By the mail desk on its own: ${a.words}` : a.words, idempotencyKey: `desk:${ctx.env.owner.id}:${a.idempotencyKey}`,
+      pursuitId: p.pursuit_id, body: ctx.env.autonomous ? `By the mail desk on its own: ${a.words}` : a.words, idempotencyKey: `desk:${ctx.env.owner.id}:${p.pursuit_id}:${a.idempotencyKey}`,
       // Red-team pass, 17 Oct 2026: an autonomous status read as a person's ('us'); it is the system's, as outreach_add_lp sets it.
       status: t.status ? { to: t.status.to, passedBy: t.status.passedBy ?? null, reason: t.status.reason ?? null, source: ctx.env.autonomous ? 'rule' : 'us' } : null,
       touch: t.touch ? { channel: t.touch.channel, direction: t.touch.direction ?? (t.touch.channel === 'meeting' || t.touch.channel === 'call' ? 'both' : 'ours'), on: at(t.touch.on, '12'), read: t.touch.read ?? null } : null,
@@ -140,7 +147,7 @@ const plusDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOStrin
 
 export async function requestTicket(ctx: DeskContext, raw: Record<string, unknown>) {
   const a = raw as z.infer<typeof ticketInput>;
-  return once(ctx, 'tickets', a.idempotencyKey, async () => {
+  return once(ctx, 'tickets', a.idempotencyKey, raw, async () => {
     const db = await getDb();
     const p = await deskPursuit(ctx, a.pursuitId, db);
     if (a.kind === 'SEND' && !a.scope.recipients?.length) throw new OutreachRefused(400, 'A SEND ticket names its recipients (scope.recipients): the approval covers them and nobody else.');
@@ -203,7 +210,11 @@ export async function requestTicket(ctx: DeskContext, raw: Record<string, unknow
         const recipients = [...new Set(a.scope.recipients!)];
         let contentSendId: string | null = null, material: string | null = null;
         if (a.assetId) {
-          const m = await proposeDeskSend(actor, { assetId: a.assetId, entityId: p.entity_id, vehicleId: p.vehicle_id, instrument: p.kind === 'spv' ? 'spv' : 'lp_commitment' }, tx);
+          // The instrument and gates the Materials page uses (rules 8, 11, 12; red team, 17 Oct 2026: the desk wrapped a
+          // grants-rail send, or an LP holding another instrument, as a commitment).
+          const gate = await sendGate(p.entity_id, p.vehicle_id);
+          if (gate.refusals.length) throw new OutreachRefused(409, `Refused, no ticket opened: ${gate.refusals.join(' ')}`);
+          const m = await proposeDeskSend(actor, { assetId: a.assetId, entityId: p.entity_id, vehicleId: p.vehicle_id, instrument: gate.instrument }, tx);
           if (!m.sendId) throw new OutreachRefused(409, `Refused by the wrap check, no ticket opened: ${m.check.refusals.join(' ')}`);
           contentSendId = m.sendId; material = `${m.title} (v${m.version})`;
         }
@@ -297,7 +308,7 @@ export async function entityVehicles(entityId: string, q: Queryable): Promise<st
 
 export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
   const a = raw as z.infer<typeof contactInput>;
-  return once(ctx, 'contacts', a.idempotencyKey, async () => {
+  return once(ctx, 'contacts', a.idempotencyKey, raw, async () => {
     requireMutationProfile();
     const owner = ctx.env.owner;
     const confirmed = a.source === 'gmail';

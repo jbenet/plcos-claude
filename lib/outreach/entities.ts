@@ -95,7 +95,7 @@ export async function addEntity(ctx: DeskContext, raw: Record<string, unknown>) 
   const a = raw as AddEntityArgs;
   requireMutationProfile();
   const autonomous = ctx.env.autonomous;
-  return once(ctx, 'entities', a.idempotencyKey, async () => {
+  return once(ctx, 'entities', a.idempotencyKey, raw, async () => {
     const owner = ctx.env.owner;
     const db = await getDb();
     const desk = autonomous ? await deskActor(db) : null;
