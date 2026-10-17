@@ -16,8 +16,20 @@ export function usdCompact(amount: number): string {
   return usd(amount);
 }
 
+/**
+ * Formatters made once: `toLocaleString` builds a new one on every call, about 30 times the cost of using one, and LP
+ * stats formats a few thousand numbers per build (performance pass, 17 Oct 2026). Same output as before.
+ */
+const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const GROUPED = new Intl.NumberFormat('en-US');
+
 export function usd(amount: number): string {
-  return amount.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  return USD.format(amount);
+}
+
+/** A count or whole amount with thousands separators: 12,345 (what `n.toLocaleString('en-US')` gives). */
+export function grouped(n: number): string {
+  return GROUPED.format(n);
 }
 
 export function pct(fraction: number, digits = 0): string {

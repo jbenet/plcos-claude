@@ -1,5 +1,5 @@
 import Link from '@/components/ui/AppLink';
-import { usdCompact } from '@/lib/money';
+import { grouped, usdCompact } from '@/lib/money';
 import { shortDate } from '@/lib/time';
 import { REGION_LABEL, regionOf } from '@/lib/lp-stats/geo';
 import {
@@ -11,7 +11,7 @@ import s from './stats.module.css';
 
 export const PAGE_SIZE = 50;
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(' ');
-const num = (n: number) => n.toLocaleString('en-US');
+const num = grouped;
 const share = (x: number) => (x > 0 && x < 0.005 ? '<1%' : `${Math.round(x * 100)}%`);
 /** Values that are a gap in the record rather than a segment: drawn muted, never as a finding. */
 const COUNTRY_BASIS: Record<NonNullable<LpFact['countryBasis']>, string> = { dakota: 'Dakota', research: 'research', firm: 'their firm’s', people: 'their people’s' };

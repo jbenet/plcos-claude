@@ -89,11 +89,25 @@ const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 /** 32 hex digits, three at a time (12 bits) as two characters; the last two digits are padded to 12 bits. */
 function uuidsOut(values: string[]) {
   let out = '';
-  for (const v of values) {
-    const hex = v.replaceAll('-', '') + '0';
-    for (let at = 0; at < 33; at += 3) { const n = parseInt(hex.slice(at, at + 3), 16); out += B64[n >> 6]! + B64[n & 63]!; }
-  }
+  for (const v of values) out += uuidOut(v);
   return out;
+}
+/**
+ * One id's 22 characters, kept: the same ids are packed again on every build of a list (Pipeline's 4,500 rows, five
+ * id columns each, after every write; performance pass, 17 Oct 2026). Bounded; cleared whole when full.
+ */
+const idCodes = new Map<string, string>();
+const ID_CODES_KEPT = 100_000; // GUESS: well above the ids a few lists hold.
+function uuidOut(v: string) {
+  let code = idCodes.get(v);
+  if (code === undefined) {
+    code = '';
+    const hex = v.replaceAll('-', '') + '0';
+    for (let at = 0; at < 33; at += 3) { const n = parseInt(hex.slice(at, at + 3), 16); code += B64[n >> 6]! + B64[n & 63]!; }
+    if (idCodes.size >= ID_CODES_KEPT) idCodes.clear();
+    idCodes.set(v, code);
+  }
+  return code;
 }
 function uuidsIn(text: string, n: number) {
   const out: string[] = [];
