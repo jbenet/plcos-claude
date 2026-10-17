@@ -17,6 +17,10 @@ data on Juan's Mac.
 - **The all-vehicles pipeline rebuilds sooner after a write.** It is now built from each vehicle's own list, and
   each vehicle's plans and touches start as soon as that list arrives, rather than after every list. On the real
   data: 495 → 430 ms. The strategic filter reads each profile's kept text once, not the whole profile.
+- **LP profiles are read once per version.** Every rebuild after a write read each public profile whole (about
+  8 MB) for the plans and the strategic marks. A 12 ms read of note keys and row versions now says which changed, and
+  only those are read (`modules/strategy/profile-parts.ts`). On the real data, the same 3,255 profiles with no
+  differences; all/pipeline after a write 430 → 390 ms.
 
 ### Red team
 
@@ -93,8 +97,9 @@ data on Juan's Mac.
 - **The Mac app's security review** ("Fix all four"):
   - Its local database listens on no TCP port, only on its socket in the app's own folder. With trust sign-in, the
     port let any program or account on the Mac in as superuser, able to run commands through `COPY TO PROGRAM`. An
-    existing copy is closed once, with a restart of its database, at the app's next start. The server accepts a
-    socket address for the copy (`?host=/folder`, nothing else).
+    existing copy is closed once, with a restart of its database, at the app's next start; a folder whose socket
+    path would be too long for macOS puts the socket in the user's own temporary folder. The address is
+    `localhost` with `?host=<folder>`, which the build's own checks now accept (that parameter and nothing else).
   - Pairing sends its grant only to the app's own port (47100), and only to a browser at the address that started
     the pairing; one allowed from elsewhere is refused and forgotten, and says so. The page already said the device
     name is what the app says it is.
