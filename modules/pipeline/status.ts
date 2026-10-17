@@ -26,13 +26,14 @@ export async function vehicleCloseStatus(vehicleId: string | null, requestedPage
     select identity.canonical_entity_id(entity_id), vehicle_id from pipeline.exposure
       where closed_at is null and ($1::uuid is null or vehicle_id = $1)
   )`;
-  const total = (await db.one<{ n: number }>(`${candidates} select count(*)::int as n from candidates`, [vehicleId]))?.n ?? 0;
-  const page = Math.min(Math.max(1, Number.isSafeInteger(requestedPage) ? requestedPage : 1), Math.max(1, Math.ceil(total / CLOSE_PAGE_SIZE)));
-  const rows = await db.query<{
+  // The asked page and the count in one statement (performance pass, 17 Oct 2026): the count was a read of its own
+  // before the page, each resolving every candidate. Only a page past the end reads the count first, as before.
+  const asked = Math.max(1, Number.isSafeInteger(requestedPage) ? requestedPage : 1);
+  const read = (page: number) => db.query<{
     entity_id: string; entity_name: string; vehicle_id: string; vehicle_name: string; vehicle_slug: string;
     pursuit_id: string | null; owner_name: string | null; next_step: string | null;
     next_step_on: Date | string | null; headline: string | null; status_reason: string | null;
-    source: string | null; source_as_of: Date | string | null; stage_said: string | null;
+    source: string | null; source_as_of: Date | string | null; stage_said: string | null; total: number;
   }>(`${candidates},
     -- The page first, then each row's pursuit through its aliases: the pursuit lookup used to run
     -- for every candidate, a canonical_entity_id() call per pursuit each time (performance pass,
@@ -46,7 +47,8 @@ export async function vehicleCloseStatus(vehicleId: string | null, requestedPage
     )
     select c.entity_id, c.vehicle_id, c.entity_name, c.vehicle_name, c.vehicle_slug,
            p.pursuit_id, coalesce(p.owner_said, u.name) as owner_name, p.next_step, p.next_step_on,
-           p.headline, p.status_reason, p.source, p.source_as_of, p.stage_said
+           p.headline, p.status_reason, p.source, p.source_as_of, p.stage_said,
+           (select count(*)::int from candidates) as total
       from shown c
       left join lateral (
         select p.* from identity.alias_pairs(array[c.entity_id]) a
@@ -56,6 +58,12 @@ export async function vehicleCloseStatus(vehicleId: string | null, requestedPage
       ) p on true
       left join platform.app_user u on u.id = p.owner_id
      order by c.sort_order, c.entity_name, c.entity_id`, [vehicleId, CLOSE_PAGE_SIZE, (page - 1) * CLOSE_PAGE_SIZE]);
+  let page = asked, rows = await read(page), total = rows[0]?.total ?? 0;
+  if (!rows.length && asked > 1) {
+    total = (await db.one<{ n: number }>(`${candidates} select count(*)::int as n from candidates`, [vehicleId]))?.n ?? 0;
+    page = Math.min(asked, Math.max(1, Math.ceil(total / CLOSE_PAGE_SIZE)));
+    if (page !== asked) rows = await read(page);
+  }
   if (!rows.length) return { total, page, rows: [] };
   const ids = [...new Set(rows.map(r => r.entity_id))];
   const [tracks, questions, notes, conditions] = await Promise.all([
@@ -78,7 +86,7 @@ export async function vehicleCloseStatus(vehicleId: string | null, requestedPage
           and (k.entity_id is null or identity.canonical_entity_id(k.entity_id) = any($1::uuid[]))
         order by k.due_on nulls last, k.condition_id`, [ids, [...new Set(rows.map(r => r.vehicle_id))]]),
   ]);
-  return { total, page, rows: rows.map(r => ({ ...r,
+  return { total, page, rows: rows.map(({ total: _total, ...r }) => ({ ...r,
     tracks: tracks.filter(t => t.exposure.entityId === r.entity_id && t.exposure.vehicleId === r.vehicle_id),
     questions: questions.filter(q => q.entity_id === r.entity_id && q.vehicle_id === r.vehicle_id),
     note: notes.find(n => n.entity_id === r.entity_id) ?? null,
