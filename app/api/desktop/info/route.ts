@@ -21,4 +21,5 @@ export const GET = withRoute('app/api/desktop/info/route.ts#GET', async (request
     secure: base.startsWith('https://'),
     user: { id: user.id, handle: user.handle, name: user.name, access: user.access },
   }, { headers: { 'cache-control': 'no-store' } });
-});
+  // The person and the build, no vehicle's records: anyone who may read one of their vehicles.
+}, (_request, user) => ({ vehicle: user?.vehicles ?? null }));

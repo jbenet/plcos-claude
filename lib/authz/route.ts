@@ -2,10 +2,16 @@ import { readFileSync } from 'node:fs';
 import type { AppUser } from '@/lib/auth';
 import { requireMutationOrigin, requireMutationProfile, MutationGuardError } from '@/lib/mutation-policy';
 import { routeRules, type RouteId } from './route-rules';
-import { AuthorizationError, requireCan } from './index';
+import { AuthorizationError, requireCan, type Scope } from './index';
+
+/**
+ * The vehicle a cookie route reads, from its request. Without one the rule needs all-vehicle access, so a person
+ * limited to some vehicles was refused even on theirs (17 Oct 2026). The handler still checks its own reads.
+ */
+type RouteScope = (request: Request, user: AppUser | null) => Scope;
 
 /** One boundary per handler. Feedback deliberately journals without a roster/DB lookup. */
-export function withRoute(name: RouteId, handler: (request: Request, context: any, user: AppUser) => Promise<Response> | Response) {
+export function withRoute(name: RouteId, handler: (request: Request, context: any, user: AppUser) => Promise<Response> | Response, scope?: RouteScope) {
   // MCP authenticates by its own bearer token (lib/mcp/server.ts) and authorizes per tool call; the
   // envelope rides in the context. No cookie, so no origin rule: a cross-site Origin is refused there.
   if (routeRules[name] === 'mcp') {
@@ -56,7 +62,7 @@ export function withRoute(name: RouteId, handler: (request: Request, context: an
         }
         const { currentUser } = await import('@/lib/auth');
         const user = await currentUser();
-        requireCan(user, policy);
+        requireCan(user, policy, scope?.(request, user));
         return await handler(request, context, user);
       } catch (error) {
         if (error instanceof MutationGuardError) return Response.json({ error: error.message }, { status: error.status });

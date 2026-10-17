@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getDb } from '@/lib/db';
+import { can } from '@/lib/authz';
 import { requireMutationProfile } from '@/lib/mutation-policy';
 import { resolveEntity } from '@/modules/identity/create';
 import { appendAudit } from '@/modules/platform';
@@ -53,6 +54,11 @@ class Unchanged extends Error { constructor(readonly answer: { data: unknown }) 
 export async function addResearch(ctx: DeskContext, raw: Record<string, unknown>) {
   const a = raw as ResearchArgs;
   requireMutationProfile();
+  // It writes people and claims on no vehicle, so it asks what the rest of the desk's writes ask of a token: that its
+  // owner may change their own vehicles. A Viewer's token added research with no check at all (17 Oct 2026).
+  if (!can(ctx.env.principal, 'mutate', { vehicle: ctx.env.principal.vehicles ?? null })) {
+    throw new OutreachRefused(403, 'Not added: this token\'s owner may not change records here.');
+  }
   const autonomous = ctx.env.autonomous;
   return once(ctx, 'research', a.idempotencyKey, async () => {
     const owner = ctx.env.owner;

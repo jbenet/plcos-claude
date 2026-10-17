@@ -12,7 +12,7 @@ import { fixtures, outreachClient } from './outreach-api';
 export async function affinityWriteProperties(check: Check, db: Db) {
   const { resetWindows } = await import('../../lib/mcp/envelope');
   const { OUTREACH_READ, OUTREACH_WRITE } = await import('../../lib/outreach/scopes');
-  const { guardedWrite, affinityWriter, AffinityWriteRefused } = await import('../../lib/connectors/affinity/write');
+  const { guardedWrite, affinityWriter, AffinityWriteRefused, AffinityWriteError } = await import('../../lib/connectors/affinity/write');
   const { AFFINITY_ORIGIN: A } = await import('../../lib/connectors/affinity/fetch');
   const aw = { ...(await import('../../lib/affinity-writes')), ...(await import('../../lib/affinity-writes-decide')) };
   const { config } = await import('../../config/deployment');
@@ -51,9 +51,10 @@ export async function affinityWriteProperties(check: Check, db: Db) {
   const items = status.json?.data?.batches?.[0]?.items ?? [];
   const merged = items.find((i: any) => i.address === 'new.person@invented-aw.example');
   const ro = await call(await token(juan, [OUTREACH_READ]), 'affinity', {}, { method: 'POST', body });
-  check('Affinity writes: proposing plans each item (internal skip, a note on a known person, person + note) and merges a repeated address; it needs outreach:write and writes nothing to Affinity',
+  check('Affinity writes: proposing plans each item (internal skip, a note on a known person, person + note) and merges a repeated address under a new id; it needs outreach:write and writes nothing to Affinity',
     r.status === 200 && plan.get('known@invented-aw.example')?.plan === 'note' && plan.get('new.person@invented-aw.example')?.plan === 'person+note'
-    && plan.get(String(juan.email).toLowerCase())?.plan === 'skip' && again.json?.data?.items?.[0]?.itemId === plan.get('new.person@invented-aw.example')?.itemId
+    && plan.get(String(juan.email).toLowerCase())?.plan === 'skip' && again.json?.data?.items?.[0]?.itemId !== plan.get('new.person@invented-aw.example')?.itemId
+    && items.filter((i: any) => i.address === 'new.person@invented-aw.example').length === 1
     && merged?.messages?.length === 2 && merged.name === 'Invented Newperson' && items.every((i: any) => i.state === 'proposed') && ro.status === 403
     && (await db.one<{ n: number }>(`select count(*)::int n from sources.request_log where note = 'write'`))!.n === logBefore,
     `plans ${JSON.stringify([...plan.values()].map((i) => i.plan))}; merged ${merged?.messages?.length} messages, name ${merged?.name}; read-only ${ro.status}`);
@@ -131,4 +132,41 @@ export async function affinityWriteProperties(check: Check, db: Db) {
     nextBatch !== null && nextBatch.batchId !== drawn.batchId && nextBatch.items.length === 1 && nextBatch.items[0]!.address === 'late@invented-aw.example'
     && nextBatch.items[0]!.state === 'proposed' && sent.length === 0 && badId instanceof aw.WriteBatchRefused,
     `next ${nextBatch?.batchId === drawn.batchId ? 'same batch' : nextBatch?.items.map((i) => i.address).join(',')}; calls ${sent.length}; bad id ${String((badId as Error)?.message).slice(0, 40)}`);
+
+  // ── Red-team pass, 17 Oct 2026 ──
+  // An item changed after the page was drawn (more mail, another proposer) is a new item: approving the id that was
+  // shown writes nothing, and the changed item waits in the next batch, attributed to whoever proposed it last.
+  const ines = await user('aw-other', 'admin', null);
+  const other = await token(ines, [OUTREACH_READ, OUTREACH_WRITE]);
+  const seenBatch = (await aw.openWriteBatch())!;
+  const seenItem = seenBatch.items.find((i) => i.address === 'late@invented-aw.example')!;
+  await call(other, 'affinity', {}, { method: 'POST', body: { items: [{ address: 'late@invented-aw.example', messages: [{ at: at('2026-10-13'), subject: 'Invented changed' }] }] } });
+  sent.length = 0;
+  await aw.decideWriteBatch(juan, seenBatch.batchId, [seenItem.itemId], scripted, [seenItem.itemId]);
+  const moved = await aw.openWriteBatch();
+  const movedItem = moved?.items.find((i) => i.address === 'late@invented-aw.example');
+  const by = await db.one<{ id: string }>(`select proposed_by::text id from sources.affinity_write_item where item_id = $1`, [movedItem?.itemId ?? seenItem.itemId]);
+  check('Affinity writes: an item changed after it was shown is not written on the shown id; it waits in the next batch under its latest proposer',
+    sent.length === 0 && moved !== null && moved.batchId !== seenBatch.batchId && movedItem?.state === 'proposed' && movedItem.itemId !== seenItem.itemId
+    && movedItem.messages.length === 2 && by?.id === ines.id,
+    `calls ${sent.length}; next ${moved?.batchId === seenBatch.batchId ? 'same batch' : 'new'}; item ${movedItem?.state}, ${movedItem?.messages.length} messages; proposer ${by?.id === ines.id ? 'latest' : 'first'}`);
+
+  // A write that got no answer may have landed: its mail is not proposed again. One Affinity refused is proposed again.
+  const flaky = { ...scripted, createNote: async () => { throw new Error('socket hang up'); } };
+  const refusing = { ...scripted, createNote: async () => { throw new AffinityWriteError(422, 'Affinity answered 422'); } };
+  const toDecide = (await aw.openWriteBatch())!;
+  await aw.decideWriteBatch(juan, toDecide.batchId, [movedItem!.itemId], flaky, toDecide.items.map((i) => i.itemId));
+  await call(rw, 'affinity', {}, { method: 'POST', body: { items: [
+    { address: 'late@invented-aw.example', messages: [{ at: at('2026-10-12'), subject: 'Invented late' }, { at: at('2026-10-13'), subject: 'Invented changed' }] },
+    { address: 'refused@invented-aw.example', messages: [{ at: at('2026-10-13'), subject: 'Invented refused' }] }] } });
+  const b2 = (await aw.openWriteBatch())!;
+  await aw.decideWriteBatch(juan, b2.batchId, b2.items.filter((i) => i.address === 'refused@invented-aw.example').map((i) => i.itemId), refusing, b2.items.map((i) => i.itemId));
+  const replan = await call(rw, 'affinity', {}, { method: 'POST', body: { items: [
+    { address: 'late@invented-aw.example', messages: [{ at: at('2026-10-13'), subject: 'Invented changed' }] },
+    { address: 'refused@invented-aw.example', messages: [{ at: at('2026-10-13'), subject: 'Invented refused' }] }] } });
+  const rp = new Map<string, any>((replan.json?.data?.items ?? []).map((i: any) => [i.address, i]));
+  check('Affinity writes: mail whose write got no answer is not proposed again (it may be in Affinity); mail Affinity refused is',
+    rp.get('late@invented-aw.example')?.plan === 'skip' && /may have landed/.test(rp.get('late@invented-aw.example')?.reason ?? '')
+    && rp.get('refused@invented-aw.example')?.plan !== 'skip',
+    `plans ${JSON.stringify([...rp.values()].map((i) => [i.address, i.plan, String(i.reason).slice(0, 50)]))}`);
 }

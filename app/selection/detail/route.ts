@@ -15,4 +15,4 @@ export const GET = withRoute('app/selection/detail/route.ts#GET', async (request
   const vehicleId = q.get('v'), pursuitId = q.get('lp');
   if (!vehicleId || !pursuitId || !UUID.test(vehicleId) || !UUID.test(pursuitId)) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
   return NextResponse.json({ detail: await scoreDetail(vehicleId, pursuitId) }, { headers: { 'cache-control': 'private, no-store' } });
-});
+}, (request) => ({ vehicle: new URL(request.url).searchParams.get('v') ?? [] }));

@@ -143,7 +143,7 @@ const serialise = (e: Editor): string =>
  * serialises.
  */
 export function MarkdownField({
-  value, onChange, images, onImages, onAnnotate, onPendingChange, placeholder, rows = 7, label,
+  value, onChange, images, onImages, onAnnotate, onPendingChange, placeholder, rows = 7, label, autoFocus = false,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -156,6 +156,8 @@ export function MarkdownField({
   rows?: number;
   /** The accessible name of the rich editor and the source textarea. */
   label?: string;
+  /** Put the cursor at the end once the editor is drawn: the deferred field swaps in on a person's focus. */
+  autoFocus?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>('rich');
   /**
@@ -202,6 +204,7 @@ export function MarkdownField({
 
   const editor = useEditor({
     immediatelyRender: false,
+    autofocus: autoFocus ? 'end' : false,
     extensions: [
       // StarterKit carries Link in v3; adding it again registered two and warned about it.
       StarterKit.configure({ heading: { levels: [3, 4] }, link: { openOnClick: false }, hardBreak: false }),

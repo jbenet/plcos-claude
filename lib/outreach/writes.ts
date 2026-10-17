@@ -95,6 +95,11 @@ export const updateInput = z.object({
 
 export async function update(ctx: DeskContext, raw: Record<string, unknown>) {
   const a = raw as z.infer<typeof updateInput>;
+  // The rule outreach_add_lp keeps (lib/outreach/lps.ts): an amount is a person's to record. This was the way
+  // around it for a call no person clicked (17 Oct 2026).
+  if (ctx.env.autonomous && a.applied?.indicated) {
+    throw new OutreachRefused(400, 'Not recorded: an amount is a person\'s to record. Called autonomously (no person clicked), leave out indicated; a person adds it from the LP page or a call they make.');
+  }
   const db = await getDb();
   const p = await deskPursuit(ctx, a.pursuitId, db);
   const t = a.applied;
