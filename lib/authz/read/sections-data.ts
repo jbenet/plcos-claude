@@ -56,6 +56,6 @@ export async function scopedStrategyData(user: Principal, query?: Db) {
     where ($1::uuid[] is null or p.vehicle_id=any($1::uuid[])) order by s.made_at desc`, [allowed]);
   const readable = rows.filter(r => can(user,'read',{vehicle:r.vehicleId,fieldClass:'R2'})).map(r => r.id);
   const words = readable.length ? await db.query<{ id: string; body: string }>(`select suggestion_id::text id,body from strategy.suggestion
-    where suggestion_id=any($1::uuid[]) and data->>'source' is distinct from 'dakota'`,[readable]) : [];
+    where suggestion_id=any($1::uuid[]) and coalesce(data->>'source','') !~* '^dakota'`,[readable]) : [];
   return rows.map(r => ({ ...r, body: words.find(w => w.id === r.id)?.body ?? null }));
 }

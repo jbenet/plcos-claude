@@ -72,6 +72,7 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
   const about: AboutVehicle[] = vehicles.map((v) => ({ slug: v.slug, name: v.name, aliases: v.aliases }));
   const slugOf = new Map(vehicles.map((v) => [v.id, v.slug]));
   const raising = new Set(vehicles.filter((v) => v.phase === 'active' && v.kind !== 'grant_rail').map((v) => v.slug));
+  const partial = u.access !== 'admin' && u.vehicles !== null;
 
   // The same address twice in one call is one party: its sends together, the first name given.
   const merged = new Map<string, { address: string; name: string | null; sends: Array<{ at: string; subject?: string; to?: boolean }> }>();
@@ -156,6 +157,9 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
     const person = affinityPeople.has(p.address) || byAffinity.has(p.address);
     const covered = person ? Boolean(last && last >= lastSent) : null;
     const raiseVehicles = [...raise].sort();
+    // A reader without every vehicle learns that an address is on file, not whom it names or Affinity's record of
+    // them, unless they read a pursuit of theirs (as self, firm or contact) (red team, 17 Oct 2026).
+    const withheld = partial && !pursuits.length;
     const issues: PartyIssue[] = [];
     const suggest: PartySuggestion[] = [];
     if (!entityId) issues.push('not_on_file');
@@ -173,14 +177,14 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
       suggest.push({ action: 'affinity_add_note', lastSent, reason: 'Affinity has no email with them.' });
     } else if (!covered) {
       issues.push('email_not_in_affinity');
-      suggest.push({ action: 'affinity_add_note', lastSent, reason: last ? `Affinity's last email with them is ${last}.` : 'Affinity has no email with them.' });
+      suggest.push({ action: 'affinity_add_note', lastSent, reason: last && !withheld ? `Affinity's last email with them is ${last}.` : last ? 'Affinity\'s last email with them is older than the last mail sent.' : 'Affinity has no email with them.' });
     }
     return {
-      address: p.address, internal: false, name: p.name ?? affinityPeople.get(p.address) ?? null,
+      address: p.address, internal: false, name: p.name ?? (withheld ? null : affinityPeople.get(p.address) ?? null),
       sends: sends.length, firstSent: day(sends[0].at), lastSent,
-      onFile: entityId ? { entityId, name: names.get(entityId) ?? null, matchedBy: byClaim.has(p.address) ? 'claim' : 'affinity' } : null,
+      onFile: entityId ? withheld ? { known: true as const } : { entityId, name: names.get(entityId) ?? null, matchedBy: byClaim.has(p.address) ? 'claim' : 'affinity' } : null,
       pursuits, raiseVehicles,
-      affinity: { person, name: affinityPeople.get(p.address) ?? null, lastEmail: last, covered },
+      affinity: { person, name: withheld ? null : affinityPeople.get(p.address) ?? null, lastEmail: withheld ? null : last, covered },
       issues, suggest,
     };
   });

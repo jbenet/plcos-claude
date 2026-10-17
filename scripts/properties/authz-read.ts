@@ -4,6 +4,7 @@ import { scopedReadData } from '../../lib/authz/read/scoped-data';
 import { redactAffiliations, redactSpv, redactStats } from '../../lib/authz/read/r3';
 import { projectRoutes, scopedStrategyData } from '../../lib/authz/read/sections-data';
 import { redactLicensedRoutes } from '../../lib/authz/read/network';
+import { scoreDetailOf } from '../../lib/pipeline-data';
 import { resolveSpv, type SpvEvidence } from '../../modules/strategy';
 import type { Affiliation } from '../../modules/identity';
 import type { RouteSearch } from '../../modules/network';
@@ -128,9 +129,44 @@ export async function authzReadProperties(check: Check, db: Db) {
     && safeViewer?.restrictionCount === 1 && safeViewer.coverage.edges === 12 && safeViewer.routes.length === routes.routes.length
     && safeGp?.restrictionReasons[0] === 'INVENTED_R4_ROUTE' && projectRoutes({ ...gp, vehicles: ['b'] }, 'a', routes) === null,
     'route names/tier/verdict and corpus dates remain; scope denies a foreign vehicle without narrowing the search graph');
-  const prior = JSON.stringify(routes), safe = redactLicensedRoutes(routes);
-  check('Authz reads: route display redacts licensed evidence without changing graph, target restrictions or route eligibility',
-    !JSON.stringify(safe).includes('INVENTED_R3_') && safe.graph === routes.graph && safe.restrictions === routes.restrictions
-    && safe.routes.length === routes.routes.length && JSON.stringify(routes) === prior,
-    'full graph/route planning is preserved; only display evidence and contact title change');
+  // Red team, 17 Oct 2026: a route with a hop whose only evidence is licensed is withheld, not just its words, and counted;
+  // a hop with other evidence too keeps the route with the licensed words redacted. Connectors on withheld routes vanish.
+  const hop = (to: string, evidence: Array<{ source: string; note: string }>) => ({ toName: `Invented ${to}`, toEntity: to,
+    edge: { edgeId: `edge-${to}`, fromEntity: 'team', toEntity: to, tier: 'B', kind: 'knows', evidence } });
+  const route = (to: string, evidence: Array<{ source: string; note: string }>) => ({ fromEntity: 'team', fromName: 'Invented Team', verdict: 'recommend',
+    hops: [hop(to, evidence), hop('target', [{ source: 'affinity', note: 'INVENTED_PUBLIC_TIE' }])], connectorIds: [to], connectorNames: [`Invented ${to}`],
+    reasons: [], weakestTier: 'B', askLoad: null, influence: null, viaContact: { entityId: to, name: `Invented ${to}`, role: 'INVENTED_R3_TITLE' } });
+  const mixed = { ...routes, targetId: 'target', routes: [route('only-licensed', [{ source: 'Dakota-2026', note: 'INVENTED_R3_ROUTE' }]),
+    route('mixed', [{ source: 'dakota', note: 'INVENTED_R3_ROUTE' }, { source: 'affinity', note: 'INVENTED_PUBLIC_MIXED' }])] } as unknown as RouteSearch;
+  mixed.topRoutes = mixed.routes;
+  const prior = JSON.stringify(mixed), safe = redactLicensedRoutes(mixed), again = redactLicensedRoutes(safe), text = JSON.stringify(safe);
+  check('Authz reads: without licensed access, a route with a Dakota-only hop is withheld and counted; a mixed hop keeps its route with the licensed words redacted; no connector or graph node is left only through the withheld hop',
+    !text.includes('INVENTED_R3_') && text.includes('INVENTED_PUBLIC_MIXED') && safe.restrictions === mixed.restrictions
+    && safe.routes.length === 1 && safe.routes[0]!.connectorIds[0] === 'mixed' && safe.topRoutes?.length === 1 && safe.licensedRoutesWithheld === 1
+    && !text.includes('only-licensed') && !safe.graph?.nodes.some((n) => n.entityId === 'only-licensed')
+    && safe.graph!.links.every((l) => l.routeIndices.every((i) => i < safe.routes.length))
+    && again.licensedRoutesWithheld === 1 && JSON.stringify(mixed) === prior,
+    `${safe.routes.length} route(s) kept, withheld ${safe.licensedRoutesWithheld} (again ${again.licensedRoutesWithheld}); graph nodes ${safe.graph?.nodes.map((n) => n.entityId).join(',')}`);
+  check('Authz reads: licensed affiliations are matched by prefix, whatever the case (Dakota-2026, DAKOTA)',
+    redactAffiliations(gp, [{ ...affiliation, source: 'Dakota-2026' } as Affiliation, { ...affiliation, source: 'DAKOTA' } as Affiliation]).length === 0,
+    'r3.ts redactAffiliations uses /^dakota/i');
+
+  // Score detail (the selection page's pane): a Dakota suggestion is skipped; a Dakota-based row shows no next, ask or basis.
+  const plain = { label: 'L', weight: 1, value: 1, level: 'x', basis: 'INVENTED_R3_BASIS' };
+  const strat = (source?: string) => ({ made_at: '2026-10-01T00:00:00Z', data: { ...(source ? { source } : {}), angle: 'INVENTED_R3_ANGLE', ask: { shape: 'verify first', range: '1M' }, risks: ['INVENTED_R3_RISK'],
+    scores: { capacity: { band: 'unknown', basis: 'INVENTED_R3_BASIS' }, affinity: { level: 'low', basis: 'INVENTED_R3_BASIS' }, propensity: { level: 'low', basis: 'INVENTED_R3_BASIS' }, timeToDecision: { band: 'weeks', basis: 'INVENTED_R3_BASIS' } } } });
+  const row = (over: Record<string, unknown>) => ({ stale: false, action: 'INVENTED_R3_NEXT', risks: ['INVENTED_R3_RISK', 'Owner unavailable'], usingDakota: false,
+    pursuit: { source: 'mail_desk' }, suggestion: strat(), ...over }) as unknown as Parameters<typeof scoreDetailOf>[0];
+  const fitA = { dimensions: [{ label: 'Fit', weightUs: 1, grade: 'strong', finding: 'INVENTED_R3_BASIS' }], gateStatus: 'clear', updatedAt: new Date() } as unknown as Parameters<typeof scoreDetailOf>[1];
+  const fromSuggestion = scoreDetailOf(row({ suggestion: strat('dakota-import') }), undefined, false);
+  const usingDakota = scoreDetailOf(row({ usingDakota: true }), fitA, false);
+  const fromPursuit = scoreDetailOf(row({ pursuit: { source: 'Dakota' } }), undefined, false);
+  const licensedReader = scoreDetailOf(row({ usingDakota: true, suggestion: strat('dakota') }), undefined, true);
+  const ordinary = scoreDetailOf(row({}), undefined, false);
+  check('Authz reads: score detail without licensed access skips a Dakota suggestion and, for a Dakota-based LP, nulls next, ask and every basis; licensed readers and ordinary rows are unchanged',
+    !JSON.stringify(fromSuggestion).includes('INVENTED_R3_') && fromSuggestion.risks.join() === 'Owner unavailable'
+    && [usingDakota, fromPursuit].every((d) => d.next === null && d.ask === null && d.parts.length > 0 && d.parts.every((p) => p.basis === null))
+    && licensedReader.next === 'INVENTED_R3_NEXT' && licensedReader.ask !== null && licensedReader.parts.some((p) => p.basis === plain.basis)
+    && ordinary.next === 'INVENTED_R3_NEXT' && ordinary.angle === 'INVENTED_R3_ANGLE' && ordinary.parts.some((p) => p.basis === plain.basis),
+    `suggestion ${JSON.stringify(fromSuggestion).slice(0, 120)}; usingDakota next ${usingDakota.next}; pursuit next ${fromPursuit.next}; licensed next ${licensedReader.next}`);
 }

@@ -4,7 +4,7 @@ import { can } from '@/lib/authz';
 import { licensedAccess } from '@/lib/authz/read/r3';
 import { needsScopedProjection } from '@/lib/authz/read/projection';
 import { projectRoutes } from '@/lib/authz/read/sections-data';
-import { planRoutes, throughNode, redactLicensedRoutes } from '@/lib/authz/read/network';
+import { planRoutes, throughNode, redactLicensedRoutes, type RedactedRouteSearch } from '@/lib/authz/read/network';
 import { getPursuit, listPursuits, STATUSES, RUNG_LABEL, type PursuitStatus } from '@/lib/authz/read/strategy';
 import { pipelineData } from '@/lib/authz/read/pipeline';
 import { changelogItems } from '@/lib/changelog';
@@ -131,9 +131,12 @@ export async function routeContacts(user: AppUser, vehicleId: string | null, peo
 }
 
 async function routeAnswer(user: AppUser, vehicleId: string, search: RouteSearch | null, limit: number) {
-  const shown = search && !licensedAccess(user) ? redactLicensedRoutes(search) : search;
+  const licensed = licensedAccess(user);
+  const shown = search && !licensed ? redactLicensedRoutes(search) : search;
   const dto = projectRoutes(user, vehicleId, shown);
   if (!dto) return null;
+  // Routes resting on a hop whose only evidence is licensed are withheld for a reader without R3, and counted (rule 7).
+  const withheld = licensed ? {} : { licensedRoutesWithheld: (shown as RedactedRouteSearch | null)?.licensedRoutesWithheld ?? 0 };
   const routes = dto.routes.slice(0, limit);
   const people = routes.flatMap((r) => [...r.hops, ...(r.introducer ? [r.introducer] : [])]);
   const c = await routeContacts(user, vehicleId, people);
@@ -141,7 +144,7 @@ async function routeAnswer(user: AppUser, vehicleId: string, search: RouteSearch
   return { ...dto,
     routes: routes.map((r) => ({ ...r, hops: r.hops.map((h: Hop) => c.at(h)), askFirst: r.askFirst ? c.at(r.askFirst) : null,
       introducer: r.introducer ? c.at(r.introducer) : null })),
-    routesFound: dto.routes.length, addresses: c.shown ? 'shown' : ADDRESSES_WITHHELD,
+    routesFound: dto.routes.length, ...withheld, addresses: c.shown ? 'shown' : ADDRESSES_WITHHELD,
     empty: dto.routes.length ? null : 'No supported route in the material inspected. That is not proof that no route exists (rule 7).' };
 }
 
@@ -167,7 +170,7 @@ export async function lpSummary(user: AppUser, a: { pursuitId: string; routes?: 
       where identity.canonical_entity_id(entity_id) = identity.canonical_entity_id($1::uuid) and vehicle_id = $2 and closed_at is null`, [p.entityId, p.vehicleId]) : Promise.resolve([]),
   ]);
   // The latest strategy that was not dismissed; a licensed (Dakota) one only for an Admin.
-  const s = suggestions.find((x) => x.status !== 'dismissed' && (licensed || x.data?.source !== 'dakota'));
+  const s = suggestions.find((x) => x.status !== 'dismissed' && (licensed || !/^dakota/i.test(String(x.data?.source ?? ''))));
   const sd = (s?.data ?? {}) as Partial<Strategy>;
   const routes = a.routes === false ? null
     : await routeAnswer(user, p.vehicleId, await planRoutes(user.handle, p.entityId, 3, vehicle.kind, 'team', undefined, { vehicleId: p.vehicleId }), MAX_ROUTES);
@@ -257,6 +260,8 @@ export async function routesThrough(user: AppUser, a: { nodeId: string; vehicle?
       })),
       onwardTotal: view.onward.length,
       restrictedOnward: view.restrictedOnward,
+      // Without licensed (R3) access: onward ties and routes to the node resting only on Dakota evidence, withheld.
+      ...(licensedAccess(user) ? {} : { licensedRoutesWithheld: (view.licensedRoutesWithheld ?? 0) + (toNode?.licensedRoutesWithheld ?? 0) }),
       onlyThrough: view.onlyThrough.slice(0, limit).map((o) => ({ entityId: o.entityId, name: o.name, candidatePaths: o.candidates })),
       gaps: view.gaps,
     },

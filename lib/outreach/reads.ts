@@ -300,7 +300,7 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
     // The latest strategy that was not dismissed or withdrawn; never one written from licensed (Dakota) data.
     db.query<{ pursuit_id: string; data: Record<string, unknown>; made_at: Date | string }>(`select distinct on (s.pursuit_id) s.pursuit_id::text pursuit_id, s.data, s.made_at
       from strategy.suggestion s where s.pursuit_id = any($1::uuid[]) and s.status not in ('dismissed', 'withdrawn')
-        and s.data->>'source' is distinct from 'dakota'
+        and coalesce(s.data->>'source', '') !~* '^dakota'
       order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [ids]),
     db.query<{ entity_id: string; vehicle_id: string; name: string; status: PursuitStatus }>(`select identity.canonical_entity_id(p.entity_id)::text entity_id,
       p.vehicle_id::text, v.name, p.status::text status from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id

@@ -107,6 +107,12 @@ export async function outreachAddLpProperties(check: Check, db: Db) {
     t1.status === 409 && /Invented Mail Twin; Invented Mail Twin/.test(t1.json?.error ?? '') && /Nothing was written/.test(t1.json?.error ?? '')
     && JSON.stringify(before3) === JSON.stringify(after3) && pm?.n === 0,
     `${t1.status}: ${String(t1.json?.error).slice(0, 160)}; counts ${JSON.stringify(before3)} → ${JSON.stringify(after3)}; possible matches ${pm?.n}`);
+  // Red team, 17 Oct 2026: a token limited to some vehicles is refused the same way, but not told whom the candidates are.
+  const narrowRw = await token(juan, [OUTREACH_READ, OUTREACH_WRITE], [fund.id]);
+  const t2 = await post(add({ name: 'Invented Mail Twin', email: 'twin2@invented-twinfirm.example' }), narrowRw);
+  check('Outreach add-LP: a vehicle-limited caller\'s 409 (could be someone here) leaves the candidates\' names out',
+    t2.status === 409 && !/Invented Mail Twin;/.test(t2.json?.error ?? '') && /one of 2 people already here, and/.test(t2.json?.error ?? ''),
+    `${t2.status}: ${String(t2.json?.error).slice(0, 160)}`);
 
   // ── Autonomous: the system's status, an unconfirmed address, an amount marked as the desk's (Juan, 17 Oct 2026) ──
   const autoAmount = await agent(add({ name: 'Invented Mail Auto Amount', email: 'amount@invented-auto.example' }, { indicated: { low: 100000 } }));

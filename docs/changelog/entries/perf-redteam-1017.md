@@ -357,6 +357,15 @@ data on Juan's Mac.
   write, but the address (and the contact's LinkedIn and other details) is recorded unconfirmed, medium with no verifier, and the answer says so;
   send-to is unchanged. Undoing `outreach_add_entity` or `outreach_add_research` matched to an existing record now also
   removes the mail-desk alias it attached, as undoing `outreach_add_lp` does.
+- **Reads to people limited to some vehicles, or without the licensed data, leaked words, names and Dakota routes.**
+  `comms_trace` showed a message's subject or a note's words on any vehicle and Affinity note text; it now keeps their
+  dates and counts and leaves out words tagged only with vehicles the reader can't see, and Affinity note text. `outreach_check_parties`
+  named whom an address belongs to for an LP on none of the reader's vehicles; it now says only that the address is
+  known, and `outreach_add_lp`'s 409s leave candidates' names out for such callers. A route with a hop whose only
+  evidence is Dakota's is now dropped, not just redacted, for readers without licensed access, and counted as
+  `licensedRoutesWithheld` (routes_to, lp_summary, routes_through, top_connectors, where a connector reached only that
+  way is no longer ranked). The selection page's score detail skips a Dakota strategy and, for an LP sized or sourced from
+  Dakota, shows no next step, ask or basis. Dakota checks match `^dakota` whatever the case, not the exact word.
 
 ### Juan's calls, 17 Oct 2026
 

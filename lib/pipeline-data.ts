@@ -301,7 +301,7 @@ const DETAIL_RECENT_MS = 60_000; // GUESS: see scoreDetail.
  * the fit assessment's graded dimensions where one exists, otherwise the proposed strategy's four
  * readings, each with the sentence it rests on. Read-only; null when the pursuit is not in the vehicle.
  */
-export async function scoreDetail(vehicleId: string, pursuitId: string): Promise<ScoreDetail | null> {
+export async function scoreDetail(vehicleId: string, pursuitId: string, licensed = true): Promise<ScoreDetail | null> {
   // The detail opens beside the list, most often on the next LP right after a move to Selected. That
   // move is a person's write, so the plans would rebuild first (0.7 s on the invented copy at the live
   // scale) though nothing about this LP changed: a build from the last minute answers, and the next one
@@ -309,8 +309,23 @@ export async function scoreDetail(vehicleId: string, pursuitId: string): Promise
   const [plan, assessments] = await Promise.all([strategyFor.recent(DETAIL_RECENT_MS, vehicleId), assessmentsFor.recent(DETAIL_RECENT_MS, vehicleId)]);
   const row = plan?.rows.find((r) => r.pursuit.pursuitId === pursuitId);
   if (!row) return null;
-  const a = assessments.find((x) => x.entityId === row.pursuit.entityId && x.vehicleId === vehicleId);
-  const data = (row.suggestion?.data ?? null) as Partial<Strategy> | null;
+  return scoreDetailOf(row, assessments.find((x) => x.entityId === row.pursuit.entityId && x.vehicleId === vehicleId), licensed);
+}
+
+type PlanRow = NonNullable<Awaited<ReturnType<typeof strategyFor>>>['rows'][number];
+type Assessment = Awaited<ReturnType<typeof listAssessments>>[number];
+/**
+ * One plan row's score detail. A reader without licensed (R3) access (red team, 17 Oct 2026): a suggestion drawn from
+ * Dakota is skipped, its risks and next step with it, and an LP whose capacity or pursuit rests on Dakota shows no
+ * next step, ask or per-part basis.
+ */
+export function scoreDetailOf(row: PlanRow, a: Assessment | undefined, licensed: boolean): ScoreDetail {
+  const fromDakota = (v: unknown) => typeof v === 'string' && /^dakota/i.test(v);
+  const skipped = !licensed && fromDakota((row.suggestion?.data as { source?: unknown } | undefined)?.source);
+  const suggestion = skipped ? null : row.suggestion;
+  const hide = !licensed && (row.usingDakota || fromDakota(row.pursuit.source));
+  const data = (suggestion?.data ?? null) as Partial<Strategy> | null;
+  const theirRisks = new Set(skipped ? ((row.suggestion?.data as Partial<Strategy> | undefined)?.risks ?? []) : []);
   const bases = data?.scores as Record<string, { basis?: string } | undefined> | undefined;
   let parts: ScorePart[];
   let kind: ScoreDetail['kind'];
@@ -322,15 +337,16 @@ export async function scoreDetail(vehicleId: string, pursuitId: string): Promise
     parts = provisionalParts(data?.scores).map((p) => ({ label: p.label, weight: p.weight, value: p.value, level: p.level, basis: bases?.[p.key]?.basis ?? null }));
     kind = provisionalScore(data?.scores) === null ? 'none' : 'provisional';
   }
+  if (hide) parts = parts.map((x) => ({ ...x, basis: null }));
   return {
     kind, stale: row.stale, parts,
-    at: a?.dimensions.length ? iso(a.updatedAt) : iso(row.suggestion ? new Date(row.suggestion.made_at) : null),
+    at: a?.dimensions.length ? iso(a.updatedAt) : iso(suggestion ? new Date(suggestion.made_at) : null),
     angle: data?.angle ?? null,
     route: data?.route ?? null,
-    ask: data?.ask && data.ask.shape !== 'none yet' ? [data.ask.shape, data.ask.range].filter(Boolean).join(' · ') : null,
+    ask: !hide && data?.ask && data.ask.shape !== 'none yet' ? [data.ask.shape, data.ask.range].filter(Boolean).join(' · ') : null,
     list: data?.list ?? null,
     confidence: data?.confidence ?? null,
-    next: row.action,
-    risks: [...row.risks, ...(a && a.gateStatus !== 'clear' ? [a.diagnosis.statement] : [])],
+    next: hide || skipped ? null : row.action,
+    risks: [...row.risks.filter((r) => !theirRisks.has(r)), ...(a && a.gateStatus !== 'clear' ? [a.diagnosis.statement] : [])],
   };
 }
