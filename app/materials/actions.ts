@@ -3,17 +3,27 @@ import { requireAction } from '@/lib/authz/server';
 
 import { revalidatePath } from 'next/cache';
 import { recordSend, requestSend, setAssetLink } from '@/modules/content';
+import { sendGate } from './gate';
 
 export async function proposeSend(
   formData: FormData,
 ): Promise<{ refusals?: string[]; ticketId?: string; sendId?: string }> {
   const authorizedUser = await requireAction('app/materials/actions.ts#proposeSend', formData);
   const user = authorizedUser;
+  const entityId = String(formData.get('entityId')), vehicleId = String(formData.get('vehicleId'));
+  // Rules 8, 11 and 12 hold for everyone (red team, 17 Oct 2026): the instrument is the target's on that vehicle, not a
+  // choice, and a restriction that bars email or a grants funder with no invitation refuses before anything is recorded.
+  const gate = await sendGate(entityId, vehicleId);
+  const chosen = String(formData.get('instrument') ?? '');
+  if (gate.refusals.length) return { refusals: gate.refusals };
+  if (chosen && chosen !== gate.instrument) {
+    return { refusals: [`The instrument for this LP on this vehicle is ${gate.instrument.replace('_', ' ')}, not ${chosen.replace('_', ' ')}: the wrap is checked against what they would actually hold.`] };
+  }
   const { sendId, ticketId, check } = await requestSend(user.id, {
     assetId: String(formData.get('assetId')),
-    entityId: String(formData.get('entityId')),
-    vehicleId: String(formData.get('vehicleId')),
-    instrument: String(formData.get('instrument')),
+    entityId,
+    vehicleId,
+    instrument: gate.instrument,
   });
   revalidatePath('/materials');
   revalidatePath('/approvals');

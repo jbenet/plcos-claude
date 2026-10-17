@@ -3,7 +3,7 @@ import { config } from '@/config/deployment';
 import { can } from '@/lib/authz';
 import { pipelineData } from '@/lib/authz/read/pipeline';
 import { getDb } from '@/lib/db';
-import { addressesFor, detailsFor } from './addresses';
+import { addressesFor, detailsFor, emailBarredAmong } from './addresses';
 import { sendToFor } from './entity-reads';
 import { redactHealth } from '@/lib/redact-health';
 import { SPV_STAGE_LABEL, spvRooms, workingDaysUntil, type SpvStage } from '@/modules/close';
@@ -320,8 +320,10 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
   const contactsBy = new Map(orgContacts);
   const people = [...new Set([...page.map((b) => b.r.entityId), ...orgContacts.flatMap(([, m]) => [...m.values()].flat().map((c) => c.entityId))])];
   // Addresses only where words are readable (R2), as before: the same reader as the route hops' contacts.
-  const [emails, sendTo] = await Promise.all([addressesFor(page.some((b) => words(user, b.v.id)) ? people : []),
-    sendToFor(page.filter((b) => words(user, b.v.id)).map((b) => b.r.entityId))]);
+  const [emails, sendTo, barredPeople] = await Promise.all([addressesFor(page.some((b) => words(user, b.v.id)) ? people : []),
+    sendToFor(page.filter((b) => words(user, b.v.id)).map((b) => b.r.entityId)), emailBarredAmong(people)]);
+  // A contact a restriction bars from email is listed as such (rule 8; red team, 17 Oct 2026), not as a plain contact.
+  const barredMark = (entityId: string) => (barredPeople.has(entityId) ? { doNotEmail: true } : {});
   const metaOf = new Map(meta.map((m) => [m.id, m]));
   const strategyOf = new Map(strategies.map((s) => [s.pursuit_id, s]));
   const rules = new Map<string, Awaited<ReturnType<typeof checkWrap>>>();
@@ -353,8 +355,8 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
     const isPerson = m?.type === 'person';
     const addressOf = (entityId: string) => (emails.get(entityId) ?? []).slice(0, 3);
     const contacts = !w ? [] : isPerson
-      ? addressOf(r.entityId).map((x) => ({ name: r.name, ...x }))
-      : (contactsBy.get(v.id)?.get(r.entityId) ?? []).flatMap((c) => addressOf(c.entityId).map((x) => ({ name: c.name, ...x })));
+      ? addressOf(r.entityId).map((x) => ({ name: r.name, ...x, ...barredMark(r.entityId) }))
+      : (contactsBy.get(v.id)?.get(r.entityId) ?? []).flatMap((c) => addressOf(c.entityId).map((x) => ({ name: c.name, ...x, ...barredMark(c.entityId) })));
     const blanket = restrictions.filter((x) => x.entity_id === r.entityId && x.scope === 'blanket');
     // A channel restriction that names no channel bars email too: fail closed on what it does not say.
     const emailBarred = restrictions.filter((x) => x.entity_id === r.entityId && x.scope === 'channel' && (!x.channel || /mail/i.test(x.channel)));
@@ -529,16 +531,17 @@ export async function outreachContacts(user: AppUser, a: ContactsArgs, fit: Queu
   const kindOf = new Map(kinds.map((k) => [k.id, k.type === 'person' ? 'person' as const : 'org' as const]));
   const contactsBy = new Map(orgContacts);
   const people = [...new Set([...chosen.filter((b) => contactsBy.has(b.v.id)).map((b) => b.r.entityId), ...orgContacts.flatMap(([, m]) => [...m.values()].flat().map((c) => c.entityId))])];
-  const [emails, details, sendTo] = await Promise.all([addressesFor(people), a.details ? detailsFor(people) : Promise.resolve(null),
-    sendToFor([...new Set(chosen.filter((b) => contactsBy.has(b.v.id)).map((b) => b.r.entityId))])]);
+  const [emails, details, sendTo, barredPeople] = await Promise.all([addressesFor(people), a.details ? detailsFor(people) : Promise.resolve(null),
+    sendToFor([...new Set(chosen.filter((b) => contactsBy.has(b.v.id)).map((b) => b.r.entityId))]), emailBarredAmong(people)]);
+  const barredMark = (entityId: string) => (barredPeople.has(entityId) ? { doNotEmail: true } : {});
   const addressOf = (entityId: string) => (emails.get(entityId) ?? []).slice(0, 3);
   const detailOf = (entityId: string) => (details ? { details: details.get(entityId) ?? {} } : {});
   const rows = chosen.map(({ r, v }) => {
     const kind = kindOf.get(r.entityId) ?? 'org';
     const w = contactsBy.has(v.id);
     const contacts = !w ? [] : kind === 'person'
-      ? addressOf(r.entityId).map((x) => ({ name: r.name, ...x, ...detailOf(r.entityId) }))
-      : (contactsBy.get(v.id)?.get(r.entityId) ?? []).flatMap((c) => addressOf(c.entityId).map((x) => ({ name: c.name, ...x, ...detailOf(c.entityId) })));
+      ? addressOf(r.entityId).map((x) => ({ name: r.name, ...x, ...detailOf(r.entityId), ...barredMark(r.entityId) }))
+      : (contactsBy.get(v.id)?.get(r.entityId) ?? []).flatMap((c) => addressOf(c.entityId).map((x) => ({ name: c.name, ...x, ...detailOf(c.entityId), ...barredMark(c.entityId) })));
     return {
       // sendTo (docs/27 §5c): the address mail goes To, its main contact cc'd; an address, so only where words are readable.
       pursuitId: r.id, vehicle: v.slug, entity: { id: r.entityId, name: r.name, kind, sendTo: w ? sendTo.get(r.entityId) ?? null : null },

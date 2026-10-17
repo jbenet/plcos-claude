@@ -17,6 +17,7 @@ import type { Envelope } from '@/lib/mcp/envelope';
 
 /** Who is calling: the token's envelope. */
 export interface DeskContext { env: Envelope }
+import { barredRecipients } from './addresses';
 import { FUND_FIRST_CHOICES, OutreachRefused, outreachQueue, type Check } from './reads';
 
 /**
@@ -146,6 +147,11 @@ export async function requestTicket(ctx: DeskContext, raw: Record<string, unknow
     if (a.kind === 'INTRO_ASK' && !a.connectorId) throw new OutreachRefused(400, 'An INTRO_ASK names the connector who would introduce (connectorId).');
     const row = (await outreachQueue(ctx.env.principal, { vehicle: p.slug, pursuitId: p.pursuit_id })).data.rows[0] as { checks: Check[] } | undefined;
     if (!row) throw new OutreachRefused(409, 'This LP is not in the queue (passed, or not readable): no ticket was opened.');
+    // The people addressed, not only the LP the mail is about (rule 8; red team, 17 Oct 2026): a restricted contact at
+    // a firm is barred for everyone, shown to a person and refused to an agent.
+    const barred = a.kind === 'SEND' ? await barredRecipients(a.scope.recipients ?? [], db) : [];
+    if (barred.length) row.checks = [...row.checks, { rule: 'restriction', ok: false, blocking: true,
+      detail: `A do-not-contact restriction is on file for ${barred.map((b) => `${b.name} (${b.address})`).join(', ')}: do not email ${barred.length === 1 ? 'them' : 'these people'}.` }];
     // A person needs no ticket (Juan, 5 Oct 2026): the checks come back for them to weigh — a restriction as the
     // red flag it is — and nothing is opened. Only a call with no person in the loop asks for an approval.
     if (!ctx.env.autonomous) {
