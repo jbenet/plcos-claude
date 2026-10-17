@@ -130,6 +130,16 @@ data on Juan's Mac.
   calendar warm 10 → 8 ms and after a write 9 → 7 ms, all vehicles 15 → 13 ms and 14 → 10 ms; conversion's own
   work after LP stats 8–9 → 5–6 ms. Conversion is otherwise at its floor: 6 ms warm, and about 190 ms after a write,
   all but a few ms of it the pipeline rows and LP stats it is built from. Same output by hash, clock frozen.
+- **The Neurotech pipeline rebuilds a fifth faster after a status or next-step change.** The rebuild is bound by
+  the server's own work, not the database. A pursuit's people, contacts, firms and organisations are now cached on
+  the touch revision, which a status or next-step change does not move. Organisations are read as a slim id list,
+  not whole entities. The plan and the strategic marks share one read of profile keys, where they each made one.
+  SPV readings look up canonical ids only for entities that have SPV evidence or settings. The row map works out each
+  value once. Timestamps and dates are parsed by a fast path for Postgres's UTC layout, with the old parser for
+  anything else; 6.7M values compared, none differed, also under New York time. On perf4, alternating runs, medians
+  of 3×25 after a write: Neurotech pipeline 104 → 82 ms (−21%), all vehicles 114 → 99 ms, the scored pipeline
+  90 → 75 ms. Pipeline, LP stats, conversion and plan data hash the same as before, warm and after each of eight
+  kinds of write, with the clock frozen. Authorization, the vehicle filters and Dakota redaction are untouched.
 
 ### Red team
 
@@ -379,6 +389,17 @@ data on Juan's Mac.
   `plcos-pg` there is used only if it is this user's own private folder, not a link; otherwise a fresh private one.
   The Rust changes were checked with `cargo check` on Linux, not built or run on a Mac.
 
+- **A play is handed only to someone active on the team.** Assigning took any user id, the system's actor or a
+  deactivated person included, and the Linear handoff then named them (`modules/plays/service.ts`).
+- **The fact check's page reader reaches only public addresses, at connect time too.** It took `::ffff:7f00:1` and
+  `::ffff:a9fe:a9fe` (how Node spells `[::ffff:169.254.169.254]`) for public, so a cited link could read the
+  server's own loopback or the cloud metadata address. IPv6 is now read byte by byte: a mapped address is judged by
+  its IPv4 part, and IPv4-compatible, site-local, 6to4, NAT64 and Teredo addresses are refused with the private
+  ranges. The host was also checked by one DNS answer and connected by another (rebinding); the reader now connects
+  through its own lookup, which runs the same check, so the address connected to is the one checked, on every
+  redirect hop, with the host name (TLS name and certificate check) unchanged. A page with no length is read only up
+  to the size cap, not whole first. Dakota's requests no longer follow a redirect and stop after 30 seconds.
+
 ### Juan's calls, 17 Oct 2026
 
 - **JuanMail does more on its own.** Juan: "we should remove the rules that only people can change settings. It's
@@ -484,3 +505,6 @@ data on Juan's Mac.
   every autonomous write would block nothing; it waits until corrections are recorded.
 - A Team member's push token can begin runs in the cloud ledger without a cap and report any cost on finish; Juan
   asked for no new limits without asking, and the ledger serializes appends.
+- A Team member with all-vehicle access may undo anyone's "bad terms" mark (audited); limiting it to the marker or an
+  Admin would be a new refusal, so it waits for Juan. An ask's owner may be anyone active, even without access to
+  that vehicle. Pinning a stand-up day works for any unpinned day by design (the button shows on each).

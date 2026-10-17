@@ -148,8 +148,9 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
         undefined, undefined, byContext.get(p.entityId), total.kind)) || (profileAt && profileAt > strategyAt)));
     const routeStale = Boolean(route && (!route.current || (now.getTime() - route.at.getTime()) / DAY > rules.staleDays));
     const capacityBand = strategy?.scores?.capacity?.band ?? profile?.data.profile?.capacity?.band;
-    const capacity = soft.length ? soft.reduce((n, x) => n + x.amount, 0) : capacityEstimate(capacityBand) ?? dakota.get(p.entityId)?.amount ?? null;
-    const usingDakota = !soft.length && capacityEstimate(capacityBand) === null && dakota.has(p.entityId);
+    const estimate = soft.length ? null : capacityEstimate(capacityBand);
+    const capacity = soft.length ? soft.reduce((n, x) => n + x.amount, 0) : estimate ?? dakota.get(p.entityId)?.amount ?? null;
+    const usingDakota = !soft.length && estimate === null && dakota.has(p.entityId);
     const capacityBasis = soft.length ? 'Recorded soft amount in this vehicle; not hard committed.' : usingDakota ? dakota.get(p.entityId)!.basis : strategy?.scores?.capacity?.basis ?? profile?.data.profile?.capacity?.basis ?? 'No supported capacity basis.';
     const propensity = strategy?.scores?.propensity;
     const likelihood = propensity && propensity.level !== 'unknown' ? rules.likelihood[propensity.level] : null;
@@ -179,16 +180,19 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
         : !route?.count ? 'Find and assess a route' : 'Write a vehicle-specific strategy');
     const group = closed ? 'Closed or passed' : limits.length ? 'Review restrictions' : stale ? 'Refresh strategy'
       : p.nextStep ? 'Recorded next actions' : strategy?.next?.what ? 'Proposed next actions' : p.plan.length ? 'Recorded next actions' : 'Fill evidence gaps';
-    const workFactors = closed ? [] : [
-      { label: 'Target restriction needs review', points: limits.length ? rules.evidenceWork.restriction : 0 },
-      { label: 'Recorded action overdue', points: overdue ? rules.evidenceWork.overdue : 0 },
-      { label: 'Soft indication to substantiate', points: soft.length ? rules.evidenceWork.soft : 0 },
-      { label: 'Strategy needs refreshing', points: stale ? rules.evidenceWork.staleStrategy : 0 },
-      { label: 'Route search needs refreshing', points: routeStale ? rules.evidenceWork.staleRoute : 0 },
-      { label: 'Owner unavailable', points: !byOwner.get(p.pursuitId) ? rules.evidenceWork.noOwner : 0 },
-      { label: 'Research missing', points: !profile && !byClaims.get(p.entityId) ? rules.evidenceWork.missingResearch : 0 },
-      { label: 'Strategy missing', points: !suggestion && !p.headline && !p.plan.length ? rules.evidenceWork.missingStrategy : 0 },
-    ].filter(f => f.points > 0);
+    // Only the factors that count, in this order: not all eight made and then filtered (performance pass, 17 Oct 2026).
+    const workFactors: Array<{ label: string; points: number }> = [];
+    if (!closed) {
+      const add = (label: string, points: number) => { if (points > 0) workFactors.push({ label, points }); };
+      add('Target restriction needs review', limits.length ? rules.evidenceWork.restriction : 0);
+      add('Recorded action overdue', overdue ? rules.evidenceWork.overdue : 0);
+      add('Soft indication to substantiate', soft.length ? rules.evidenceWork.soft : 0);
+      add('Strategy needs refreshing', stale ? rules.evidenceWork.staleStrategy : 0);
+      add('Route search needs refreshing', routeStale ? rules.evidenceWork.staleRoute : 0);
+      add('Owner unavailable', !byOwner.get(p.pursuitId) ? rules.evidenceWork.noOwner : 0);
+      add('Research missing', !profile && !byClaims.get(p.entityId) ? rules.evidenceWork.missingResearch : 0);
+      add('Strategy missing', !suggestion && !p.headline && !p.plan.length ? rules.evidenceWork.missingStrategy : 0);
+    }
     const workPriority = workFactors.reduce((n, f) => n + f.points, 0);
     return { workFactors, workPriority, pursuit: p, suggestion, profileAt, claimCount: byClaims.get(p.entityId) ?? 0, route, limits, touch,
       capacity, capacityBand, capacityBasis, usingDakota, likelihood, propensity, days, decision, routeWeight, conversion, score,

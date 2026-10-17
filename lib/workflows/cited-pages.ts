@@ -1,5 +1,8 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { request as httpRequest, type IncomingMessage } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+import { isIP, type LookupFunction } from 'node:net';
+import { Readable } from 'node:stream';
 import { config } from '@/config/deployment';
 import { isBroker } from '@/lib/enrich/schema';
 
@@ -56,13 +59,44 @@ export function publicAddress(address: string): boolean {
       || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19)));
   }
   if (v === 6) {
-    const x = address.toLowerCase();
-    if (x === '::' || x === '::1') return false;
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(x);
-    if (mapped) return publicAddress(mapped[1]!);
-    return !(/^f[cd]/.test(x) || /^fe[89ab]/.test(x) || x.startsWith('ff') || x.startsWith('64:ff9b:') || x.startsWith('2001:db8'));
+    const b = ipv6Bytes(address);
+    if (!b) return false;
+    const zero = (from: number, to: number) => b.slice(from, to).every((x) => x === 0);
+    // ::ffff:0:0/96, IPv4-mapped, in either spelling (`::ffff:7f00:1` is 127.0.0.1): judged by its IPv4 part.
+    if (zero(0, 10) && b[10] === 0xff && b[11] === 0xff) return publicAddress(b.slice(12).join('.'));
+    if (zero(0, 8)) return false; // ::, ::1, ::/96 (IPv4-compatible), ::ffff:0:0:0/96 and the rest of ::/64
+    const [b0, b1, b2, b3] = b as unknown as [number, number, number, number];
+    if (b0 === 0x00 && b1 === 0x64 && b2 === 0xff && b3 === 0x9b) return false; // 64:ff9b::/32, NAT64 (well-known and local)
+    if (b0 === 0x01 && b1 === 0x00 && zero(2, 8)) return false; // 100::/64, discard
+    if (b0 === 0x20 && b1 === 0x02) return false; // 2002::/16, 6to4 carries an IPv4 address
+    if (b0 === 0x20 && b1 === 0x01 && b2 === 0x00 && b3 === 0x00) return false; // 2001::/32, Teredo carries one too
+    if (b0 === 0x20 && b1 === 0x01 && b2 === 0x0d && b3 === 0xb8) return false; // 2001:db8::/32, documentation
+    if ((b0 & 0xfe) === 0xfc) return false; // fc00::/7, unique local
+    if (b0 === 0xfe && b1 >= 0x80) return false; // fe80::/10 link-local and fec0::/10 site-local
+    if (b0 === 0xff) return false; // multicast
+    return true;
   }
   return false;
+}
+
+/** The 16 bytes of an IPv6 address (a zone suffix dropped, an embedded IPv4 tail read), or null. */
+function ipv6Bytes(address: string): number[] | null {
+  let x = address.toLowerCase().replace(/%.*$/, '');
+  const tail = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(x);
+  if (tail) {
+    const q = tail.slice(1).map(Number);
+    if (q.some((n) => n > 255)) return null;
+    x = x.slice(0, tail.index) + ((q[0]! << 8) | q[1]!).toString(16) + ':' + ((q[2]! << 8) | q[3]!).toString(16);
+  }
+  const halves = x.split('::');
+  if (halves.length > 2) return null;
+  const words = (h: string) => (h ? h.split(':') : []);
+  const head = words(halves[0]!), rest = halves.length === 2 ? words(halves[1]!) : [];
+  const fill = halves.length === 2 ? 8 - head.length - rest.length : 0;
+  if (fill < 0 || (halves.length === 1 && head.length !== 8)) return null;
+  const all = [...head, ...Array<string>(fill).fill('0'), ...rest];
+  if (all.length !== 8 || all.some((w) => !/^[0-9a-f]{1,4}$/.test(w))) return null;
+  return all.flatMap((w) => { const n = parseInt(w, 16); return [n >> 8, n & 0xff]; });
 }
 
 /** Why a URL may not be fetched at all, or null. Checked before any request and again on each redirect. */
@@ -81,6 +115,64 @@ export async function urlRefusal(raw: string, lookup: NonNullable<PageDeps['look
   try { addresses = await lookup(host); } catch { return 'the host did not resolve'; }
   if (!addresses.length || addresses.some((a) => !publicAddress(a.address))) return 'the host resolves to an address that is not public';
   return null;
+}
+
+/**
+ * A fetch whose connection goes to an address the check passed. `urlRefusal` resolves the host once to refuse
+ * a private one, but a second, independent resolution at connect time could answer differently (DNS
+ * rebinding). Here the socket's own lookup runs the check, so the address connected to is the address
+ * checked; the URL's host name is untouched, so TLS SNI and the certificate check stay as they are. No
+ * redirect is followed (each hop is a new call, checked again) and nothing is decompressed (none is asked for).
+ */
+export function pinnedFetch(lookup: NonNullable<PageDeps['lookup']>, allowed: (address: string) => boolean = publicAddress): typeof fetch {
+  const pinned: LookupFunction = (host, options, done) => {
+    lookup(host).then((found) => {
+      const addresses = found.map((a) => ({ address: a.address, family: isIP(a.address) }));
+      if (!addresses.length || addresses.some((a) => !a.family || !allowed(a.address))) {
+        done(Object.assign(new Error('the host resolves to an address that is not public'), { code: 'EADDRNOTPUBLIC' }), '', 0);
+        return;
+      }
+      const wanted = options.family === 4 || options.family === 6 ? addresses.filter((a) => a.family === options.family) : addresses;
+      if (!wanted.length) { done(Object.assign(new Error('no address of the wanted family'), { code: 'ENOTFOUND' }), '', 0); return; }
+      if (options.all) (done as unknown as (e: null, a: typeof wanted) => void)(null, wanted);
+      else done(null, wanted[0]!.address, wanted[0]!.family);
+    }, (error: unknown) => done(error instanceof Error ? error as NodeJS.ErrnoException : new Error('lookup failed'), '', 0));
+  };
+  return (async (input: string | URL | Request, init: RequestInit = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new TypeError('not a web address');
+    const headers: Record<string, string> = {};
+    new Headers(init.headers).forEach((v, k) => { headers[k] = v; });
+    const send = url.protocol === 'https:' ? httpsRequest : httpRequest;
+    const res = await new Promise<IncomingMessage>((resolve, reject) => {
+      const req = send(url, { method: init.method ?? 'GET', headers, lookup: pinned, signal: init.signal ?? undefined }, resolve);
+      req.on('error', reject);
+      req.end();
+    });
+    const out = new Headers();
+    for (let i = 0; i + 1 < res.rawHeaders.length; i += 2) out.append(res.rawHeaders[i]!, res.rawHeaders[i + 1]!);
+    const status = res.statusCode ?? 0;
+    if (status < 200 || status > 599) { res.destroy(); throw new TypeError(`the page answered an unusable status ${status}`); }
+    const empty = status === 204 || status === 205 || status === 304 || init.method === 'HEAD';
+    if (empty) res.resume();
+    return new Response(empty ? null : Readable.toWeb(res) as ReadableStream<Uint8Array>, { status, statusText: res.statusMessage, headers: out });
+  }) as typeof fetch;
+}
+
+/** The body as text, read until `max` bytes and no further: a huge answer is refused, never held whole in memory. */
+async function readCapped(res: Response, max: number): Promise<string | null> {
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let text = '', bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > max) { await reader.cancel().catch(() => undefined); return null; }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
 }
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', mdash: '—', ndash: '–', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', hellip: '…' };
@@ -132,8 +224,9 @@ export class PageReader {
   requests = 0;
 
   constructor(deps: PageDeps = {}) {
-    this.fetch = deps.fetch ?? globalThis.fetch;
     this.lookup = deps.lookup ?? ((h) => dnsLookup(h, { all: true, verbatim: true }));
+    // The connection is made to an address checked at connect time, on every hop (see pinnedFetch).
+    this.fetch = deps.fetch ?? pinnedFetch(this.lookup);
     this.sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.now = deps.now ?? Date.now;
   }
@@ -188,9 +281,9 @@ export class PageReader {
       if (declared > p.maxBytes) { await res.body?.cancel().catch(() => undefined); return out('unavailable', 'the page is larger than a fact check reads', res.status, '', false, sec); }
       let html: string;
       try {
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.length > p.maxBytes) return out('unavailable', 'the page is larger than a fact check reads', res.status, '', false, sec);
-        html = buf.toString('utf8');
+        const read = await readCapped(res, p.maxBytes);
+        if (read === null) return out('unavailable', 'the page is larger than a fact check reads', res.status, '', false, sec);
+        html = read;
       } catch { return out('unavailable', 'the page stopped loading part way', res.status, '', false, sec); }
       if (/<form\b[^>]*(login|signin|sign-in)|cf-browser-verification|challenge-platform|captcha/i.test(html) && html.length < 20_000) {
         return out('unavailable', 'a sign-in wall or browser checkpoint; not bypassed', res.status, '', false, sec);

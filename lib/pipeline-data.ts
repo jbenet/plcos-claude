@@ -1,7 +1,6 @@
 import type { PipelineRow } from '@/components/strategy/pipeline-model';
 import { getDb } from '@/lib/db';
-import { listEntities } from '@/modules/identity';
-import { buildCache, liveRevisions } from '@/lib/build-cache';
+import { buildCache, liveRevisions, touchRevisions } from '@/lib/build-cache';
 import { listVehicles } from '@/modules/platform';
 import { listAssessments } from '@/modules/fit';
 import { capacityEstimate, spvMarks, strategicMark, strategicRecords, strategicScope, strategyOf, pursuitsOn, touchesOn, type StrategicGrade } from '@/modules/strategy';
@@ -43,6 +42,59 @@ function flags(all: string[]) {
 }
 
 const strategyFor = strategyOf;
+
+/**
+ * Who an LP's row names, and which LPs are organisations, kept by the touch revision for the same LPs and pursuits
+ * (performance pass, 17 Oct 2026). These read only entities, affiliations and pursuits' contacts, all of which move
+ * that revision (network 020), and a status, a next step or a score does not: the list rebuilt after a person's move
+ * read them all again, about a sixth of what it sent and parsed. The answer is the same as reading them then.
+ * Shared between builds: never change it.
+ */
+const linkedFor = buildCache(async (entityList: string, pursuitList: string) => {
+  const entityIds = entityList ? entityList.split(',') : [], pursuitIds = pursuitList ? pursuitList.split(',') : [];
+  const db = await getDb();
+  // The LP is the committing unit (docs/23): an organisation's row names its people — its contacts on
+  // this pursuit first, then everyone acting for it now — and a person's row names their firms. Asked of every LP,
+  // beside the entities rather than after them (16 Oct 2026): each row reads only what fits its kind, so the extra
+  // answers are never used, and a rebuild no longer waits on the entity types before it can start these.
+  const [people, contacts, affiliations, organisations] = await Promise.all([
+    db.query<{ org_id: string; id: string; name: string; role: string }>(
+      // Aliases first (identity.alias_pairs): index probes, not canonical_entity_id() on every affiliation.
+      `select distinct o.canonical_id::text as org_id,
+        e.entity_id::text as id, e.display_name as name, coalesce(a.role, '') as role
+        from identity.alias_pairs($1::uuid[]) o join identity.affiliation a on a.org_entity=o.entity_id
+        join identity.entity a_e on a_e.entity_id=a.person_entity
+        join identity.entity e on e.entity_id=case when a_e.merged_into is null then a.person_entity else identity.canonical_entity_id(a.person_entity) end
+        where a.ended_on is null
+        order by name, id`, [entityIds]),
+    db.query<{ pursuit_id: string; id: string; name: string; role: string }>(
+      // Each person by key (lateral … offset 0), not a hash of every entity twice: the planner chose that for 40 contacts
+      // (17 Oct 2026, Neurotech: 8.6 → 0.6 ms). The same goes for the firms below (6.6 → 3.0 ms).
+      `select c.pursuit_id::text, e.entity_id::text id, e.display_name name, coalesce(c.role, '') role
+         from strategy.pursuit_contact c
+         cross join lateral (select case when c_e.merged_into is null then c_e.entity_id else identity.canonical_entity_id(c_e.entity_id) end person
+           from identity.entity c_e where c_e.entity_id=c.person_entity offset 0) p
+         join identity.entity e on e.entity_id=p.person
+        where c.pursuit_id=any($1::uuid[]) order by c.created_at, name, id`, [pursuitIds]),
+    db.query<{ person: string; id: string; name: string; role: string | null }>(
+      `select p.canonical_id::text person, o.entity_id::text id, o.display_name name, a.role
+         from identity.alias_pairs($1::uuid[]) p
+         cross join lateral (select a.org_entity, a.role, a.is_primary, a.as_of from identity.affiliation a
+           where a.person_entity=p.entity_id and a.ended_on is null offset 0) a
+         cross join lateral (select case when a_o.merged_into is null then a_o.entity_id else identity.canonical_entity_id(a_o.entity_id) end org
+           from identity.entity a_o where a_o.entity_id=a.org_entity offset 0) x
+         join identity.entity o on o.entity_id=x.org
+        where o.entity_type<>'person' and o.retired_at is null
+        order by 1, a.is_primary desc, a.as_of desc nulls last, o.entity_id`, [entityIds]),
+    // Which LPs are organisations, as listEntities would have them (live records, through a merge to the one kept):
+    // only their ids, not every LP's whole record.
+    entityIds.length ? db.query<{ id: string }>(
+      `select entity_id::text id from identity.entity where merged_into is null and retired_at is null and entity_type <> 'person'
+        and entity_id in (select case when x.merged_into is null then x.entity_id else identity.canonical_entity_id(x.entity_id) end
+          from unnest($1::uuid[]) id join identity.entity x on x.entity_id = id)`, [entityIds]) : Promise.resolve([]),
+  ]);
+  return { people, contacts, affiliations, organisations: new Set(organisations.map(e => e.id)) };
+}, 16, touchRevisions);
 /** Both tables start from pursuits, never the sparse manual-factor table. */
 export const pipelineData = buildCache(async (vehicleId: string) => {
   // One vehicle's pursuits and touchpoints are shared with its plan (pursuitsOn, touchesOn): one read each. Every
@@ -96,41 +148,14 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
   // this pursuit first, then everyone acting for it now — and a person's row names their firms. Asked of every LP,
   // beside the entities rather than after them (16 Oct 2026): each row reads only what fits its kind, so the extra
   // answers are never used, and a rebuild no longer waits on the entity types before it can start these.
-  const linked = Promise.all([
-    db.query<{ org_id: string; id: string; name: string; role: string }>(
-      // Aliases first (identity.alias_pairs): index probes, not canonical_entity_id() on every affiliation.
-      `select distinct o.canonical_id::text as org_id,
-        e.entity_id::text as id, e.display_name as name, coalesce(a.role, '') as role
-        from identity.alias_pairs($1::uuid[]) o join identity.affiliation a on a.org_entity=o.entity_id
-        join identity.entity a_e on a_e.entity_id=a.person_entity
-        join identity.entity e on e.entity_id=case when a_e.merged_into is null then a.person_entity else identity.canonical_entity_id(a.person_entity) end
-        where a.ended_on is null
-        order by name, id`, [entityIds]),
-    db.query<{ pursuit_id: string; id: string; name: string; role: string }>(
-      // Each person by key (lateral … offset 0), not a hash of every entity twice: the planner chose that for 40 contacts
-      // (17 Oct 2026, Neurotech: 8.6 → 0.6 ms). The same goes for the firms below (6.6 → 3.0 ms).
-      `select c.pursuit_id::text, e.entity_id::text id, e.display_name name, coalesce(c.role, '') role
-         from strategy.pursuit_contact c
-         cross join lateral (select case when c_e.merged_into is null then c_e.entity_id else identity.canonical_entity_id(c_e.entity_id) end person
-           from identity.entity c_e where c_e.entity_id=c.person_entity offset 0) p
-         join identity.entity e on e.entity_id=p.person
-        where c.pursuit_id=any($1::uuid[]) order by c.created_at, name, id`, [pursuits.map(p => p.pursuitId)]),
-    db.query<{ person: string; id: string; name: string; role: string | null }>(
-      `select p.canonical_id::text person, o.entity_id::text id, o.display_name name, a.role
-         from identity.alias_pairs($1::uuid[]) p
-         cross join lateral (select a.org_entity, a.role, a.is_primary, a.as_of from identity.affiliation a
-           where a.person_entity=p.entity_id and a.ended_on is null offset 0) a
-         cross join lateral (select case when a_o.merged_into is null then a_o.entity_id else identity.canonical_entity_id(a_o.entity_id) end org
-           from identity.entity a_o where a_o.entity_id=a.org_entity offset 0) x
-         join identity.entity o on o.entity_id=x.org
-        where o.entity_type<>'person' and o.retired_at is null
-        order by 1, a.is_primary desc, a.as_of desc nulls last, o.entity_id`, [entityIds]),
-  ]);
-  linked.catch(() => undefined); // awaited below
-  const entities = await listEntities(entityIds);
-  const organisations = new Set(entities.filter(e => e.entityType !== 'person').map(e => e.entityId));
-  const [people, contacts, affiliations] = await linked;
-  const lpRow = new Map(pursuits.map(p => [`${p.entityId}:${p.vehicleId}`, p.pursuitId]));
+  const { people, contacts, affiliations, organisations } = await linkedFor(entityIds.join(','), pursuits.map(p => p.pursuitId).join(','));
+  // Each vehicle's LP rows by LP, the later of two pursuits of one pair winning as one map of both would.
+  const lpRows = new Map<string, Map<string, string>>();
+  for (const p of pursuits) {
+    const rowsOn = lpRows.get(p.vehicleId);
+    if (rowsOn) rowsOn.set(p.entityId, p.pursuitId); else lpRows.set(p.vehicleId, new Map([[p.entityId, p.pursuitId]]));
+  }
+  const lpRowOn = (vehicleId: string) => lpRows.get(vehicleId)!;
   // Grouped once: a scan of every contact and affiliation per row was quadratic in the vehicle's size.
   const group = <T,>(rows: T[], key: (row: T) => string) => {
     const out = new Map<string, T[]>();
@@ -139,10 +164,10 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
   };
   const contactsOf = group(contacts, (c) => c.pursuit_id), peopleOf = group(people, (a) => a.org_id);
   const peopleFor = (p: Pursuit): PipelineRow['people'] => {
-    const out = new Map<string, PipelineRow['people'][number]>();
-    for (const c of contactsOf.get(p.pursuitId) ?? []) if (!out.has(c.id)) out.set(c.id, { id: c.id, name: c.name, role: c.role, contact: true, individual: lpRow.get(`${c.id}:${p.vehicleId}`) ?? null });
-    for (const a of peopleOf.get(p.entityId) ?? []) if (!out.has(a.id)) out.set(a.id, { id: a.id, name: a.name, role: a.role, contact: false, individual: lpRow.get(`${a.id}:${p.vehicleId}`) ?? null });
-    return [...out.values()];
+    const out: PipelineRow['people'] = [], seen = new Set<string>(), lpRow = lpRowOn(p.vehicleId);
+    for (const c of contactsOf.get(p.pursuitId) ?? []) if (!seen.has(c.id)) { seen.add(c.id); out.push({ id: c.id, name: c.name, role: c.role, contact: true, individual: lpRow.get(c.id) ?? null }); }
+    for (const a of peopleOf.get(p.entityId) ?? []) if (!seen.has(a.id)) { seen.add(a.id); out.push({ id: a.id, name: a.name, role: a.role, contact: false, individual: lpRow.get(a.id) ?? null }); }
+    return out;
   };
   const firmsOf = new Map<string, Array<{ id: string; name: string; role: string | null }>>();
   for (const a of affiliations) {
@@ -152,7 +177,7 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
     firmsOf.set(a.person, list);
   }
   const firmsFor = (p: Pursuit): PipelineRow['firms'] =>
-    (firmsOf.get(p.entityId) ?? []).map(f => ({ ...f, lpRow: lpRow.get(`${f.id}:${p.vehicleId}`) ?? null }));
+    (firmsOf.get(p.entityId) ?? []).map(f => ({ ...f, lpRow: lpRowOn(p.vehicleId).get(f.id) ?? null }));
   const spvKind = new Set(vehicles.filter(v => v.kind === 'spv').map(v => v.id));
   const [strategicOn, { touchesBy, sums, closes, restricted, readings, spv }, [assessments, plans]] = await Promise.all([strategicP, touched, planned]);
   const strategies = new Map(plans.flatMap(plan => plan?.rows.map(r => [r.pursuit.pursuitId, r] as const) ?? []));
@@ -180,54 +205,68 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
     return y.rung - x.rung || y.meetings - x.meetings || y.implied - x.implied || y.touch - x.touch || byName(a.entityName, b.entityName);
   });
 
+  // Each row's lookups once (its pair key, kind, plan), not again per field: building the rows was the largest single
+  // piece of a rebuild after a person's write (performance pass, 17 Oct 2026).
+  const slugOf = new Map(vehicles.map(v => [v.id, v.slug]));
   const rows: PipelineRow[] = pursuits.map((p) => {
-    const s = sum(p);
+    const pair = `${p.entityId}:${p.vehicleId}`;
+    const s = sums.get(pair)!;
     const reading = scoreFor(p);
     const plan = strategies.get(p.pursuitId);
-    const assessment = fit.get(`${p.entityId}:${p.vehicleId}`);
-    const c = closes.get(`${p.entityId}:${p.vehicleId}`);
-    const read = shownRead(s.read, readsOf.get(p.entityId) ?? [], laterFacts(p, c ? [c] : []));
+    const assessment = fit.get(pair);
+    const c = closes.get(pair);
+    const tracks = c ? [c] : [];
+    const readings = readsOf.get(p.entityId);
+    // No read logged or noted: shownRead answers null whatever happened since.
+    const read = s.read || readings ? shownRead(s.read, readings ?? [], laterFacts(p, tracks)) : null;
     // What the records support beside what the ladder has accepted (N57, docs/18).
-    const file = onFile(p, touchesBy.get(`${p.entityId}:${p.vehicleId}`) ?? [], c ? [c] : []);
-    const onFileRungs = new Set(file.climb.map((x) => x.rung));
+    const file = onFile(p, touchesBy.get(pair) ?? [], tracks);
     const beyond = assessment?.dimensions.find((d) => d.code === 'strategic_value');
     const w5 = plan?.suggestion?.data as Partial<Strategy> | undefined;
     const spvMark = spv.get(p.entityId)!;
+    const said = strategicOn.texts.get(p.entityId);
     const strategic = strategicMark(scopes.get(p.vehicleId)!, {
       assessed: beyond ? { grade: beyond.grade as StrategicGrade, finding: beyond.finding, certainty: beyond.certainty, asOf: iso(beyond.asOf)?.slice(0, 10) ?? null } : null,
-      prospect: strategicOn.prospects.get(`${p.entityId}:${p.vehicleId}`) ?? null,
+      prospect: strategicOn.prospects.get(pair) ?? null,
       strategy: w5 ? { affinity: w5.scores?.affinity ?? null, askShape: w5.ask?.shape ?? null } : null,
       // The SPV stance's research quote is research text too: "two neurotech rounds" is a portfolio tie.
       // Only research: a derived mark's words are our own records ("In 2 of our SPVs: …") or a fixed label.
-      texts: [...(strategicOn.texts.get(p.entityId) ?? []), ...(spvMark.why && spvMark.basis === 'research' ? [{ field: 'spv', value: spvMark.why, asOf: null }] : [])],
+      texts: spvMark.why && spvMark.basis === 'research' ? [...(said ?? []), { field: 'spv', value: spvMark.why, asOf: null }] : said ? [...said] : [],
     });
+    const org = organisations.has(p.entityId);
+    const firm = org ? undefined : firmsOf.get(p.entityId)?.[0];
+    const risks = plan?.risks ?? [];
+    const flagged = flags(assessment && assessment.gateStatus !== 'clear' ? [...risks, assessment.diagnosis.statement] : risks);
+    const rung = rungIndex(p.rung);
+    let onFileRungs: Set<string> | null = null;
     return {
       licensedCapacity: plan?.usingDakota ?? false,
       licensedStatusReason: p.source === 'dakota' && p.statusSource === 'rule',
       id: p.pursuitId,
       entityId: p.entityId,
-      isOrg: organisations.has(p.entityId),
-      people: organisations.has(p.entityId) ? peopleFor(p) : [],
-      firms: organisations.has(p.entityId) ? [] : firmsFor(p),
-      lpCapacity: organisations.has(p.entityId) ? 'organisation' : p.lpCapacity === 'personal' ? 'personal' : null,
-      lpReview: organisations.has(p.entityId) ? null : p.lpReview,
+      isOrg: org,
+      people: org ? peopleFor(p) : [],
+      firms: org ? [] : firmsFor(p),
+      lpCapacity: org ? 'organisation' : p.lpCapacity === 'personal' ? 'personal' : null,
+      lpReview: org ? null : p.lpReview,
       capacitySort: capacityEstimate(plan?.capacityBand),
       vehicleId: p.vehicleId,
-      vehicleSlug: vehicles.find(v => v.id === p.vehicleId)!.slug,
-      orgId: organisations.has(p.entityId) ? p.entityId : firmsOf.get(p.entityId)?.[0]?.id ?? null,
+      vehicleSlug: slugOf.get(p.vehicleId)!,
+      orgId: org ? p.entityId : firm?.id ?? null,
       score: reading.score,
       scoreKind: reading.kind,
       scoreAt: reading.at,
-      priority: strategies.get(p.pursuitId)?.score?.priority ?? null,
-      capacity: strategies.get(p.pursuitId)?.capacityBand ?? null,
-      route: strategies.get(p.pursuitId)?.route?.count ?? null,
-      ...flags([...(plan?.risks ?? []), ...(assessment && assessment.gateStatus !== 'clear' ? [assessment.diagnosis.statement] : [])]),
+      priority: plan?.score?.priority ?? null,
+      capacity: plan?.capacityBand ?? null,
+      route: plan?.route?.count ?? null,
+      risks: flagged.risks,
+      riskCount: flagged.riskCount,
       list: plan?.suggestion?.data.list ?? null,
       nextKind: plan?.group ?? null,
       name: p.entityName,
-      org: organisations.has(p.entityId) ? p.entityName : firmsOf.get(p.entityId)?.[0]?.name ?? null,
+      org: org ? p.entityName : firm?.name ?? null,
       // The row is the LP unit's own: its name leads, whoever it is (docs/23).
-      orgFirst: organisations.has(p.entityId),
+      orgFirst: org,
       headline: p.headline,
       vehicle: p.vehicleName,
       owner: p.ownerSaid ?? p.ownerName,
@@ -235,7 +274,7 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
       ended: p.status === 'passed'
         ? [p.passedBy ? PASSED_BY_LABEL[p.passedBy] : 'Passed', p.statusReason?.replace(/_/g, ' ')].filter(Boolean).join(' · ')
         : null,
-      next: p.nextStep ?? strategies.get(p.pursuitId)?.action ?? null,
+      next: p.nextStep ?? plan?.action ?? null,
       nextOn: iso(p.nextStepOn),
       said: p.source !== 'us' ? p.stageSaid : null,
       implied: p.implied.map((i) => IMPLIED_LABEL[i]),
@@ -262,11 +301,13 @@ export const pipelineData = buildCache(async (vehicleId: string) => {
       readSuggested: Boolean(read?.suggested),
       readSuperseded: read?.superseded?.what ?? null,
       readOld: Boolean(read?.old),
-      rung: rungIndex(p.rung),
-      needs: rungIndex(p.rung) + 1 + file.climb.length,
+      rung,
+      needs: rung + 1 + file.climb.length,
       rungs: RUNGS.map((r) => {
         const ev = p.events.find((e) => e.rung === r);
-        return ev ? (ev.evidenceKind === 'not_applicable' ? 'na' : 'on') : onFileRungs.has(r) ? 'file' : 'off';
+        if (ev) return ev.evidenceKind === 'not_applicable' ? 'na' : 'on';
+        if (!file.climb.length) return 'off';
+        return (onFileRungs ??= new Set(file.climb.map((x) => x.rung))).has(r) ? 'file' : 'off';
       }),
       rungLabel: file.to
         ? `${p.rung ? `${RUNG_LABEL[p.rung]} · ` : ''}${RUNG_LABEL[file.to]} on file, not accepted`

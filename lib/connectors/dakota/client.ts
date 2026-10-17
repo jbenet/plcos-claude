@@ -69,7 +69,8 @@ export class DakotaClient {
     const segment = path === 'oauth2' ? 'authentication' : ['account', 'contact', 'investment', 'investment_strategy'].includes(module) ? module : 'other';
     try {
       // No identity of ours in the request: no User-Agent naming us (docs/agent-rules/real-data.md).
-      const res = await this.fetcher(`${BASE}/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers }, body });
+      const res = await this.fetcher(`${BASE}/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers }, body,
+        redirect: 'error', signal: AbortSignal.timeout(30_000) });
       let text: string;
       try { text = await res.text(); }
       catch (error) {

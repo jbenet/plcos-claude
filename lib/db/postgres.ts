@@ -18,8 +18,44 @@ const parseInt8 = (text: string) => {
   if (!Number.isSafeInteger(value)) throw new RangeError('Database integer exceeds JavaScript safe precision');
   return value;
 };
+/**
+ * A timestamptz as the server prints it in UTC ("2026-10-17 12:00:00.123456+00", a four-digit year), read without
+ * postgres-date's regular expressions: the same Date.UTC of the same numbers, so the same instant. Anything else (another
+ * zone, BC, infinity, a short year) goes to the library's parser. Rebuilding the pipeline list parses thousands of
+ * these, and the library's parse was about a microsecond and a half each (performance pass, 17 Oct 2026).
+ */
+const parseTimestamptz = types.getTypeParser(1184, 'text') as (text: string) => unknown;
+const digit = (text: string, at: number) => { const c = text.charCodeAt(at) - 48; return c >= 0 && c <= 9 ? c : -1; };
+const twoDigits = (text: string, at: number) => { const a = digit(text, at), b = digit(text, at + 1); return a < 0 || b < 0 ? -1 : a * 10 + b; };
+export function fastTimestamptz(text: string): unknown {
+  const end = text.length - 3;
+  if (end < 19 || text.charCodeAt(end) !== 43 /* + */ || text.charCodeAt(end + 1) !== 48 || text.charCodeAt(end + 2) !== 48
+    || text.charCodeAt(4) !== 45 || text.charCodeAt(7) !== 45 || text.charCodeAt(10) !== 32 || text.charCodeAt(13) !== 58 || text.charCodeAt(16) !== 58) {
+    return parseTimestamptz(text);
+  }
+  const hi = twoDigits(text, 0), lo = twoDigits(text, 2), month = twoDigits(text, 5), day = twoDigits(text, 8);
+  const hour = twoDigits(text, 11), minute = twoDigits(text, 14), second = twoDigits(text, 17);
+  if (hi < 1 || lo < 0 || month < 0 || day < 0 || hour < 0 || minute < 0 || second < 0) return parseTimestamptz(text);
+  let ms = 0;
+  if (end > 19) {
+    if (text.charCodeAt(19) !== 46 /* . */ || end === 20) return parseTimestamptz(text);
+    for (let i = 20; i < end; i++) if (digit(text, i) < 0) return parseTimestamptz(text);
+    ms = 1000 * parseFloat(text.slice(19, end));
+  }
+  return new Date(Date.UTC(hi * 100 + lo, month - 1, day, hour, minute, second, ms));
+}
+/** A date ("2026-10-17", a four-digit year) the same way: the library's local midnight of the same numbers. */
+const parseDateText = types.getTypeParser(1082, 'text') as (text: string) => unknown;
+export function fastDate(text: string): unknown {
+  if (text.length !== 10 || text.charCodeAt(4) !== 45 || text.charCodeAt(7) !== 45) return parseDateText(text);
+  const hi = twoDigits(text, 0), lo = twoDigits(text, 2), month = twoDigits(text, 5), day = twoDigits(text, 8);
+  if (hi < 1 || lo < 0 || month < 0 || day < 0) return parseDateText(text);
+  return new Date(hi * 100 + lo, month - 1, day);
+}
 const parsers = { getTypeParser(oid: number, format?: 'text' | 'binary') {
   if (oid === 20 && format !== 'binary') return parseInt8;
+  if (oid === 1184 && format !== 'binary') return fastTimestamptz;
+  if (oid === 1082 && format !== 'binary') return fastDate;
   return types.getTypeParser(oid, format);
 } };
 

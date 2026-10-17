@@ -1,4 +1,5 @@
-import type { Queryable } from '@/lib/db';
+import type { Db, Queryable } from '@/lib/db';
+import { readRevision } from '@/lib/build-cache';
 import { byVersion, VERSION } from './by-version';
 
 /**
@@ -18,13 +19,44 @@ export interface ProfileParts {
 }
 export interface PublicProfile { entityId: string; noteId: string; at: Date; parts: ProfileParts }
 
+type Key = { entity: string; id: string; v: string; at: Date };
+const readKeys = (q: Queryable, ids: string[]) => q.query<Key>(
+  `select a.canonical_id::text entity, n.note_id::text id, ${VERSION('n')} v, n.created_at at
+     from identity.alias_pairs($1::uuid[]) a join research.note n on n.entity_id = a.entity_id
+    where n.kind = 'public_profile' order by n.created_at desc, n.note_id`, [ids]);
+
+/** GUESS: a rebuild asks for a few sets of LPs; past this many at one revision, the oldest is dropped. */
+const SHARED_SETS = 8;
+const shared = new WeakMap<Db, { revision: string; keys: Map<string, Promise<Key[]>> }>();
+/**
+ * The notes' keys, read once per read revision for the same LPs (performance pass, 17 Oct 2026): a vehicle's plan and its
+ * pipeline list's strategic marks both asked them of the same LPs on every rebuild after a person's write (900 rows
+ * each for Neurotech). Both tables read here move the read revision, and a read joins only one at the revision it
+ * saw, as lib/build-cache does. Inside a transaction (no `transaction` of its own) it always reads, so its own
+ * uncommitted writes are seen.
+ */
+async function profileKeys(q: Queryable, ids: string[]): Promise<Key[]> {
+  if (!('transaction' in q)) return readKeys(q, ids);
+  const db = q as Db;
+  const revision = await readRevision(db);
+  let state = shared.get(db);
+  if (!state || state.revision !== revision) shared.set(db, (state = { revision, keys: new Map() }));
+  const key = [...ids].sort().join(',');
+  let keys = state.keys.get(key);
+  if (!keys) {
+    const mine = state, read = readKeys(q, ids);
+    keys = read;
+    mine.keys.set(key, read);
+    if (mine.keys.size > SHARED_SETS) mine.keys.delete(mine.keys.keys().next().value!);
+    read.catch(() => { if (mine.keys.get(key) === read) mine.keys.delete(key); });
+  }
+  return keys;
+}
+
 /** Every public profile of these LPs (aliases included, under their canonical id), the latest first. */
 export async function publicProfiles(q: Queryable, entityIds: string[]): Promise<PublicProfile[]> {
   if (!entityIds.length) return [];
-  const keys = await q.query<{ entity: string; id: string; v: string; at: Date }>(
-    `select a.canonical_id::text entity, n.note_id::text id, ${VERSION('n')} v, n.created_at at
-       from identity.alias_pairs($1::uuid[]) a join research.note n on n.entity_id = a.entity_id
-      where n.kind = 'public_profile' order by n.created_at desc, n.note_id`, [[...new Set(entityIds)]]);
+  const keys = await profileKeys(q, [...new Set(entityIds)]);
   const parts = await byVersion<ProfileParts>(q, 'public_profile', keys, async (ids) =>
     (await q.query<{ id: string; v: string; data: ProfileParts['data']; text: string; on: Date | string | null }>(
       `select n.note_id::text id, ${VERSION('n')} v,

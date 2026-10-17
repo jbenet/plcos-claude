@@ -33,8 +33,7 @@ export async function spvReadings(q: Queryable, entityIds: string[]): Promise<Ma
   const out = new Map<string, SpvReading>();
   const ids = [...new Set(entityIds)];
   if (!ids.length) return out;
-  const [canon, settings, evidence] = await Promise.all([
-    q.query<{ id: string; canon: string }>(`select id::text, identity.canonical_entity_id(id)::text canon from unnest($1::uuid[]) id`, [ids]),
+  const [settings, evidence] = await Promise.all([
     q.query<SettingRow>(
       `select identity.canonical_entity_id(s.entity_id)::text entity, s.stance, s.min_deals, s.note, s.set_at, u.name by
          from strategy.spv_setting s left join platform.app_user u on u.id = s.set_by
@@ -62,7 +61,14 @@ export async function spvReadings(q: Queryable, entityIds: string[]): Promise<Ma
   }
   for (const e of evidence) add(e.entity, { kind: e.kind, stance: e.stance, minDeals: e.min_deals, label: e.label, quote: e.quote,
     source: e.source, url: e.url, asOf: day(e.as_of), confidence: e.confidence, lastVerifiedBy: e.verified });
-  const canonical = new Map(canon.map((c) => [c.id, c.canon]));
+  // Only the ids whose record is one of those with something on file, and none when nothing is: every other id reads
+  // unknown, as before. Each key is a kept record, its own canonical id, so an id that is a key is always found here.
+  // Reading every id's canonical id was 910 rows each rebuild of Neurotech's list for one SPV stance (performance
+  // pass, 17 Oct 2026).
+  const keys = [...by.keys()].filter((k) => k !== null);
+  const canonical = new Map(keys.length ? (await q.query<{ id: string; canon: string }>(
+    `select id::text, c::text canon from unnest($1::uuid[]) id, identity.canonical_entity_id(id) c where c = any($2::uuid[])`, [ids, keys]))
+    .map((c) => [c.id, c.canon]) : []);
   for (const id of ids) out.set(id, resolveSpv(by.get(canonical.get(id) ?? id) ?? []));
   return out;
 }
