@@ -58,6 +58,7 @@ export async function queueJob(caller: SyncCaller, request: Request, o: { db?: D
 }
 
 export async function jobState(caller: SyncCaller, request: Request, o: { db?: Db } = {}): Promise<PushAnswer> {
+  if (new URL(request.url).searchParams.get('receipts') === 'affinity') return affinityReceipts(caller, o.db ?? await getDb());
   const id = new URL(request.url).searchParams.get('job') ?? '';
   if (!UUID.test(id)) return { status: 400, body: { ok: false, error: 'Give a job id as ?job=<id>.' } };
   const db = o.db ?? await getDb();
@@ -77,4 +78,29 @@ export async function jobState(caller: SyncCaller, request: Request, o: { db?: D
   return { status: 200, body: { ok: true, job: { id: row.id, kind: row.kind, status: row.status, phase: row.phase, error: row.error,
     createdAt: new Date(row.created_at).toISOString(), finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null, counts,
     ...(decisions ? { decisions } : {}), ...(off ? { off } : {}), ...(skipped?.length ? { skipped } : {}) } } };
+}
+
+/**
+ * The last 20 Affinity read receipts and Affinity jobs, newest first: kind, status, times, request and record counts,
+ * the receipt's note, and who ran it (a handle). 17 Oct 2026: whether a refresh Juan ran had read anything could only
+ * be seen in his signed-in session. Counts and states only; a note names lists by id, never a person.
+ */
+async function affinityReceipts(caller: SyncCaller, db: Db): Promise<PushAnswer> {
+  const [runs, jobs] = await Promise.all([
+    db.query<{ kind: string; status: string; started_at: Date; finished_at: Date | null; requests: number | null; records: number | null; new_records: number | null; note: string | null; by: string | null }>(
+      `select r.kind, r.status, r.started_at, r.finished_at, r.requests, r.records, r.new_records, r.note, u.handle by
+         from sources.sync_run r left join platform.app_user u on u.id = r.run_by
+        where r.source = 'affinity' order by r.started_at desc limit 20`),
+    db.query<{ id: string; status: string; operation: string | null; schedule: string | null; error: string | null; created_at: Date; finished_at: Date | null; by: string | null }>(
+      `select j.id::text, j.status, j.input->>'operation' operation, j.input->>'schedule' schedule, j.error, j.created_at, j.finished_at, u.handle by
+         from platform.import_job j left join platform.app_user u on u.id = j.actor
+        where j.kind::text = 'affinity' order by j.created_at desc limit 20`),
+  ]);
+  await auditSync(caller, 'jobs', 'ok', { op: 'receipts', source: 'affinity' });
+  const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
+  return { status: 200, body: { ok: true,
+    runs: runs.map((r) => ({ kind: r.kind, status: r.status, startedAt: iso(r.started_at), finishedAt: iso(r.finished_at), requests: r.requests,
+      records: r.records, newRecords: r.new_records, note: r.note?.slice(0, 300) ?? null, by: r.by })),
+    jobs: jobs.map((j) => ({ id: j.id, operation: j.operation, schedule: j.schedule, status: j.status, error: j.error?.slice(0, 300) ?? null,
+      createdAt: iso(j.created_at), finishedAt: iso(j.finished_at), by: j.by })) } };
 }

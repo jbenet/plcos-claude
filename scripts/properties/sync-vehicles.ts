@@ -102,6 +102,14 @@ export async function syncVehiclesProperties(check: Check) {
   const offState = 'response' in g3 ? null : (await jobState(g3.caller, jobsReq(admin.secret, null, 'GET', `?job=${offId}`), { db })).body as { job?: { off?: string; skipped?: unknown[] } };
   check('Jobs by token: a calendar read that did not run says why, and lists who was not read by state, never an address',
     offState?.job?.off === 'No mailguard address is set.' && JSON.stringify(offState.job.skipped) === '[{"handle":"juan","why":"no_read"}]', JSON.stringify(offState));
+  // The Affinity receipts (17 Oct 2026): the last reads and jobs, by kind and state, with who ran them.
+  await db.query(`insert into sources.sync_run (source, kind, status, run_by, requests, records, note, finished_at) values ('affinity', 'slice', 'failed', $1, 3, 0, 'Invented stop', now())`, [juan.id]);
+  const g4 = await syncGuard(jobsReq(admin.secret, null, 'GET', '?receipts=affinity'), 'jobs');
+  const receipts = 'response' in g4 ? null : (await jobState(g4.caller, jobsReq(admin.secret, null, 'GET', '?receipts=affinity'), { db })).body as { runs?: Array<{ kind: string; status: string; note: string; by: string }>; jobs?: unknown[] };
+  const g5 = await syncGuard(jobsReq(pushOnly.secret, null, 'GET', '?receipts=affinity'), 'jobs');
+  check('Jobs by token: an Admin reads the last Affinity receipts with who ran them; a push token cannot',
+    receipts?.runs?.[0]?.kind === 'slice' && receipts.runs[0].status === 'failed' && receipts.runs[0].note === 'Invented stop' && receipts.runs[0].by === juan.handle
+      && Array.isArray(receipts.jobs) && 'response' in g5 && g5.response.status === 403, JSON.stringify(receipts)?.slice(0, 300));
   // An Affinity read needs one of the buttons' operations; nothing here reaches Affinity.
   const affNone = await jobsBy(admin.secret, { kind: 'affinity' }), affBad = await jobsBy(admin.secret, { kind: 'affinity', operation: 'write' });
   check('Jobs by token: a push token cannot queue, an unknown kind or an Affinity job without a known operation is refused, an unknown job is 404',
