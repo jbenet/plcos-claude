@@ -95,7 +95,7 @@ export async function startLocal(ctx) {
   return copy.api();
 }
 
-class LocalCopy {
+export class LocalCopy {
   constructor({ state, log, refreshInfo, remoteFetch, DATA_DIR, settings = {} }) {
     Object.assign(this, { state, log, refreshInfo, remoteFetch, dir: DATA_DIR, settings });
     this.phase = 'waiting';           // waiting | preparing | syncing | ready | off | error
@@ -264,8 +264,9 @@ class LocalCopy {
         this.tables = null;
         this.failures++;
         this.log('local copy:', String(e?.stack ?? e).slice(0, 1500));
-        this.detail = String(e?.message ?? e).slice(0, 300);
-        if (this.phase !== 'ready') this.phase = 'error';
+        // A copy turned off by a refusal (remoteAnswer) stays off and says why, rather than showing as an error.
+        if (this.phase !== 'off') this.detail = String(e?.message ?? e).slice(0, 300);
+        if (this.phase !== 'ready' && this.phase !== 'off') this.phase = 'error';
         // Back off, doubling, from 30 s to 30 min (JuanMail: give up on tight retries).
         await this.sleep(Math.min(30 * 60_000, 30_000 * 2 ** Math.min(6, this.failures - 1)));
         continue;
@@ -362,7 +363,10 @@ class LocalCopy {
     if (!json) try { json = JSON.parse(text); } catch { /* not json */ }
     if (res.status === 403 || res.status === 401 || (res.status >= 300 && res.status < 400)) {
       await this.refreshInfo();
-      if (this.state.user?.access !== 'admin') { this.phase = 'off'; this.detail = 'The local copy is for Admins; this app uses the live server.'; }
+      // The sync route is for Admins only, so a refusal there stops the copy whatever the person's info said: an info
+      // answer that left `access` as it was kept the copy serving after a demotion (red team, 17 Oct 2026). A
+      // redirect (deactivated, or signed out everywhere) is a refusal too; the next tick waits for sign-in.
+      if (res.status === 401 || res.status === 403 || this.state.user?.access !== 'admin') { this.phase = 'off'; this.detail = 'The local copy is for Admins; this app uses the live server.'; }
       throw new Error(`the server refused ${pathname.split('?')[0]} (${res.status})`);
     }
     if (!res.ok || !json?.ok) throw new Error(`${pathname.split('?')[0]} answered ${res.status}: ${(json?.error ?? text).slice(0, 200)}`);

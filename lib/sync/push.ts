@@ -94,11 +94,24 @@ async function prospectsProblems(bundle: PushBundle, db: Db, caller: SyncCaller)
 const cutByW1c = (finding: unknown) => ((finding as { researched?: { corrected?: Array<{ by?: unknown }> } })?.researched?.corrected ?? [])
   .some((c) => typeof c?.by === 'string' && /\bW1c\b/.test(c.by));
 
-/** Earlier versions of a finding the server held and set aside when a push or cloud run replaced it. */
-async function earlierVersions(enrich: string, key: string): Promise<Array<{ facts?: unknown[] }>> {
-  const runs = await readdir(join(enrich, 'inbox')).catch(() => [] as string[]);
-  const found = await Promise.all(runs.map((run) => readJson(join(enrich, 'inbox', run, 'replaced', 'raw', `${key}.json`))));
-  return found.filter((x): x is { facts?: unknown[] } => !!x && typeof x === 'object');
+/**
+ * Earlier versions of a finding the server held and set aside when a push or cloud run replaced it, for one push: the
+ * inbox is listed once, on the first key asked, and each key's versions are read once, however many review rows name
+ * it (17 Oct 2026: a listing and a read per earlier push for every row that missed cost rows × inbox runs).
+ */
+function earlierVersionsFor(enrich: string): (key: string) => Promise<Array<{ facts?: unknown[] }>> {
+  let runs: Promise<string[]> | undefined;
+  const byKey = new Map<string, Promise<Array<{ facts?: unknown[] }>>>();
+  return (key) => {
+    let found = byKey.get(key);
+    if (!found) {
+      runs ??= readdir(join(enrich, 'inbox')).catch(() => [] as string[]);
+      found = runs.then((list) => Promise.all(list.map((run) => readJson(join(enrich, 'inbox', run, 'replaced', 'raw', `${key}.json`)))))
+        .then((all) => all.filter((x): x is { facts?: unknown[] } => !!x && typeof x === 'object'));
+      byKey.set(key, found);
+    }
+    return found;
+  };
 }
 
 /** What the server holds that the push would contradict. */
@@ -109,6 +122,7 @@ async function serverProblems(bundle: PushBundle, enrich: string, db: Db, caller
   const known = await db.query<{ id: string; slug: string; name: string }>('select id::text, slug, name from platform.vehicle');
   const vehicleOf = (named: string) => known.find((v) => [v.slug.toLowerCase(), v.name.toLowerCase()].includes(named.trim().toLowerCase()))?.id;
   const admin = can(caller.user, 'admin');
+  const earlierVersions = earlierVersionsFor(enrich);
   for (const f of bundle.files) {
     const target = join(enrich, f.path);
     if (DECISIONS.test(f.path)) {
@@ -169,7 +183,7 @@ async function serverProblems(bundle: PushBundle, enrich: string, db: Db, caller
         // A review grades a finding as it was before its W1c correction. If the corrected finding is already live
         // (pushed earlier, 7 Oct 2026), the review is checked against a version the server set aside under
         // inbox/<run>/replaced/; one it actually held is enough.
-        if (live.length && (await earlierVersions(enrich, row.key)).some((v) => !factReviewProblems(row, v).length)) continue;
+        if (live.length && (await earlierVersions(row.key)).some((v) => !factReviewProblems(row, v).length)) continue;
         // A finding pushed already corrected has no set-aside version (7 Oct 2026). Its W1c correction log says facts
         // were cut but not how many, so a review grading more facts than it now has passes when that is its only fault.
         if (live.length === 1 && cutByW1c(original) && /^grades (\d+) facts; the finding has (\d+)$/.test(live[0]!)) {
