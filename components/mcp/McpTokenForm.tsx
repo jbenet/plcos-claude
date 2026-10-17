@@ -60,6 +60,12 @@ export function McpTokenForm({ vehicles, draftTools, outreach = false, sync = []
             {sync.includes('push') && <label><input type="radio" name="tools" value="push" onChange={() => setPreset('push')} /> Push: send finished research up</label>}
             {sync.includes('admin') && <label><input type="radio" name="tools" value="admin" onChange={() => setPreset('admin')} /> Admin: pull, push, add vehicles and other Admin tasks</label>}
           </div>
+          {preset.startsWith('outreach') && (
+            <label style={{ display: 'block', marginTop: 8 }}>
+              <input type="checkbox" name="autonomous" value="1" /> Autonomous (an agent running with no person clicking)
+              <br /><small className="muted">Every call it makes counts as autonomous, so each send or intro ask it records needs a ticket a person approved. Leave it off for a desk a person drives.</small>
+            </label>
+          )}
         </fieldset>
         <label className={s.row}>
           <span>Expires</span>

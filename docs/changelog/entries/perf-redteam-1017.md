@@ -433,6 +433,17 @@ data on Juan's Mac.
   to a year, so a token made from a stolen session outlived the cookie. An Admin may now tick "and their tokens" to
   revoke them in the same step (off by default, so the mail desk does not stop by surprise).
 
+- **The agent-only gates now hold at send time, and a token can be marked autonomous.** No token could carry the
+  autonomous mark, so autonomy rested on each call's header: Preferences → MCP access now offers "Autonomous (an agent
+  running with no person clicking)" on the outreach presets, off by default, and the token list shows it; existing
+  tokens are unchanged. A do-not-contact recorded after an approval did not stop the approved autonomous send to that
+  person, because ending tickets matched fewer addresses than the send-time check: recording an autonomous send now
+  checks the LP's email bars and every person addressed again, and ending tickets reaches a firm's people, Affinity
+  addresses, send-to addresses and an intro ask's connector. The grants invitation (rule 12) was checked only on a
+  send with an attachment; every autonomous SEND or INTRO_ASK request now clears it. The queue's wrap check read the
+  vehicle kind's instrument rather than the one the LP holds, as its materials already did. A person's sends are not
+  gated by any of this (`scripts/properties/outreach-autonomy.ts`).
+
 ### Juan's calls, 17 Oct 2026
 
 - **JuanMail does more on its own.** Juan: "we should remove the rules that only people can change settings. It's

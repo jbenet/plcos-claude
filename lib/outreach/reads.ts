@@ -240,11 +240,6 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
         and p.entity_id = any((select identity.alias_ids($1::uuid[]))::uuid[])`, [entityIds, OPEN_FUND]) : Promise.resolve([]),
   ]);
   const seatOf = new Map(seats.map((s) => [`${s.entity_id}:${s.vehicle_id}`, s]));
-  // Whether the wrap matrix covers the vehicle at all (rule 11); each material is checked on its own below.
-  const wrapRuleFor = new Map(await Promise.all(vehicles.map(async (v) => {
-    const w = await checkWrap({ exemption: v.exemption, instrument: instrumentOf(v), audience: 'lp_memo', permittedUse: 'internal' });
-    return [v.id, w.rule !== null] as const;
-  })));
   const empty: Merged = { touches: [], sameAs: new Map(), messageOf: new Map(), flags: [] };
   const summaries = new Map(pairs.map((p) => {
     const list = (traces.get(key(p)) ?? empty).touches;
@@ -348,6 +343,12 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
   const wanted = new Map<string, [Vehicle, string]>([...vehicles.map((v) => [`${v.id}|${instrumentOf(v)}`, [v, instrumentOf(v)]] as [string, [Vehicle, string]]),
     ...page.map((b) => { const i = instrumentFor(b.r.entityId, b.v); return [`${b.v.id}|${i}`, [b.v, i]] as [string, [Vehicle, string]]; })]);
   const materialsByKey = new Map(await Promise.all([...wanted].map(async ([k, [v, i]]) => [k, await materialsFor(v, i)] as const)));
+  // Whether the wrap matrix covers the vehicle × the instrument the LP holds on it (rule 11), as materialsFor checks each
+  // material (red team, 17 Oct 2026: this read the vehicle kind's instrument, so an LP holding another one passed on it).
+  const wrapRuleFor = new Map(await Promise.all([...wanted].map(async ([k, [v, i]]) => {
+    const w = await checkWrap({ exemption: v.exemption, instrument: i as Parameters<typeof checkWrap>[0]['instrument'], audience: 'lp_memo', permittedUse: 'internal' });
+    return [k, w.rule !== null] as const;
+  })));
 
   let redacted = 0;
   const clean = (t: string | null | undefined) => {
@@ -380,6 +381,8 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
     const asked = asks.find((x) => x.entity_id === r.entityId)?.n ?? 0;
     const cap = config.guard.asksPerRelationshipPerQuarter;
     const barred = blanket.length + emailBarred.length > 0;
+    const heldInstrument = instrumentFor(r.entityId, v);
+    const wrapCovered = wrapRuleFor.get(`${v.id}|${heldInstrument}`) === true;
     const checks: Check[] = [
       {
         // Always surfaced (5 Oct 2026): any restriction on file fails this check; only one that bars email blocks.
@@ -406,9 +409,9 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
       }] : []),
       {
         // Shown to people, never a hold for them; an autonomous agent is still refused (Juan, 7 Oct 2026).
-        rule: 'wrap', ok: wrapRuleFor.get(v.id) === true, blocking: false, agentOnly: wrapRuleFor.get(v.id) !== true,
-        detail: wrapRuleFor.get(v.id) ? `${v.exemption} × ${instrumentOf(v)}: covered by the wrap matrix; each material says whether it may go.`
-          : `No wrap rule on file for ${v.exemption} × ${instrumentOf(v)}, so materials for this vehicle are not checked against one. A person may send; an autonomous agent may not.`,
+        rule: 'wrap', ok: wrapCovered, blocking: false, agentOnly: !wrapCovered,
+        detail: wrapCovered ? `${v.exemption} × ${heldInstrument}: covered by the wrap matrix; each material says whether it may go.`
+          : `No wrap rule on file for ${v.exemption} × ${heldInstrument}, so materials for this LP on this vehicle are not checked against one. A person may send; an autonomous agent may not.`,
       },
     ];
     const held = checks.some((c) => !c.ok && c.blocking);
