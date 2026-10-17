@@ -243,7 +243,8 @@ async function work(slot: Slot, job: Job, root: string) {
   await writeFile(`${base}-brief.md`, brief);
   const protocol = mode === 'w1' ? 'w1-profile.md' : 'w5-strategy.md';
   const runId = await beginRun({ parentRunId: null, workflow: mode === 'w1' ? 'W1' : 'W5', operation: job.workflow === 'w1w5' ? 'astra profile+strategy' : job.workflow === 'w5t' ? 'astra shorten strategies' : job.workflow === 'w1s' ? 'astra search pass' : job.workflow === 'w5r' ? 'astra revise strategies' : `astra ${mode}`,
-    protocol: { version: null, hash: sha(template + await readFile(join(REPO, 'docs', 'workflows', protocol), 'utf8')) },
+    // The filled brief (template, common.md and this batch's values), the protocol and the runner's commit pin what the run meant.
+    protocol: { version: await git('rev-parse', 'HEAD').then((h) => h.slice(0, 12), () => null), hash: sha(brief + await readFile(join(REPO, 'docs', 'workflows', protocol), 'utf8')) },
     source: 'chatgpt', agent: 'astra-runner', model: MODELS[0], launchFolder: REPO, workerFolder: slot.folder,
     batch: { id: batch, manifest: `enrich/batches/${basename(file)}`, hash: sha(text), planned: keys.length } });
   await reportJob(job.id, 'running', { batch, slot: slot.name, model: MODELS[0], counts: { selected: keys.length } });
