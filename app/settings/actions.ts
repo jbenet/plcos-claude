@@ -37,11 +37,15 @@ export async function createMcpTokenAction(formData: FormData): Promise<MadeToke
   if (user.vehicles !== null && chosen.some((v) => !user.vehicles!.includes(v))) return { ok: false, error: 'A token cannot see a vehicle you cannot.' };
   const live = (await listMcpTokens(user.id)).filter((t) => !t.revokedAt && new Date(t.expiresAt) > new Date());
   if (live.length >= 10) return { ok: false, error: 'You have ten live tokens. Revoke one you no longer use first.' }; // GUESS: plenty for one person's devices
+  // Autonomous, opt in (docs/27 open item 6; rule 3): an outreach token for an agent with no person clicking is marked, so
+  // every call it makes is autonomous whatever the call says. Off by default: an unmarked token is unchanged.
+  const { AUTONOMOUS_MARK } = await import('@/lib/mcp/envelope');
+  const autonomous = preset.startsWith('outreach') && formData.get('autonomous') === '1' ? [AUTONOMOUS_MARK] : [];
   const { token, secret } = await createMcpToken(user, {
     label,
     tools: sync ? sync : preset === 'draft' ? [...TOOL_NAMES]
-      : preset === 'outreach-read' ? [...READ_TOOLS, OUTREACH_READ]
-        : preset === 'outreach-write' ? [...READ_TOOLS, OUTREACH_READ, OUTREACH_WRITE] : [...READ_TOOLS],
+      : preset === 'outreach-read' ? [...READ_TOOLS, OUTREACH_READ, ...autonomous]
+        : preset === 'outreach-write' ? [...READ_TOOLS, OUTREACH_READ, OUTREACH_WRITE, ...autonomous] : [...READ_TOOLS],
     vehicles: chosen.length && !sync ? chosen : null, callsPerDay: config.mcp.defaultCallsPerDay, days,
   });
   revalidatePath('/settings');

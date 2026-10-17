@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { revokeMcpTokenAction } from '@/app/settings/actions';
 import { auth } from '@/lib/auth';
 import { can } from '@/lib/authz';
+import { AUTONOMOUS_MARK } from '@/lib/mcp/envelope';
 import { READ_TOOLS, TOOLS } from '@/lib/mcp/tools';
 import { shortDate, ago } from '@/lib/time';
 import { listMcpTokens, listVehicles } from '@/modules/platform';
@@ -59,7 +60,8 @@ export async function McpTokens() {
                     <td><b>{t.label}</b><br /><span className="mono muted" style={{ fontSize: 11 }}>{t.prefix}…</span></td>
                     <td>{t.tools.includes(SYNC_ADMIN) ? 'Admin' : t.tools.includes(SYNC_SNAPSHOT) ? 'Snapshot (cloud-pull)' : t.tools.includes(SYNC_PUSH) ? 'Push research (cloud-push)'
                       : t.tools.includes(OUTREACH_WRITE) ? 'Outreach desk: read and write' : t.tools.includes(OUTREACH_READ) ? 'Outreach desk: read'
-                      : t.tools.some((x) => !READ_TOOLS.includes(x)) ? 'Read and draft' : 'Read'}</td>
+                      : t.tools.some((x) => !READ_TOOLS.includes(x)) ? 'Read and draft' : 'Read'}
+                      {t.tools.includes(AUTONOMOUS_MARK) && <><br /><span className="muted" style={{ fontSize: 11 }} title="Every call counts as autonomous: a send or intro ask needs an approved ticket">autonomous: no person clicks</span></>}</td>
                     <td>{t.vehicles ? t.vehicles.map((v) => vname.get(v) ?? 'unknown').join(', ') : 'All of yours'}</td>
                     <td>{shortDate(new Date(t.createdAt))}</td>
                     <td>{t.lastUsedAt ? ago(new Date(t.lastUsedAt)) : 'never'}

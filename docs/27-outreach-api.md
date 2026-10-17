@@ -949,9 +949,11 @@ part is `lib/redact-health.ts`, applied to every text field the queue returns. N
 3. ~~INTRO_ASK sends~~ — answered 5 Oct: `outreach_link_message` with an INTRO_ASK ticket records the ask made, by email.
 4. **Rate of sends:** MailGuard rate-limits juanmail; Capital OS limits calls, not sends. A cap per day here?
 5. **Webhooks**, if polling the cursor turns out too slow or too costly.
-6. **Marking a token autonomous in Preferences.** The flag works on a call today; a token is marked by `mode:autonomous`
-   in its list, which Preferences cannot set yet (the settings pages are the deploy branch's this week). Add the
-   checkbox there when that branch lands.
+6. ~~Marking a token autonomous in Preferences~~ — done 17 Oct 2026. Preferences → MCP access offers "Autonomous (an
+   agent running with no person clicking)" on the two outreach presets, off by default; ticked, the token carries
+   `mode:autonomous` in its list and every call it makes is autonomous whatever its header or `_meta` says. The token list
+   shows the mark. Existing tokens are unchanged: unmarked, they are autonomous only on a call marked so. Open: whether
+   juanmail's own token should be remade marked — Juan's call.
 7. **A person's intro asks are not counted as asks** (5 Oct 2026). `asksThisQuarter` and the ask cap read
    `coordination.ask`; an intro ask Juan sends from juanmail and links to the LP is a linked message, not a recorded ask,
    so it is not counted. Either juanmail records the ask too (the routes page's "record an ask" has no API yet), or a link

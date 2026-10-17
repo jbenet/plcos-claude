@@ -154,6 +154,15 @@ export async function requestTicket(ctx: DeskContext, raw: Record<string, unknow
     const p = await deskPursuit(ctx, a.pursuitId, db);
     if (a.kind === 'SEND' && !a.scope.recipients?.length) throw new OutreachRefused(400, 'A SEND ticket names its recipients (scope.recipients): the approval covers them and nobody else.');
     if (a.kind === 'INTRO_ASK' && !a.connectorId) throw new OutreachRefused(400, 'An INTRO_ASK names the connector who would introduce (connectorId).');
+    // Every autonomous SEND or INTRO_ASK clears the send gate the Materials page uses, attachment or not (rules 8 and 12;
+    // red team, 17 Oct 2026: it ran only with an assetId, so a grants funder's invitation went unchecked on a plain send).
+    // The material's wrap is checked below, only when there is one. A person's request opens nothing and is not gated here.
+    const gate = ctx.env.autonomous ? await sendGate(p.entity_id, p.vehicle_id) : null;
+    if (gate?.refusals.length) {
+      const why = can(ctx.env.principal, 'read', { vehicle: p.vehicle_id, fieldClass: 'R4' });
+      const said = gate.refusals.map((r) => (!why && r.startsWith('A do-not-contact restriction') ? 'A do-not-contact restriction is on file (reasons withheld at your access).' : r));
+      throw new OutreachRefused(409, `Refused, no ticket opened: ${said.join(' ')}`);
+    }
     const row = (await outreachQueue(ctx.env.principal, { vehicle: p.slug, pursuitId: p.pursuit_id })).data.rows[0] as { checks: Check[] } | undefined;
     if (!row) throw new OutreachRefused(409, 'This LP is not in the queue (passed, or not readable): no ticket was opened.');
     // The people addressed, not only the LP the mail is about (rule 8; red team, 17 Oct 2026): a restricted contact at
@@ -214,11 +223,11 @@ export async function requestTicket(ctx: DeskContext, raw: Record<string, unknow
         if (a.assetId) {
           // The instrument and gates the Materials page uses (rules 8, 11, 12; red team, 17 Oct 2026: the desk wrapped a
           // grants-rail send, or an LP holding another instrument, as a commitment).
-          const gate = await sendGate(p.entity_id, p.vehicle_id);
-          if (gate.refusals.length) throw new OutreachRefused(409, `Refused, no ticket opened: ${gate.refusals.join(' ')}`);
-          const m = await proposeDeskSend(actor, { assetId: a.assetId, entityId: p.entity_id, vehicleId: p.vehicle_id, instrument: gate.instrument }, tx);
+          // The gate ran above (this path is autonomous only); its instrument is the LP's own on the vehicle.
+          const instrument = gate?.instrument ?? (await sendGate(p.entity_id, p.vehicle_id)).instrument;
+          const m = await proposeDeskSend(actor, { assetId: a.assetId, entityId: p.entity_id, vehicleId: p.vehicle_id, instrument }, tx);
           if (!m.sendId) throw new OutreachRefused(409, `Refused by the wrap check, no ticket opened: ${m.check.refusals.join(' ')}`);
-          contentSendId = m.sendId; material = `${m.title} (v${m.version})`; wrapped = gate.instrument;
+          contentSendId = m.sendId; material = `${m.title} (v${m.version})`; wrapped = instrument;
         }
         const sendId = randomUUID();
         const ticketId = await openTicket(actor, {

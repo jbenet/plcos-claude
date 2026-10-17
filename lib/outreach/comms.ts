@@ -17,7 +17,7 @@ import { AUTONOMOUS, PERSON, requireApprovedTicket, TicketRequired } from '@/mod
 import { CHANNEL_LABEL, DIRECTION_LABEL, aboutThisRaise, eventAbout, raiseWindows, type Touchpoint } from '@/modules/meetings';
 import { appendAudit, listVehicles } from '@/modules/platform';
 import type { Envelope } from '@/lib/mcp/envelope';
-import { peopleWithAddress } from './addresses';
+import { barredRecipients, emailBars, peopleWithAddress } from './addresses';
 import { OutreachRefused } from './reads';
 
 /**
@@ -267,7 +267,16 @@ type Desk = Awaited<ReturnType<typeof pursuitFor>>;
  * unused, and — for a SEND — every recipient within it; a material's wrap check runs again. Marks it used. Any refusal
  * throws, and the whole link rolls back.
  */
-async function useTicket(tx: Queryable, ticket: Ticketed, a: { sentAt: Date; recipients: string[]; gmailMessageId: string; ownerId: string; acting: typeof PERSON }) {
+async function useTicket(tx: Queryable, ticket: Ticketed, a: { sentAt: Date; recipients: string[]; gmailMessageId: string; ownerId: string; acting: typeof PERSON; entityId: string }) {
+  // A restriction recorded after the approval (red team, 17 Oct 2026): rule 8 already refuses an agent, so an autonomous
+  // send is checked again at record time — the LP's own email bars and every person addressed — whatever the ticket says.
+  // A person who names a ticket is shown restrictions where they send; this does not block them.
+  if (a.acting.autonomous) {
+    const [barred, bars] = await Promise.all([barredRecipients(a.recipients, tx), emailBars(a.entityId, tx)]);
+    if (barred.length || bars.length) {
+      throw new OutreachRefused(409, `A do-not-contact restriction is on file for ${barred.length ? barred.map((b) => b.address).join(', ') : 'this LP'}, recorded or found after the approval: an autonomous send to them is refused. Nothing was linked.`);
+    }
+  }
   try {
     await requireApprovedTicket(tx, ticket.kind === 'SEND'
       ? { kind: 'SEND', subjectType: ticket.contentSendId ? 'send' : 'outreach_send', subjectId: ticket.contentSendId ?? ticket.sendId, ticketId: ticket.ticketId }
@@ -363,7 +372,7 @@ export async function link(ctx: Ctx, raw: Record<string, unknown>) {
         if (!ticket && acting.autonomous) {
           throw new OutreachRefused(409, 'An autonomous send needs an approved, unexpired SEND ticket covering these recipients (outreach_request_ticket, then a person approves it). Nothing was linked.');
         }
-        if (ticket) await useTicket(tx, ticket, { sentAt, recipients, gmailMessageId: a.gmailMessageId, ownerId: owner.id, acting });
+        if (ticket) await useTicket(tx, ticket, { sentAt, recipients, gmailMessageId: a.gmailMessageId, ownerId: owner.id, acting, entityId: p.entity_id });
       }
       const linkId = (await tx.one<{ id: string }>(`insert into email.message_link (message_id, gmail_id, thread_id, sent_at, direction, from_addr, to_addrs, cc_addrs, subject, body,
           pursuit_id, ticket_id, outreach_send_id, autonomous, linked_by, token_id)

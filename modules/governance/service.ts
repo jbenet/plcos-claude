@@ -149,22 +149,36 @@ export { appendAudit };
 
 /**
  * A do-not-contact restriction recorded on someone ends their open SEND and INTRO_ASK tickets at once, and SEND tickets that
- * would mail one of their addresses at a firm: an approval given
- * before it would otherwise still let an agent send until it expired (rule 8; red-team pass, 14 Oct 2026). Unused
- * tickets only; the number ended.
+ * would mail them: an approval given before it would otherwise still let an agent send until it expired (rule 8; red-team
+ * pass, 14 Oct 2026). "Would mail them" is what barredRecipients (lib/outreach/addresses.ts) refuses at send time (red team,
+ * 17 Oct 2026): an address of theirs on record (a claim, Affinity's person record, their send-to), and for a firm the
+ * addresses of the people whose current primary firm it is; and an intro ask that would email them as its connector.
+ * Unused tickets only; the number ended. It may end a little more than barredRecipients would refuse (Dakota addresses
+ * count here), never less.
  */
 export async function expireOutreachTicketsFor(q: Queryable, entityId: string): Promise<number> {
-  const rows = await q.query<{ id: string }>(`update governance.approval_ticket t set expires_at = now()
+  const rows = await q.query<{ id: string }>(`with x as (select identity.canonical_entity_id($1::uuid) id),
+     them as (select id from x
+       union select identity.canonical_entity_id(a.person_entity) from identity.affiliation a, x
+        where a.ended_on is null and a.is_primary and coalesce(a.source, '') !~* '^dakota' and identity.canonical_entity_id(a.org_entity) = x.id),
+     addr as (
+       select lower(btrim(c.value)) a from research.claim c
+        where c.superseded_by is null and c.field ~ '(^|\\.)email$' and identity.canonical_entity_id(c.entity_id) in (select id from them)
+       union select lower(btrim(s.email)) from identity.send_to s where identity.canonical_entity_id(s.entity_id) in (select id from them)
+       union select lower(btrim(e.v)) from sources.raw_record r
+         join identity.source_record sr on sr.source = 'affinity' and sr.source_id = 'person:' || r.source_id
+         cross join lateral (select r.payload->>'primaryEmailAddress' v
+           union all select jsonb_array_elements_text(case when jsonb_typeof(r.payload->'emailAddresses') = 'array' then r.payload->'emailAddresses' else '[]'::jsonb end)) e
+        where r.source = 'affinity' and r.kind = 'person' and e.v is not null and identity.canonical_entity_id(sr.entity_id) in (select id from them))
+   update governance.approval_ticket t set expires_at = now()
      where t.kind in ('SEND', 'INTRO_ASK') and (t.expires_at is null or t.expires_at > now())
        and (t.id in (select o.ticket_id from email.outreach_send o where o.sent_at is null and o.ticket_id is not null
-                      and identity.canonical_entity_id(o.entity_id) = identity.canonical_entity_id($1::uuid))
-         -- Or a ticket that would mail them at a firm: an address of theirs among its recipients (red team, 17 Oct 2026).
+                      and identity.canonical_entity_id(o.entity_id) = (select id from x))
          or t.id in (select o.ticket_id from email.outreach_send o where o.sent_at is null and o.ticket_id is not null
-                      and exists (select 1 from research.claim c where c.superseded_by is null and c.field ~ '(^|\.)email$'
-                        and identity.canonical_entity_id(c.entity_id) = identity.canonical_entity_id($1::uuid)
-                        and lower(btrim(c.value)) in (select lower(btrim(x)) from unnest(o.recipients) x)))
+                      and exists (select 1 from unnest(o.recipients) r where lower(btrim(r)) in (select a from addr)))
          or (t.subject_type = 'ask' and t.subject_id in (select a.ask_id from coordination.ask a
-                      where identity.canonical_entity_id(a.entity_id) = identity.canonical_entity_id($1::uuid))))
+                      where identity.canonical_entity_id(a.entity_id) = (select id from x)
+                         or identity.canonical_entity_id(a.connector_id) = (select id from x))))
      returning t.id::text id`, [entityId]);
   return rows.length;
 }

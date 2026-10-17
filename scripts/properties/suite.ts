@@ -99,6 +99,7 @@ export async function runProperties(check: Check) {
   await step('outreach.outreachProperties', async () => (await import('./outreach')).outreachProperties(check, db));
   await step('outreach-api.outreachReadProperties', async () => (await import('./outreach-api')).outreachReadProperties(check, db));
   await step('outreach-writes.outreachWriteProperties', async () => (await import('./outreach-writes')).outreachWriteProperties(check, db));
+  await step('outreach-autonomy.outreachAutonomyProperties', async () => (await import('./outreach-autonomy')).outreachAutonomyProperties(check, db));
   await step('outreach-mcp.outreachMcpProperties', async () => (await import('./outreach-mcp')).outreachMcpProperties(check, db));
   await step('outreach-parties.outreachPartiesProperties', async () => (await import('./outreach-parties')).outreachPartiesProperties(check, db));
   await step('outreach-parties.outreachResearchProperties', async () => (await import('./outreach-parties')).outreachResearchProperties(check, db));
