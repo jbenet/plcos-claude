@@ -210,7 +210,7 @@ export async function addCandidate(db: Db, actor: string, input: { key: string; 
           values ('calendar:guest-domain', 'Calendar guests'' email domains', 'calendar', 'calendar', current_date, 'weak',
                   'That a firm''s people write from this email domain, as a person on the team said when adding the firm from a calendar meeting.', '')
           on conflict (doc_id) do nothing`);
-      if (!await tx.one(`select 1 from research.claim where identity.canonical_entity_id(entity_id) = $1 and field = 'email_domain' and lower(value) = $2 and superseded_by is null`, [entityId, c.domain])) {
+      if (!await tx.one(`select 1 from research.claim where entity_id = any(identity.alias_ids(array[$1::uuid])) and field = 'email_domain' and lower(value) = $2 and superseded_by is null`, [entityId, c.domain])) {
         await tx.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence, last_verified_by, last_verified_at)
             values ($1, 'email_domain', $2, 'calendar:guest-domain', current_date, 'medium', $3, now())`, [entityId, c.domain, actor]);
       }

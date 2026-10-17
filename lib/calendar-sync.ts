@@ -167,7 +167,7 @@ export async function partiesOf(addresses: string[], q: Queryable): Promise<Map<
      order by email, rank, id`, [addresses]);
   if (!people.length) return out;
   const firms = await q.query<{ person: string; firm: string }>(`select distinct identity.canonical_entity_id(person_entity)::text person, identity.canonical_entity_id(org_entity)::text firm
-      from identity.affiliation where ended_on is null and identity.canonical_entity_id(person_entity) = any($1::uuid[])`, [[...new Set(people.map((p) => p.id))]]);
+      from identity.affiliation where ended_on is null and person_entity = any(identity.alias_ids($1::uuid[]))`, [[...new Set(people.map((p) => p.id))]]);
   for (const p of people) out.set(p.email, { person: p.id, firms: firms.filter((f) => f.person === p.id).map((f) => f.firm).sort() });
   return out;
 }
