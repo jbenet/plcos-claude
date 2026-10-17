@@ -143,6 +143,8 @@ const TYPES = /^data:(image\/(?:png|jpeg|gif|webp));base64,([A-Za-z0-9+/=]+)$/;
 const MAX_B64 = 12_000_000;
 /** GUESS: every picture together. A report over it is refused with 413 rather than journaled. */
 export const MAX_TOTAL_B64 = 40_000_000;
+/** A whole report's body: the pictures plus room for its text. Reading stops past it (app/api/feedback). */
+export const MAX_REPORT_BODY = MAX_TOTAL_B64 + 2_000_000;
 const KINDS = new Set(['bug', 'request', 'question', 'chore']);
 const PRIORITIES = new Set(['P0', 'P1', 'P2', 'P3']);
 

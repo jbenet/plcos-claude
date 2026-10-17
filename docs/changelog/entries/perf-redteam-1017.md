@@ -24,6 +24,9 @@ data on Juan's Mac.
 - **Id columns stay compact when some ids repeat.** A packed column of ids is sent in the 22-character form unless
   a shared dictionary would be shorter; the floor's LP ids (5,037 distinct in 6,039 rows) went from 236 to 133 KB.
   On the real data: all/visualizations 1,058 → 956 KB, coverage 1.51 → 1.32 MB, all/pipeline 2.61 → 2.44 MB.
+- **Suggestions and vehicle readings are read once per version.** The same version check (`modules/strategy/by-version.ts`)
+  keeps the wide values of each suggestion and reading until its row changes. On the real data: all/fit after a write
+  230 → 132 ms, all/pipeline's SQL 976 → 682 ms, conversion 515 → 490 ms.
 
 ### Red team
 
@@ -79,6 +82,14 @@ data on Juan's Mac.
 - **An intro ask's ticket covers mail to its connector.** A message linked under an INTRO_ASK ticket was accepted
   whoever it went to, the LP included. At least one recipient must now be the connector, by an address on record.
   And no ticket is spent on a sent message that names no recipients: it said nothing of who got the mail.
+- **A stranger's invite is not a meeting held.** A calendar invite from outside landed as a meeting with that LP even
+  when nobody here had answered it, so Reconciliation recorded the conversation rungs (connector, opted in, meeting
+  held) from it. An outside invite now counts only once someone here accepted it (yes or maybe), and a guest who
+  declined is not a guest. One added before goes after the next whole read.
+- **Markdown links go only to the web, mail or this app.** A link in feedback, a commitment or a doc could carry any
+  scheme or a `//host`; those now show as text.
+- **The feedback form has an overall size limit.** The browser route read the whole body before checking each
+  picture; it now stops reading past 42 MB (the pictures' 40 MB plus text) and answers 413, as the token route does.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -138,3 +149,5 @@ data on Juan's Mac.
 - Under an intro ask's ticket, recipients other than the connector are not checked against restrictions.
 - A push identical to an earlier one answers that push's run and job ids, whoever pushed it; the job itself answers
   only its own pusher.
+- DocSend visits name the visitor by the email they typed, unchecked. Visits feed only the conversion charts, never
+  the consent ladder, so a made-up address can't move an LP.

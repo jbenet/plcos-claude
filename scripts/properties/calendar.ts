@@ -290,6 +290,23 @@ export async function calendarProperties(check: Check) {
     check('Calendar: a read with no calendar change adds and removes nothing, even for a meeting that is already Affinity’s for one of its LPs',
       firstRead.affinity >= 1 && both.length === 2 && both.every((x) => x.entity === lena || x.entity === firm) && second.added === 0 && second.removed === 0,
       JSON.stringify({ first: [firstRead.added, firstRead.removed, firstRead.affinity], second: [second.added, second.removed], rows: both.length }));
+
+    // An invite from outside that nobody here accepted is not a meeting held, and a guest who declined is not a guest
+    // (red team, 17 Oct 2026): neither adds a touchpoint, so Reconciliation records no rung for it.
+    const lenaAt = (id: string, day: string, mine: string) => ev(id, `${day}T15:00:00Z`, [], { organizer: { email: 'lena@invented-cal.example' },
+      attendees: [{ email: 'lena@invented-cal.example', organizer: true, responseStatus: 'accepted' }, { email: juan.email, self: true, responseStatus: mine }] });
+    const declinedGuest = ev('dec1', '2026-09-23T15:00:00Z', [], { organizer: { email: juan.email, self: true },
+      attendees: [{ email: juan.email, self: true, organizer: true, responseStatus: 'accepted' }, { email: 'lena@invented-cal.example', responseStatus: 'declined' }] });
+    await fakeCalendar(dir, juan.email, { id: 'primary' }, [lenaAt('inv1', '2026-09-20', 'needsAction'), lenaAt('inv2', '2026-09-21', 'declined'), lenaAt('inv3', '2026-09-22', 'accepted'), declinedGuest]);
+    await sync();
+    const invites = async () => db.query<{ day: string }>(`select held_on::text "day" from meetings.meeting where source = 'calendar' and held_on between '2026-09-20' and '2026-09-23' order by 1`);
+    const inv = await invites();
+    await fakeCalendar(dir, juan.email, { id: 'primary' }, [lenaAt('inv3', '2026-09-22', 'needsAction')]);
+    const unaccepted = await sync();
+    const invAfter = await invites();
+    check('Calendar: an outside invite counts only once someone here accepts it; an unanswered or declined one, or a guest who declined, adds no meeting, and one no longer accepted goes',
+      inv.length === 2 && inv.every((x) => x.day === '2026-09-22') && unaccepted.complete && !invAfter.length,
+      JSON.stringify({ first: inv.map((x) => x.day), invAfter: invAfter.map((x) => x.day) }));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

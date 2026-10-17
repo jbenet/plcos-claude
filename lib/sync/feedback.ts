@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { config } from '@/config/deployment';
+import { cappedText } from '@/lib/body-cap';
 import { issues, type IssueSink, type IssueStatus } from '@/lib/issues';
 import { MAX_IDS } from '@/lib/feedback-signal';
 import { auditSync, type SyncCaller } from './auth';
@@ -119,8 +120,8 @@ export async function fileFeedbackByToken(caller: SyncCaller, request: Request, 
   if (config.data.copyTakenAt || !(o.filesHere ?? feedbackHome(config.data.profile).filesHere)) {
     return answer(403, 'refused', { error: 'Feedback is filed on the live server.' }, { reason: 'not-live' });
   }
-  const text = await request.text();
-  if (text.length > MAX_REPORT) return answer(413, 'invalid', { error: 'The report is too large.' }, { reason: 'size' });
+  const text = await cappedText(request, MAX_REPORT);
+  if (text === null) return answer(413, 'invalid', { error: 'The report is too large.' }, { reason: 'size' });
   let raw: Record<string, unknown>;
   try { raw = JSON.parse(text); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return answer(422, 'invalid', { error: 'Send a report object.' }, { reason: 'shape' });

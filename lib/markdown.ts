@@ -258,3 +258,14 @@ export function groupChangelog(blocks: Block[]): ChangelogDoc {
 
   return { preamble, entries };
 }
+
+/**
+ * Where a Markdown link may go: the web or mail (`web`), a page of this app (`app`), or nowhere, shown as text
+ * (red team, 17 Oct 2026): any other scheme (javascript:, data:, vbscript:) and a //host are refused.
+ */
+export function linkKind(href: string): 'web' | 'app' | null {
+  if (/^(https?:\/\/|mailto:)/i.test(href)) return 'web';
+  const bare = href.replace(/[\s\u0000-\u001f]/g, '');
+  if (!bare || /^[a-z][a-z0-9+.-]*:/i.test(bare) || /^[/\\]{2}/.test(bare)) return null;
+  return 'app';
+}

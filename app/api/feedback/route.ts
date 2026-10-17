@@ -12,7 +12,8 @@ import { NextResponse } from 'next/server';
 import { config } from '@/config/deployment';
 import { feedbackHome } from '@/config/ports';
 import { isClientId } from '@/lib/feedback-journal';
-import { checkReport, inboxStatus, journal } from '@/lib/feedback-inbox';
+import { checkReport, inboxStatus, journal, MAX_REPORT_BODY } from '@/lib/feedback-inbox';
+import { cappedText } from '@/lib/body-cap';
 import { newRequestKey } from '@/lib/request-key';
 
 const issuesRoot = () => join(process.cwd(), config.issues.dir);
@@ -37,9 +38,12 @@ export const POST = withRoute('app/api/feedback/route.ts#POST', async function(r
   const { feedbackReporter } = await import('@/lib/auth/reporter');
   const who = await feedbackReporter();
   if ('refused' in who) return who.refused;
+  // Capped as the token route is (red team, 17 Oct 2026): reading stops past the limit, so no body is held whole.
+  const text = await cappedText(req, MAX_REPORT_BODY);
+  if (text === null) return NextResponse.json({ error: 'The report is too large.' }, { status: 413 });
   let raw: Record<string, unknown>;
   try {
-    raw = (await req.json()) as Record<string, unknown>;
+    raw = JSON.parse(text) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: 'The report did not arrive whole. It is still in your browser; it will be sent again.' }, { status: 400 });
   }

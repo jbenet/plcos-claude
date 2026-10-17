@@ -69,7 +69,7 @@ export interface CalendarSyncResult {
   window: { from: string; to: string };
 }
 
-interface Seen { event: CalendarEvent; holders: Set<string> }
+interface Seen { event: CalendarEvent; holders: Set<string>; accepted: boolean }
 
 const startOf = (e: CalendarEvent) => (e.start.dateTime ? new Date(e.start.dateTime) : e.start.date ? new Date(`${e.start.date}T00:00:00Z`) : null);
 /** One occurrence across everyone's calendars: Google keeps one iCalUID for an event in every guest's calendar. */
@@ -229,7 +229,10 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
           if (!start) return;
           const k = keyOf(e, start);
           if (e.status === 'cancelled') { cancelled.add(k); return; }
-          const s = seen.get(k) ?? { event: e, holders: new Set<string>() };
+          const s = seen.get(k) ?? { event: e, holders: new Set<string>(), accepted: false };
+          // Held, not just received: the holder made it, or said yes or maybe. An invite nobody answered is a stranger's ask.
+          const me = e.attendees.find((a) => a.self);
+          if (e.organizer?.self || !me || me.responseStatus === 'accepted' || me.responseStatus === 'tentative') s.accepted = true;
           // A guest's copy can lack the description the organizer's has: keep the fuller one.
           if (!s.event.description && e.description) s.event = e;
           s.holders.add(u.id);
@@ -257,8 +260,12 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
     try { fundraise = (await (await import('@/lib/real/init')).readInit()).init?.fundraiseDomains ?? []; } catch { /* no init file: the team's addresses still say */ }
     const ours = new Set([...[...team.keys()].map(domainOf).filter((d) => !PUBLIC_MAIL.has(d)), ...fundraise, ...PL_DOMAINS].map((d) => d.toLowerCase()));
     const isOurs = (a: string) => team.has(a) || ours.has(domainOf(a));
+    // A meeting someone outside sent that nobody here accepted is not a meeting held (red team, 17 Oct 2026): left out,
+    // so it adds no touchpoint and no rung, and one added before is gone after a whole read.
+    for (const [k, s] of seen) if (!s.accepted && !(s.event.organizer?.email && isOurs(s.event.organizer.email.toLowerCase()))) seen.delete(k);
+    r.events = seen.size;
     const nameOf = new Map(users.map((u) => [u.id, u.name]));
-    const guestsOf = (e: CalendarEvent) => [...new Set([e.organizer?.email, ...e.attendees.filter((a) => !a.resource).map((a) => a.email)]
+    const guestsOf = (e: CalendarEvent) => [...new Set([e.organizer?.email, ...e.attendees.filter((a) => !a.resource && a.responseStatus !== 'declined').map((a) => a.email)]
       .filter((a): a is string => !!a && !NOT_A_PERSON.test(a)).map((a) => a.toLowerCase()))];
     /** The outside guests of an LP meeting's candidate, or none: no guests besides the holder, all ours, or nobody of ours. */
     const outsideOf = (e: CalendarEvent) => {

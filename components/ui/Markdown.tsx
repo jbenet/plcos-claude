@@ -1,5 +1,5 @@
 import Link from '@/components/ui/AppLink';
-import { parseInline, parseMarkdown, type Block, type Inline } from '@/lib/markdown';
+import { linkKind, parseInline, parseMarkdown, type Block, type Inline } from '@/lib/markdown';
 
 /**
  * The small markdown renderer, as components.
@@ -41,11 +41,10 @@ export function Spans({
         }
         if (s.kind === 'link') {
           const href = s.href ?? '';
-          return href.startsWith('http') ? (
-            <a key={i} href={href} target="_blank" rel="noreferrer">{s.text}</a>
-          ) : (
-            <Link key={i} href={href}>{s.text}</Link>
-          );
+          const kind = linkKind(href);
+          if (kind === 'web') return <a key={i} href={href} target="_blank" rel="noreferrer">{s.text}</a>;
+          if (kind === 'app') return <Link key={i} href={href}>{s.text}</Link>;
+          return <span key={i}>{s.text}</span>;
         }
         return <span key={i}>{s.text}</span>;
       })}

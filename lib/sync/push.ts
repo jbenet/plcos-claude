@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { cappedText } from '@/lib/body-cap';
 import { copyFile, link, mkdir, readdir, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { config } from '@/config/deployment';
@@ -97,22 +98,6 @@ async function earlierVersions(enrich: string, key: string): Promise<Array<{ fac
   const runs = await readdir(join(enrich, 'inbox')).catch(() => [] as string[]);
   const found = await Promise.all(runs.map((run) => readJson(join(enrich, 'inbox', run, 'replaced', 'raw', `${key}.json`))));
   return found.filter((x): x is { facts?: unknown[] } => !!x && typeof x === 'object');
-}
-
-/** The body as text, or null once it passes `max` bytes (reading stops there). */
-async function capped(request: Request, max: number): Promise<string | null> {
-  if (!request.body) return '';
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let n = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    n += value.byteLength;
-    if (n > max) { await reader.cancel().catch(() => undefined); return null; }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks).toString('utf8');
 }
 
 /** What the server holds that the push would contradict. */
@@ -220,7 +205,7 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
   if (declared > config.sync.maxPushBytes) return answer(413, 'invalid', { error: `The push is larger than ${config.sync.maxPushBytes} bytes; push the batch in parts.` }, { reason: 'size', bytes: declared });
   // Read whole before taking the one-at-a-time flag, and never past the limit (red-team pass, 17 Oct 2026: a chunked
   // body has no length to check, and a slow one held the flag against every other push while it was read).
-  const raw = await capped(request, config.sync.maxPushBytes);
+  const raw = await cappedText(request, config.sync.maxPushBytes);
   if (raw === null) return answer(413, 'invalid', { error: `The push is larger than ${config.sync.maxPushBytes} bytes; push the batch in parts.` }, { reason: 'size' });
   const bytes = Buffer.byteLength(raw, 'utf8');
   if (g.__syncPushBusy) return answer(409, 'refused', { error: 'Another push is being taken. Try again in a moment.' }, { reason: 'busy' });
