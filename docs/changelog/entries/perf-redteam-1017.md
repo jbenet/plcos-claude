@@ -120,6 +120,14 @@ data on Juan's Mac.
   sender also no longer uses licensed (Dakota) addresses.
 - **An invite nobody accepted counts only if one of us sent it.** Today's invite fix kept any meeting organized from a
   Protocol Labs domain; the organizer must now be a team member's own address.
+- **Record merges are on the audit log.** Merging duplicates (by rule or by review), separating records and retyping
+  them wrote only a run receipt, while undoing any of them was audited. Each run that merges, separates or retypes
+  now writes one audit row naming the records; reopening a separation and an Admin's type correction are audited too.
+- **Licensed data is matched as everywhere else.** The research read layer hid a claim or source only when its source
+  was exactly "dakota"; it now matches `dakota…` ids and any Dakota origin, as the other readers do. Nothing writes
+  such records today: this closes the gap before something does.
+- **Searches say what they covered.** The MCP routes answer with no route now names what was searched, as of when,
+  and that none found is not none (rule 7); the name search adds its date.
 - **The feedback form has an overall size limit.** The browser route read the whole body before checking each
   picture; it now stops reading past 42 MB (the pictures' 40 MB plus text) and answers 413, as the token route does.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.

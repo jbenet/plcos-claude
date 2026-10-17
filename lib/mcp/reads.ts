@@ -88,6 +88,7 @@ export async function search(user: AppUser, a: { query: string; kind?: 'any' | '
     data: rows.slice(0, limit),
     coverage: {
       corpus: 'Names of people and organisations recorded in this system (identity records), matched as a substring, case-insensitive.',
+      asOf: new Date().toISOString(),
       matched: rows.length, shown: Math.min(limit, rows.length), outsideYourVehicles: outsideScope,
       note: globalReader(user) ? 'No match means none recorded here, not that they do not exist.'
         : 'You read only LPs on your vehicles; people and organisations without a pursuit there are not listed.',
@@ -218,7 +219,10 @@ export async function routesTo(user: AppUser, a: { targetId: string; vehicle: st
   }
   const answer = await routeAnswer(user, v.id, await planRoutes(user.handle, target.id, 3, v.kind, 'team', undefined, { vehicleId: v.id }), a.limit ?? 10);
   return { data: answer ?? { target: target.name, routes: [], empty: 'No routes were computed for this target.' }, link: `/${v.slug}/routes?target=${target.id}`,
-    coverage: answer ? { ...answer.coverage, note: 'Routes start from the team and the PL network, up to three hops, and rank by evidence tier (A strongest).' } : undefined };
+    // Rule 7 on an empty answer too (red team, 17 Oct 2026): what was searched, as of when, and that none found is not none.
+    coverage: answer ? { ...answer.coverage, note: 'Routes start from the team and the PL network, up to three hops, and rank by evidence tier (A strongest).' }
+      : { corpus: 'The relationships recorded here (team, PL network, affiliations, meetings), up to three hops.', asOf: new Date().toISOString(),
+        note: 'No route found among these records; that is not proof none exists.' } };
 }
 
 const THROUGH_BUDGET_MS = 8000; // the routes page's own budget for this read (app/routes/page.tsx)

@@ -10,6 +10,9 @@ import { mergeImportPeople } from './import-person-dupes';
 import { applyIdentityDecisions, readIdentityDecisions, suppressSeparatedIdentityGroups,
   type IdentityDecisionInput, type IdentityDecisionReport } from './identity-decisions';
 import { config } from '@/config/deployment';
+import { appendAudit } from '@/modules/platform';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { foldIdentityReviewComponents } from './identity-review-components';
 import { resolvedIdentities } from './identity-roots';
 import { join } from 'node:path';
@@ -219,6 +222,13 @@ export async function mergeImportDuplicates(db: Db, by: string, decisionDir = jo
   return db.transaction(async tx => {
     const report = await mergeImportDuplicatesInTransaction(tx, by, [], [], { decisions });
     report.pursuitMerges = await consolidatePursuitsInTransaction(tx, by);
+    // On the audit log, as their undos are (red team, 17 Oct 2026): which records merged, separated or were retyped.
+    const separations = report.decisions?.separations ?? [];
+    if (report.merges.length || report.corrected.length || separations.length) {
+      await appendAudit({ actorId: UUID.test(by) ? by : null, action: 'identity.import_duplicates_merged', subjectType: 'identity', subjectId: null,
+        detail: { merged: report.merges.map((m) => ({ assertionId: m.assertionId, loserId: m.loserId, survivorId: m.survivorId })),
+          corrected: report.corrected, separations: separations.map((x) => x.assertionId) } }, tx);
+    }
     return report;
   });
 }
