@@ -1,6 +1,8 @@
+import { headers } from 'next/headers';
 import { config } from '@/config/deployment';
 import { currentUser } from '@/lib/auth';
 import { normalizeCode, pendingPairing } from '@/lib/desktop/pair';
+import { clientIp } from '@/lib/settings/floodgate';
 import s from '../../setup/setup.module.css';
 import { decidePairingAction } from './actions';
 
@@ -16,6 +18,11 @@ export default async function DesktopPairPage({ searchParams }: { searchParams: 
   const user = await currentUser();
   const code = normalizeCode(raw);
   const p = pendingPairing(code);
+  // Whoever starts a pairing names its port and device, and may send someone else the link (red-team pass, 17 Oct
+  // 2026): said plainly when it was started from another network than this browser's, or names a port the app does
+  // not use unless set to. Said, not refused: a VPN can put the app and the browser on different addresses.
+  const here = clientIp(await headers());
+  const elsewhere = Boolean(p?.ip && here && p.ip !== here);
   return (
     <main className={s.page}>
       <div className={s.narrow} style={{ maxWidth: 480, paddingTop: '8vh' }}>
@@ -28,6 +35,8 @@ export default async function DesktopPairPage({ searchParams }: { searchParams: 
             {!done && p && !p.approvedBy && <>
               <p>A PLC OS app that says it is on <b>{p.device}</b> asks to act as <b>{user.name}</b>. Its actions will be yours, as in this browser.</p>
               <p>Allow only if you just started signing in from the app <b>on this computer</b>: it finishes here, on this machine.</p>
+              {elsewhere && <p className={s.error} role="alert">This request was started from a different network than this browser. If you did not just press Sign in in the app yourself, refuse it: someone may have sent you this link.</p>}
+              {p.port !== 47100 && <p>It finishes at port {p.port} on this computer; the app uses 47100 unless it was set to another.</p>}
               <p>Check the app shows the same code:</p>
               <p style={{ fontFamily: 'var(--mono, monospace)', fontSize: 28, letterSpacing: 4, margin: '8px 0 0' }}>{p.userCode}</p>
             </>}

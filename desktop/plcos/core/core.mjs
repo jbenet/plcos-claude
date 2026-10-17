@@ -450,11 +450,11 @@ function statusJson() {
 
 // ---- the server ---------------------------------------------------------------------------------------------------
 
+/** The key compared in constant time (hashed first, so lengths match). */
+const isKey = (got) => timingSafeEqual(createHash('sha256').update(got).digest(), createHash('sha256').update(KEY).digest());
 function keyOk(req) {
   if (!KEY) return true;
-  const got = (req.headers.cookie ?? '').split(/;\s*/).find((c) => c.startsWith(`${KEY_COOKIE}=`))?.slice(KEY_COOKIE.length + 1) ?? '';
-  const a = createHash('sha256').update(got).digest(), b = createHash('sha256').update(KEY).digest();
-  return timingSafeEqual(a, b);
+  return isKey((req.headers.cookie ?? '').split(/;\s*/).find((c) => c.startsWith(`${KEY_COOKIE}=`))?.slice(KEY_COOKIE.length + 1) ?? '');
 }
 
 const server = http.createServer(async (req, res) => {
@@ -464,7 +464,7 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', ORIGIN);
     if (url.pathname === '/__desktop/enter') {
       const k = url.searchParams.get('k') ?? '';
-      if (!KEY || k !== KEY) { res.writeHead(403).end('wrong key'); return; }
+      if (!KEY || !isKey(k)) { res.writeHead(403).end('wrong key'); return; }
       // Same origin only, parsed as a browser would: a prefix check let `/\host` through, which browsers read as `//host`.
       let to = '/';
       try {

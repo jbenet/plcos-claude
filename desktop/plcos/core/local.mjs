@@ -15,6 +15,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -96,7 +97,13 @@ class LocalCopy {
     this.next = null;                 // the next start child
     this.pg = null;                   // pg.Pool on the local database
     this.pgManaged = !env.PLCOS_DESKTOP_DATABASE_URL;
-    this.dbUrl = env.PLCOS_DESKTOP_DATABASE_URL || `postgres://plcos@127.0.0.1:${PG_PORT}/${DB_NAME}`;
+    // The copy's Postgres trusts whoever connects, so it listens on no port, only on a socket in its own folder, which
+    // only this Mac's user can open. On 127.0.0.1 any process or account on the Mac could read and change the whole
+    // copy as superuser, with no password (red-team pass, 17 Oct 2026). A folder whose socket path would pass the
+    // system's 103-character limit puts the socket in this user's own temporary folder instead.
+    const pgDir = path.join(DATA_DIR, 'pg');
+    this.pgSocket = `${pgDir}/.s.PGSQL.${PG_PORT}`.length <= 100 ? pgDir : path.join(os.tmpdir(), 'plcos-pg');
+    this.dbUrl = env.PLCOS_DESKTOP_DATABASE_URL || `postgres://plcos@${encodeURIComponent(this.pgSocket)}:${PG_PORT}/${DB_NAME}`;
     this.secret = randomBytes(24).toString('hex');
     this.cookiePrefix = `capitalos_real_${NEXT_PORT}_`;
     this.origin = `http://127.0.0.1:${NEXT_PORT}`;
@@ -339,7 +346,10 @@ class LocalCopy {
     this.phase = this.phase === 'ready' ? 'ready' : 'preparing';
     const builds = path.join(this.dir, 'builds');
     mkdirSync(builds, { recursive: true });
-    let dir = commit ? path.join(builds, commit) : null;
+    // A build's name is a folder under builds/, from the server's answer: only a plain name (a commit), so a name like
+    // `../..` cannot point the delete and rename below outside it (red-team pass, 17 Oct 2026).
+    const plain = (name) => typeof name === 'string' && /^[0-9A-Za-z][0-9A-Za-z_-]{0,63}$/.test(name);
+    let dir = plain(commit) ? path.join(builds, commit) : null;
     if (!dir || !existsSync(path.join(dir, '.next', 'BUILD_ID'))) {
       this.detail = 'Downloading the server’s build';
       const tmp = path.join(builds, `.incoming-${Date.now()}`);
@@ -347,7 +357,8 @@ class LocalCopy {
       const archive = `${tmp}.tar.gz`;
       const res = await this.remoteFetch('/api/desktop/build');
       if (!res.ok) { const t = await res.text().catch(() => ''); rmSync(tmp, { recursive: true, force: true }); throw new Error(`the build download answered ${res.status}: ${t.slice(0, 200)}`); }
-      const got = res.headers.get('x-build-commit') || commit || 'unknown';
+      const got = res.headers.get('x-build-commit') || (plain(commit) ? commit : 'unknown');
+      if (!plain(got)) { await res.body?.cancel().catch(() => undefined); rmSync(tmp, { recursive: true, force: true }); throw new Error('the build download named no plain build'); }
       await pipeline(Readable.fromWeb(res.body), createWriteStream(archive));
       await sh('tar', ['-xzf', archive, '-C', tmp]);
       const packed = statSync(archive).size;
@@ -475,7 +486,9 @@ class LocalCopy {
       writeFileSync(path.join(deps, 'package.json'), readFileSync(path.join(dir, 'package.json')));
       writeFileSync(path.join(deps, 'package-lock.json'), lock);
       const npm = path.join(path.dirname(process.execPath), 'npm');
-      await sh(existsSync(npm) ? npm : 'npm', ['ci', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: deps, timeout: 20 * 60_000, env: { ...env, NODE_ENV: 'production' } });
+      await sh(existsSync(npm) ? npm : 'npm', ['ci', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: deps, timeout: 20 * 60_000,
+        // The packages' install scripts run with this: not the app's own keys (PLCOS_DESKTOP_KEY and the like).
+        env: { ...Object.fromEntries(Object.entries(env).filter(([k]) => !k.startsWith('PLCOS_'))), NODE_ENV: 'production' } });
       this.log('installed dependencies', hash);
     }
     const link = path.join(dir, 'node_modules');
@@ -511,22 +524,32 @@ class LocalCopy {
       const base = ['-D', data, '-U', 'plcos', '-A', 'trust', '-E', 'UTF8'];
       await sh(path.join(bin, 'initdb'), [...base, '--locale-provider=icu', '--icu-locale=en-US'], { env: pgEnv })
         .catch(() => { rmSync(data, { recursive: true, force: true }); return sh(path.join(bin, 'initdb'), base, { env: pgEnv }); });
-      // Loopback only, its socket in its own folder, and sized for one person on a laptop.
+      // Sized for one person on a laptop; where it listens is set below, on every start.
       writeFileSync(path.join(data, 'postgresql.auto.conf'), [
-        `port = ${PG_PORT}`, "listen_addresses = '127.0.0.1'", `unix_socket_directories = '${data.replace(/'/g, "''")}'`,
+        `port = ${PG_PORT}`,
         'shared_buffers = 256MB', 'work_mem = 32MB', 'max_connections = 40', 'fsync = off', 'synchronous_commit = off', 'full_page_writes = off',
       ].join('\n') + '\n');
     }
     try { writeFileSync(path.join(data, '.metadata_never_index'), ''); } catch { /* best effort: no Spotlight on the database files */ }
+    // No port, only the socket (constructor, pgSocket). Set on every start, so a copy made by an earlier version, which
+    // listened on 127.0.0.1, stops doing so; one already running that way is restarted.
+    mkdirSync(this.pgSocket, { recursive: true, mode: 0o700 });
+    const conf = path.join(data, 'postgresql.auto.conf');
+    const was = readFileSync(conf, 'utf8');
+    const now = [...was.split('\n').filter((l) => l.trim() && !/^\s*(listen_addresses|unix_socket_directories)\s*=/.test(l)),
+      "listen_addresses = ''", `unix_socket_directories = '${this.pgSocket.replace(/'/g, "''")}'`].join('\n') + '\n';
+    if (now !== was) writeFileSync(conf, now);
     const running = await sh(path.join(bin, 'pg_ctl'), ['-D', data, 'status'], { env: pgEnv }).then(() => true, () => false);
-    if (!running) await sh(path.join(bin, 'pg_ctl'), ['-D', data, '-l', path.join(data, 'server.log'), '-w', '-t', '60', 'start'], { env: pgEnv });
+    const ctl = (op) => sh(path.join(bin, 'pg_ctl'), ['-D', data, '-l', path.join(data, 'server.log'), '-w', '-t', '60', '-m', 'fast', op], { env: pgEnv });
+    if (!running) await ctl('start');
+    else if (now !== was) await ctl('restart');
     const psql = path.join(bin, 'psql');
-    const has = await sh(psql, ['-h', '127.0.0.1', '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-Atc', `select 1 from pg_database where datname = '${DB_NAME}'`], { env: pgEnv });
-    if (!has.trim()) await sh(psql, ['-h', '127.0.0.1', '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-c', `create database ${DB_NAME}`], { env: pgEnv });
+    const has = await sh(psql, ['-h', this.pgSocket, '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-Atc', `select 1 from pg_database where datname = '${DB_NAME}'`], { env: pgEnv });
+    if (!has.trim()) await sh(psql, ['-h', this.pgSocket, '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-c', `create database ${DB_NAME}`], { env: pgEnv });
     // The server's clock, not the Mac's: dates the database works out (current_date, a day's boundary) must agree with
     // Railway's. In Chicago from 7 pm to midnight they did not, and every route cached by the server was keyed to
     // tomorrow, so the copy recomputed all 7,000 of them every evening while pages waited on live searches (16 Oct 2026).
-    await sh(psql, ['-h', '127.0.0.1', '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-c', `alter database ${DB_NAME} set timezone to 'UTC'`], { env: pgEnv });
+    await sh(psql, ['-h', this.pgSocket, '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-c', `alter database ${DB_NAME} set timezone to 'UTC'`], { env: pgEnv });
     this.pgStop = () => sh(path.join(bin, 'pg_ctl'), ['-D', data, '-m', 'fast', 'stop'], { env: pgEnv }).catch(() => undefined);
   }
 
