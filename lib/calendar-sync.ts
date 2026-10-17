@@ -121,22 +121,24 @@ export const AFFINITY_PERSON_EMAILS = `
 export async function firmsByDomain(domains: string[], lps: Set<string> | null, q: Queryable): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>();
   if (!domains.length) return out;
-  const rows = await q.query<{ d: string; id: string }>(`select lower(regexp_replace(trim(c.value), '^.*@', '')) d, identity.canonical_entity_id(c.entity_id)::text id
-      from research.claim c left join research.source_doc s on s.doc_id = c.source
-      join identity.entity o on o.entity_id = c.entity_id and o.entity_type = 'org'
-     where c.superseded_by is null and c.field ~ '(^|\\.)(email|email_domain)$' and lower(regexp_replace(trim(c.value), '^.*@', '')) = any($1::text[])
-       and c.source !~* '^dakota' and coalesce(s.origin, '') !~* 'dakota'
+  // The address claims are read once for both uses; each person's affiliations through their aliases
+  // (identity.alias_pairs), never identity.canonical_entity_id() on every affiliation (performance pass, 17 Oct 2026).
+  const rows = await q.query<{ d: string; id: string }>(`with cl as materialized (
+      select lower(regexp_replace(trim(c.value), '^.*@', '')) d, c.entity_id, c.field ~ '(^|\\.)email$' person_email
+        from research.claim c left join research.source_doc s on s.doc_id = c.source
+       where c.superseded_by is null and c.field ~ '(^|\\.)(email|email_domain)$' and lower(regexp_replace(trim(c.value), '^.*@', '')) = any($1::text[])
+         and c.source !~* '^dakota' and coalesce(s.origin, '') !~* 'dakota'),
+    people as materialized (
+      select distinct d, identity.canonical_entity_id(entity_id) id from cl where person_email
+      union
+      select distinct regexp_replace(m.email, '^.*@', ''), m.id::uuid from (${AFFINITY_PERSON_EMAILS}) m where regexp_replace(m.email, '^.*@', '') = any($1::text[])),
+    pa as (select * from identity.alias_pairs(array(select distinct id from people where id is not null)))
+    select cl.d, identity.canonical_entity_id(cl.entity_id)::text id
+      from cl join identity.entity o on o.entity_id = cl.entity_id and o.entity_type = 'org'
     union
-    select lower(regexp_replace(trim(c.value), '^.*@', '')), identity.canonical_entity_id(a.org_entity)::text
-      from research.claim c left join research.source_doc s on s.doc_id = c.source
-      join identity.affiliation a on identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id(c.entity_id) and a.ended_on is null
-     where c.superseded_by is null and c.field ~ '(^|\\.)email$' and lower(regexp_replace(trim(c.value), '^.*@', '')) = any($1::text[])
-       and c.source !~* '^dakota' and coalesce(s.origin, '') !~* 'dakota'
-    union
-    select regexp_replace(m.email, '^.*@', ''), identity.canonical_entity_id(a.org_entity)::text
-      from (${AFFINITY_PERSON_EMAILS}) m
-      join identity.affiliation a on identity.canonical_entity_id(a.person_entity) = m.id::uuid and a.ended_on is null
-     where regexp_replace(m.email, '^.*@', '') = any($1::text[])
+    select people.d, identity.canonical_entity_id(a.org_entity)::text
+      from people join pa on pa.canonical_id = people.id
+      join identity.affiliation a on a.person_entity = pa.entity_id and a.ended_on is null
     union
     select lower(trim(d.v)), identity.canonical_entity_id(s.entity_id)::text
       from sources.raw_record r

@@ -72,6 +72,15 @@ export async function revokeMcpToken(owner: AppUser, tokenId: string, q?: Querya
   return true;
 }
 
+/** An Admin revokes every live token a person holds, with "Sign out everywhere" (red-team pass, 17 Oct 2026). */
+export async function revokeAllMcpTokens(actor: AppUser, userId: string, q?: Queryable): Promise<number> {
+  const db = q ?? await getDb();
+  const rows = await db.query<{ token_id: string }>(`update platform.mcp_token set revoked_at = now(), revoked_by = $2
+    where user_id = $1 and revoked_at is null returning token_id::text token_id`, [userId, actor.id]);
+  for (const r of rows) await appendAudit({ actorId: actor.id, action: 'mcp.token_revoked', subjectType: 'mcp_token', subjectId: r.token_id, detail: { by: 'sign-out-everywhere' } }, db);
+  return rows.length;
+}
+
 /**
  * The token a secret names and whether it may be used: 'live', or why not. Null when no token has
  * that hash. Marks a live token used at most once a minute, so a busy client does not write a row a call.

@@ -6,6 +6,7 @@ import { getDb, type Db } from '@/lib/db';
 import { withReadMemo } from '@/lib/db/read-memo';
 import { withBackgroundDb } from '@/lib/db/scheduling';
 import { routeContacts } from '@/lib/mcp/reads';
+import { fitRows } from '@/lib/mcp/output';
 import type { AppUser, Vehicle } from '@/modules/platform';
 import type { Route, RouteStrength, WarmthKind } from '@/modules/network';
 import { STATUS_LABEL, type PursuitStatus } from '@/modules/strategy';
@@ -414,8 +415,7 @@ async function connectorTargets(user: AppUser, a: ConnectorArgs & { entityId: st
   const anchor = start ? rows.findIndex((x) => x.pursuitId === start.after) : -1;
   const offset = start ? (anchor >= 0 ? anchor + 1 : Math.min(start.position, rows.length)) : 0;
   const page = rows.slice(offset, offset + limit);
-  let fitted = page;
-  if (fit.maxBytes) while (fitted.length > 1 && Buffer.byteLength(JSON.stringify(fitted)) > fit.maxBytes) fitted = fitted.slice(0, -1);
+  const fitted = fit.maxBytes ? fitRows(page, fit.maxBytes) : page;
   const nextCursor = fitted.length && offset + fitted.length < rows.length ? encodeCursor(q, rows[offset + fitted.length - 1]!.pursuitId, offset + fitted.length) : null;
   const [c, asks, intros] = await Promise.all([routeContacts(user, v.id, [{ entityId, name: name ?? 'Unknown' }]), askHistory([entityId]), introHistory(user, [entityId])]);
   const who = c.at({ entityId, name: name ?? 'Unknown' });

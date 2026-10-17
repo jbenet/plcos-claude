@@ -27,5 +27,5 @@ export {
   type AddressKind, type AddressSet, type UserAddress,
 } from './addresses';
 export {
-  createMcpToken, findMcpToken, hashToken, listMcpTokens, looksLikeToken, revokeMcpToken, TokenRefused, type McpToken, type NewToken, type TokenState,
+  createMcpToken, findMcpToken, hashToken, listMcpTokens, looksLikeToken, revokeAllMcpTokens, revokeMcpToken, TokenRefused, type McpToken, type NewToken, type TokenState,
 } from './mcp-tokens';

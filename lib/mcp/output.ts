@@ -29,6 +29,22 @@ export function oneLine(text: string | null | undefined, max = 140): string | nu
   return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), max - 20)).replace(/[\s,;:.]+$/, '')}…`;
 }
 
+/**
+ * The rows that fit `maxBytes` as one JSON array: what dropping `drop(n)` rows from the end while the array's JSON is
+ * too large keeps (at least one row). Each row is measured once — an array's JSON is its rows' JSON, comma-joined in
+ * brackets — where measuring the whole array again after every drop cost most of a long page's answer (performance
+ * pass, 17 Oct 2026).
+ */
+export function fitRows<T>(rows: T[], maxBytes: number, drop: (n: number) => number = () => 1): T[] {
+  if (rows.length <= 1) return rows;
+  const upTo = [0];
+  for (const r of rows) upTo.push(upTo.at(-1)! + Buffer.byteLength(JSON.stringify(r) ?? 'null'));
+  const bytes = (n: number) => 2 + upTo[n]! + Math.max(0, n - 1);
+  let n = rows.length;
+  while (n > 1 && bytes(n) > maxBytes) n -= drop(n);
+  return n === rows.length ? rows : rows.slice(0, n);
+}
+
 export interface Answer { data: unknown; coverage?: Record<string, unknown>; asOf?: string; link?: string | null }
 
 /** Cut long strings, then shorten the longest lists until the answer fits the response limit. */

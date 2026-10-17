@@ -75,11 +75,15 @@ export async function updateAddressesAction(_prev: PeopleResult, formData: FormD
 export async function signOutEverywhereAction(_prev: PeopleResult, formData: FormData): Promise<PeopleResult> {
   const user = await requireAction('app/settings/people/actions.ts#signOutEverywhereAction', _prev, formData);
   return guarded(async () => {
-    const { appendAudit, raiseSessionEpoch } = await import('@/modules/platform');
+    const { appendAudit, raiseSessionEpoch, revokeAllMcpTokens } = await import('@/modules/platform');
     const id = String(formData.get('userId') ?? '');
     if (!/^[0-9a-f-]{36}$/i.test(id)) return 'Nothing to do.';
     const epoch = await raiseSessionEpoch(id);
-    if (epoch !== null) await appendAudit({ actorId: user.id, action: 'session.signed_out_everywhere', subjectType: 'app_user', subjectId: id, detail: { epoch } });
-    return 'Signed out everywhere.';
+    if (epoch === null) return 'Nothing to do.';
+    // Their tokens too, when asked (red-team pass, 17 Oct 2026): a token made from a stolen session outlives the cookie.
+    // Off by default, so signing out does not quietly stop the mail desk.
+    const revoked = formData.get('tokens') === 'on' ? await revokeAllMcpTokens(user, id) : 0;
+    await appendAudit({ actorId: user.id, action: 'session.signed_out_everywhere', subjectType: 'app_user', subjectId: id, detail: { epoch, tokensRevoked: revoked } });
+    return revoked ? `Signed out everywhere; ${revoked} token${revoked === 1 ? '' : 's'} revoked.` : 'Signed out everywhere.';
   });
 }
