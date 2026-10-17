@@ -7,6 +7,7 @@ import { recordActivity } from '@/lib/activity/log';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getDb, type Queryable } from '@/lib/db';
+import type { Principal } from '@/lib/authz';
 import { finishRun, startRun } from '@/modules/sources';
 import { addOrganizationLps, type OrganizationLpCounts } from './organization-lps';
 import { readWarehouseGraph } from './connect';
@@ -17,6 +18,8 @@ import type { Path } from './connect';
 import { readPathRecords, isEntityKey, connectionIdentityProblems, dropConflictingItems, type ConnectionProblem, type LocatedRecord } from './connection-check';
 import { readStrategyFiles } from './strategy-files';
 import type { Triage } from './triage';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * The import (N64, docs/19): the research findings under data/<profile>/enrich/, mapped into the
@@ -168,7 +171,14 @@ export async function importFindings(runBy: string | null, dir = enrichDir()): P
         return [];
       });
       counts.entityTypes = await correctPipelineEntityTypes(tx, findings, parsedPaths.records.map(r => r.value as Path), runBy ?? 'system:identity-import');
-      counts.duplicateIdentities = await mergeImportDuplicatesInTransaction(tx, runBy ?? 'system:identity-import', findings, parsedPaths.records.map(r => r.value as Path));
+      // Who imports decides what their findings may merge (red team, 17 Oct 2026): a pusher who is not an Admin
+      // sends a group their finding links on another vehicle's LP to W13 review. A person no longer active is
+      // treated as having no vehicles, so such groups go to review too.
+      const principal = runBy && UUID_RE.test(runBy)
+        ? (await tx.one<Principal>(`select access::text access, vehicles, approves from platform.app_user where id = $1::uuid and active`, [runBy]))
+          ?? { access: 'viewer' as const, vehicles: [] }
+        : null;
+      counts.duplicateIdentities = await mergeImportDuplicatesInTransaction(tx, runBy ?? 'system:identity-import', findings, parsedPaths.records.map(r => r.value as Path), { principal });
       // The duplicate pass can resolve the earlier type pass's multiple-org ambiguity.
       // Report the final outcome, while retaining every recorded correction ID.
       const correctedIds = counts.duplicateIdentities.corrected.map(c => c.entityId);

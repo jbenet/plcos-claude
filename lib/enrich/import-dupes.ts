@@ -1,5 +1,6 @@
 import { readSeparationGroups, violatesSeparationGroup } from '@/modules/identity/separation-groups';
 import type { Db, Queryable } from '@/lib/db';
+import type { Principal } from '@/lib/authz';
 import { normalizeIdentityName } from '@/modules/identity/resolution';
 import { recordEntityTypeCorrection } from '@/modules/identity/entity-type';
 import { consolidatePursuitsInTransaction, type PursuitMergeReport } from '@/modules/strategy';
@@ -42,7 +43,7 @@ export interface ImportDuplicateReport {
  */
 export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: string,
   findings: Finding[] = [], paths: Path[] = [],
-  options: { decisions?: IdentityDecisionInput[]; reviewOnly?: boolean } = {}): Promise<ImportDuplicateReport> {
+  options: { decisions?: IdentityDecisionInput[]; reviewOnly?: boolean; principal?: Principal | null } = {}): Promise<ImportDuplicateReport> {
   if (!by.trim()) throw new Error('An actor is required');
   await tx.exec('lock table identity.entity, identity.source_record in share row exclusive mode');
   const report: ImportDuplicateReport = { merged: 0, merges: [], corrected: [], ambiguous: [] };
@@ -144,7 +145,7 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
       report.merges.push({ assertionId: assertion!.id, survivorId: survivor.id, loserId: loser.id, name: survivor.name });
     }
   }
-  await mergeImportPeople(tx, by, report, findings, paths);
+  await mergeImportPeople(tx, by, report, findings, paths, options.principal ?? null);
   // W13 also reviews manual/connector namesakes that the imported-person pass does
   // not own. Fold current queued components into the same stable decision groups.
   const queued = await tx.query<{a:string;b:string;name:string}>(`with pairs as materialized (
@@ -169,7 +170,7 @@ export async function mergeImportDuplicatesInTransaction(tx: Queryable, by: stri
     // reasons, without silently applying a second round of automatic repairs.
     await tx.exec('savepoint identity_review_remaining');
     try {
-      report.ambiguous = (await mergeImportDuplicatesInTransaction(tx, by, findings, paths, { reviewOnly: true })).ambiguous;
+      report.ambiguous = (await mergeImportDuplicatesInTransaction(tx, by, findings, paths, { reviewOnly: true, principal: options.principal })).ambiguous;
     } finally {
       await tx.exec('rollback to savepoint identity_review_remaining');
       await tx.exec('release savepoint identity_review_remaining');

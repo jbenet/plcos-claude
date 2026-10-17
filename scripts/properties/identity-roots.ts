@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { resolvedIdentities } from '../../lib/enrich/identity-roots';
 import { mergeImportDuplicatesInTransaction } from '../../lib/enrich/import-dupes';
+import type { Principal } from '../../lib/authz';
+import type { Finding } from '../../lib/enrich/schema';
 import type { Check, Db } from './harness';
 
 export async function identityRootProperties(check: Check, db: Db) {
@@ -56,4 +58,41 @@ export async function identityRootProperties(check: Check, db: Db) {
         'Same-root edges retire for any rule; explicit source separations retire creation-name-only edges, retaining unrelated rules.');
     } finally { await tx.exec('rollback to savepoint invented_identity_roots; release savepoint invented_identity_roots'); }
   });
+  await pushedFindingMergeProperties(check, db);
+}
+
+/**
+ * Red team, 17 Oct 2026: a Team member's pushed W1 finding is checked only on its own LP, but its affiliation can corroborate
+ * a same-name merge with a record pursued on a vehicle they may not change. That group goes to W13 review; an Admin's
+ * import (or the system's) still merges it.
+ */
+async function pushedFindingMergeProperties(check: Check, db: Db) {
+  const juan = (await db.one<{ id: string }>(`select id::text from platform.app_user where handle = 'juan'`))!.id;
+  const fund = (await db.one<{ id: string }>(`select id::text from platform.vehicle where kind = 'fund' and phase <> 'historical' order by sort_order limit 1`))!.id;
+  const spv = (await db.one<{ id: string }>(`select id::text from platform.vehicle where kind = 'spv' and phase <> 'historical' order by sort_order limit 1`))!.id;
+  const tag = randomUUID().slice(0, 8), name = `Invented Pushed Namesake ${tag}`;
+  const outcome = async (principal: Principal | null) => db.transaction(async tx => {
+    await tx.exec('savepoint invented_pushed_finding');
+    try {
+      const [theirs, mine, org] = [randomUUID(), randomUUID(), randomUUID()];
+      await tx.query(`insert into identity.entity(entity_id,entity_type,display_name) values($1::uuid,'person',$4),($2::uuid,'person',$4),($3::uuid,'org',$5)`,
+        [theirs, mine, org, name, `Invented Cedar Org ${tag}`]);
+      await tx.query(`insert into identity.source_record(source,source_id,entity_id,resolved_by) values('affinity','person:'||$1::text,$1::uuid,'rule:source-owned'),
+        ('prospect_key',$2::text,$2::uuid,'rule:sourced-prospect'),('prospect_org',$3::text,$3::uuid,'rule:sourced-prospect-organization')`, [theirs, mine, org]);
+      await tx.query(`insert into identity.affiliation(person_entity,org_entity,kind,role,source,as_of,certainty) values($1,$2,'contact','not recorded','fixture',current_date,'claimed')`, [theirs, org]);
+      await tx.query(`insert into strategy.pursuit(entity_id,vehicle_id,owner_id,status) values($1::uuid,$2::uuid,$4::uuid,'new'),($3::uuid,$5::uuid,$4::uuid,'new')`, [theirs, spv, mine, juan, fund]);
+      const finding: Finding = { key: mine, name, researched: { at: '2026-10-17', by: 'fixture', workflow: 'W1', version: '1' },
+        identity: { match: 'confirmed', basis: 'Invented affiliation', canonical: { org: `Invented Cedar Org ${tag}` } }, facts: [] };
+      const report = await mergeImportDuplicatesInTransaction(tx, 'invented-push', [finding], [], { principal });
+      const root = (await tx.one<{ id: string }>('select identity.canonical_entity_id($1)::text id', [mine]))!.id;
+      return { merged: root === theirs, review: report.ambiguous.find(g => g.entityIds.includes(mine) && g.entityIds.includes(theirs))?.reason ?? null };
+    } finally { await tx.exec('rollback to savepoint invented_pushed_finding; release savepoint invented_pushed_finding'); }
+  });
+  const team = await outcome({ access: 'team', vehicles: [fund] });
+  const both = await outcome({ access: 'team', vehicles: [fund, spv] });
+  const admin = await outcome({ access: 'admin', vehicles: null });
+  const system = await outcome(null);
+  check('IDENTITY a Team member\'s pushed finding that alone links their LP with a namesake pursued on a vehicle they can\'t change sends the group to W13 review; with that vehicle, as an Admin or the system, it merges (red team, 17 Oct 2026)',
+    !team.merged && /vehicle the importer cannot change/.test(team.review ?? '') && both.merged && admin.merged && system.merged,
+    `team ${JSON.stringify(team)}; both vehicles ${JSON.stringify(both)}; admin ${JSON.stringify(admin)}; system ${JSON.stringify(system)}`);
 }

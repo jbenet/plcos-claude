@@ -7,7 +7,7 @@ import { appendAudit } from '@/modules/platform';
 import { peopleWithAddress } from './addresses';
 import { changed, claimReliedOnSince, refCounts, UNDO_HOURS } from './lps';
 import { OutreachRefused } from './reads';
-import { deskActor, once, type DeskContext } from './writes';
+import { deskActor, onOthersVehicle, once, UNCONFIRMED_ELSEWHERE, type DeskContext } from './writes';
 
 /**
  * Someone to research, on no vehicle (JuanMail relayed Juan, 14 Oct 2026: "Should be possible to research entities
@@ -89,6 +89,10 @@ export async function addResearch(ctx: DeskContext, raw: Record<string, unknown>
           where kind = 'research_request' and identity.canonical_entity_id(entity_id) = $1::uuid order by created_at limit 1`, [entityId]);
         if (open) throw new Unchanged({ data: { entityId, created: false, requested: false, next: 'Already in the research set: nothing was changed.' } });
 
+        // A person already here on a vehicle the caller may not change: the address is written unconfirmed (red team,
+        // 17 Oct 2026), as an autonomous call's is.
+        const elsewhere = !createdEntity && await onOthersVehicle(ctx.env.principal, entityId, tx);
+        const verified = !autonomous && !elsewhere;
         const doc = `gmail:${owner.handle}`;
         await tx.query(`insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body)
           values ($1, $2, 'mailbox', 'gmail', current_date, 'moderate', $3, '') on conflict (doc_id) do nothing`,
@@ -97,7 +101,7 @@ export async function addResearch(ctx: DeskContext, raw: Record<string, unknown>
           and superseded_by is null and field = 'email' and lower(btrim(value)) = $2 limit 1`, [entityId, a.address]);
         const claimId = same ? null : (await tx.one<{ id: string }>(`insert into research.claim (entity_id, field, value, source, as_of, confidence, last_verified_by, last_verified_at)
           values ($1, 'email', $2, $3, current_date, $4, $5, $6) returning claim_id::text id`,
-        [entityId, a.address, doc, autonomous ? 'medium' : 'high', autonomous ? null : owner.id, autonomous ? null : new Date()]))!.id;
+        [entityId, a.address, doc, verified ? 'high' : 'medium', verified ? owner.id : null, verified ? new Date() : null]))!.id;
 
         const body = `Research asked for by ${autonomous ? 'the mail desk on its own' : owner.name} (${a.source})${a.note ? `: ${a.note}` : '.'}`;
         const noteId = (await tx.one<{ id: string }>(`insert into research.note (entity_id, author_id, kind, body, data) values ($1, $2, 'research_request', $3, $4::jsonb) returning note_id::text id`,
@@ -109,6 +113,7 @@ export async function addResearch(ctx: DeskContext, raw: Record<string, unknown>
         await appendAudit({ actorId: owner.id, action: 'outreach.research_added', subjectType: 'entity', subjectId: entityId, detail: { ...req, source: a.source } }, tx);
         return { data: {
           entityId, created: createdEntity, requested: true,
+          ...(elsewhere && !autonomous && claimId ? { unconfirmed: UNCONFIRMED_ELSEWHERE } : {}),
           next: `In the research set; the next research run picks them up. Undo within ${UNDO_HOURS} hours: DELETE /api/outreach/research?entityId=${entityId} (outreach_undo_add_research).`,
         } };
       });
@@ -143,7 +148,8 @@ export async function undoAddResearch(ctx: DeskContext, raw: Record<string, unkn
     const retire = req.createdEntity && changed(req.refs, await refCounts(tx, 'identity', 'entity', entityId)).length === 0;
     await tx.query('delete from research.note where note_id = $1', [req.noteId]);
     if (req.claimId && !(await claimReliedOnSince(tx, entityId, row.audit_id))) await tx.query('delete from research.claim where claim_id = $1', [req.claimId]);
-    if (req.sourceRecord && retire) {
+    // The alias it attached to a person already here goes too, as undoAddLp's does.
+    if (req.sourceRecord && (retire || !req.createdEntity)) {
       await tx.query(`delete from research.note where entity_id = $1 and kind = 'identity_creation' and data->>'source' = 'mail_desk' and data->>'sourceId' = $2`, [entityId, req.sourceRecord]);
       await tx.query(`delete from identity.source_record where source = 'mail_desk' and source_id = $1`, [req.sourceRecord]);
     }

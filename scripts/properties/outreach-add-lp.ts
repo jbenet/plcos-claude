@@ -23,7 +23,7 @@ export async function outreachAddLpProperties(check: Check, db: Db) {
   const { NOT_LIVE_REFUSAL } = await import('../../lib/mutation-policy');
   resetWindows();
   const call = await outreachClient();
-  const { juan, fund, token, entity } = await fixtures(db);
+  const { juan, fund, spv, token, entity, pursuit } = await fixtures(db);
   const rw = await token(juan, [OUTREACH_READ, OUTREACH_WRITE]);
   const ro = await token(juan, [OUTREACH_READ]);
   const desk = (await db.one<{ id: string }>(`select id::text from platform.app_user where handle = 'mail-desk'`))!;
@@ -156,6 +156,19 @@ export async function outreachAddLpProperties(check: Check, db: Db) {
   check('Outreach add-LP: undo is refused (409, saying what happened) once anything has happened on the LP — here an update — and is 404 for a pursuit this endpoint did not create',
     upd?.status === 200 && u2?.status === 409 && /happened/.test(u2.json?.error ?? '') && /update/.test(u2.json?.error ?? '') && still?.n === 1 && u3?.status === 404,
     `update ${upd?.status}; undo ${u2?.status}: ${String(u2?.json?.error).slice(0, 200)}; pursuit ${still?.n ? 'kept' : 'REMOVED'}; another's pursuit ${u3?.status}`);
+
+  // ── A person already here on a vehicle the caller may not change: added, the address unconfirmed (red team, 17 Oct 2026) ──
+  const fundOnly = await token(juan, [OUTREACH_READ, OUTREACH_WRITE], [fund.id]);
+  const onSpv = await entity('Invented Mail Spv Person', 'person');
+  await pursuit(onSpv, spv.id, 'selected');
+  await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'spv.person@invented-spvfirm.example', 'affinity:props-add-lp', current_date, 'medium')`, [onSpv]);
+  const narrow = await post(add({ name: 'Invented Mail Spv Person', email: 'spv.person@invented-spvfirm.example' }), fundOnly);
+  const narrowClaim = await db.one<{ confidence: string; verifier: string | null }>(`select confidence::text, last_verified_by::text verifier from research.claim
+    where entity_id = $1 and source = 'gmail:juan' and superseded_by is null`, [onSpv]);
+  check('Outreach add-LP: a person already here on a vehicle the caller can\'t change is added to theirs, the address written unconfirmed (medium, no verifier), and the answer says so',
+    narrow.status === 200 && narrow.json.data.entityId === onSpv && narrow.json.data.created?.pursuit === true && typeof narrow.json.data.unconfirmed === 'string'
+    && narrowClaim?.confidence === 'medium' && narrowClaim.verifier === null,
+    `add ${narrow.status} ${JSON.stringify(narrow.json?.data ?? narrow.json)?.slice(0, 160)}; claim ${JSON.stringify(narrowClaim)}`);
 
   // ── Not the live server: refused, nothing written ─────────────────────────────────────
   const original = { ...config.data };

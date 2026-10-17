@@ -9,7 +9,7 @@ import { appendAudit } from '@/modules/platform';
 import { StatusRefused } from '@/modules/strategy';
 import { peopleWithAddress } from './addresses';
 import { OutreachRefused, deskVehicle } from './reads';
-import { deskActor, once, type DeskContext } from './writes';
+import { deskActor, onOthersVehicle, once, UNCONFIRMED_ELSEWHERE, type DeskContext } from './writes';
 
 /**
  * The mail desk adds an LP from mail (docs/27-outreach-api.md §5; Juan, 9 Oct 2026: JuanMail should operate PLC OS
@@ -187,6 +187,10 @@ export async function addLp(ctx: DeskContext, raw: Record<string, unknown>) {
         const pursuitId = pursuit.id;
 
         // ── The address, as outreach_propose_contact records one: confirmed by a person, or not confirmed ──
+        // A person already here who is also on a vehicle the caller may not change gets the address unconfirmed
+        // (red team, 17 Oct 2026): written, but not confirmed in the name of someone who may not change that LP.
+        const elsewhere = !createdEntity && await onOthersVehicle(ctx.env.principal, entityId, tx);
+        const verified = !autonomous && !elsewhere;
         const doc = `gmail:${owner.handle}`;
         await tx.query(`insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body)
           values ($1, $2, 'mailbox', 'gmail', current_date, 'moderate', $3, '') on conflict (doc_id) do nothing`,
@@ -195,7 +199,7 @@ export async function addLp(ctx: DeskContext, raw: Record<string, unknown>) {
           and superseded_by is null and source = $2 and field = 'email' and lower(btrim(value)) = $3 limit 1`, [entityId, doc, a.person.email]);
         const claimId = same ? null : (await tx.one<{ id: string }>(`insert into research.claim (entity_id, field, value, source, as_of, confidence, last_verified_by, last_verified_at)
           values ($1, 'email', $2, $3, current_date, $4, $5, $6) returning claim_id::text id`,
-        [entityId, a.person.email, doc, autonomous ? 'medium' : 'high', autonomous ? null : owner.id, autonomous ? null : new Date()]))!.id;
+        [entityId, a.person.email, doc, verified ? 'high' : 'medium', verified ? owner.id : null, verified ? new Date() : null]))!.id;
 
         // ── The mail as the record (rule 9): ids and a sentence, never a body ──
         const noteId = (await tx.one<{ id: string }>(`insert into research.note (entity_id, author_id, kind, body, data) values ($1, $2, 'context', $3, $4::jsonb) returning note_id::text id`,
@@ -224,6 +228,7 @@ export async function addLp(ctx: DeskContext, raw: Record<string, unknown>) {
         } }, tx);
         return { data: {
           entityId, pursuitId, created: { entity: createdEntity, pursuit: true }, status, autonomous,
+          ...(elsewhere && !autonomous && claimId ? { unconfirmed: UNCONFIRMED_ELSEWHERE } : {}),
           next: `Added to ${v.name}${autonomous ? ', marked as added by the mail desk on its own: a person\'s status replaces this one, and the address is unconfirmed' : ''}. `
             + `Open it at /${v.slug}/pipeline/${pursuitId}. Undo within ${UNDO_HOURS} hours, while nothing else has happened on it: DELETE /api/outreach/lps?pursuitId=${pursuitId} (outreach_undo_add_lp).`,
         } };

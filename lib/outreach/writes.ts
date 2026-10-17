@@ -308,6 +308,18 @@ export async function entityVehicles(entityId: string, q: Queryable): Promise<st
       where identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id($1::uuid) and a.ended_on is null`, [entityId])).map((r) => r.v);
 }
 
+/**
+ * Whether an entity is on a vehicle this principal may not change. A write the caller may make anyway (an address, a
+ * link) is then recorded unconfirmed (confidence medium, no verifier) rather than refused, so another vehicle's LP
+ * does not carry a confirmation by someone who may not change it (red team, 17 Oct 2026).
+ */
+export async function onOthersVehicle(principal: Envelope['principal'], entityId: string, q: Queryable): Promise<boolean> {
+  return (await entityVehicles(entityId, q)).some((v) => !can(principal, 'mutate', { vehicle: v }));
+}
+
+/** What an answer says when a confirmed claim was written unconfirmed for that reason. */
+export const UNCONFIRMED_ELSEWHERE = 'Recorded unconfirmed: this record is also on a vehicle you can\'t change, so its address stays unconfirmed until someone who may change that vehicle confirms it.';
+
 export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
   const a = raw as z.infer<typeof contactInput>;
   return once(ctx, 'contacts', a.idempotencyKey, raw, async () => {
@@ -332,6 +344,8 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
     const vehicles = await entityVehicles(a.entityId!, db);
     const mayChange = vehicles.length ? vehicles.some((v) => can(ctx.env.principal, 'mutate', { vehicle: v })) : can(ctx.env.principal, 'mutate', {});
     if (!mayChange) throw new OutreachRefused(404, 'No such person or organisation on your vehicles.');
+    // Also on a vehicle the caller may not change: still recorded, but unconfirmed (red team, 17 Oct 2026).
+    const verified = confirmed && !vehicles.some((v) => !can(ctx.env.principal, 'mutate', { vehicle: v }));
     const at = a.confirmedAt ? new Date(a.confirmedAt) : new Date();
     if (at.getTime() > Date.now() + 5 * 60_000) throw new OutreachRefused(400, 'confirmedAt is in the future.');
     const asOf = !confirmed && a.seenOn ? a.seenOn : at.toISOString().slice(0, 10);
@@ -356,7 +370,7 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
           where identity.canonical_entity_id(c.entity_id) = $1::uuid and c.superseded_by is null and c.field ~ $2`, [entity, pattern]);
         const claim = (await tx.one<{ id: string }>(`insert into research.claim (entity_id, field, value, source, as_of, confidence, last_verified_by, last_verified_at)
           values ($1, $2, $3, $4, $5::date, $6, $7, $8) returning claim_id::text id`,
-        [entity, field, value, doc, asOf, confirmed ? 'high' : 'medium', confirmed ? owner.id : null, confirmed ? at : null]))!.id;
+        [entity, field, value, doc, asOf, verified ? 'high' : 'medium', verified ? owner.id : null, verified ? at : null]))!.id;
         // This mailbox's earlier reading is superseded: for an address, only the same address (a person has several);
         // for a phone, title, firm, postal address or LinkedIn page, any earlier one (the latest is the current one).
         const same = (v: string) => v.trim().toLowerCase() === value.trim().toLowerCase();
@@ -396,9 +410,10 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
       }
       const kept = claims.reduce((n, c) => n + c.kept, 0);
       return { data: {
-        entityId: entity, source: a.source, confirmed,
-        confirmedBy: confirmed ? owner.handle : null, confirmedAt: confirmed ? at.toISOString() : null, asOf,
+        entityId: entity, source: a.source, confirmed: verified,
+        confirmedBy: verified ? owner.handle : null, confirmedAt: verified ? at.toISOString() : null, asOf,
         ...emailAnswer, claims,
+        ...(confirmed && !verified ? { unconfirmed: UNCONFIRMED_ELSEWHERE } : {}),
         note: kept ? 'Other values on file were kept, not overwritten: each is on record with its source and date.' : null,
       } };
     });

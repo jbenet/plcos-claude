@@ -13,7 +13,7 @@ export async function outreachEntitiesProperties(check: Check, db: Db) {
   const { OUTREACH_READ, OUTREACH_WRITE } = await import('../../lib/outreach/scopes');
   resetWindows();
   const call = await outreachClient();
-  const { juan, fund, token, entity, pursuit } = await fixtures(db);
+  const { juan, fund, spv, token, entity, pursuit } = await fixtures(db);
   const rw = await token(juan, [OUTREACH_READ, OUTREACH_WRITE, 'search']);
   const post = (op: string, body: Record<string, unknown>) => call(rw, op, {}, { method: 'POST', body });
   const evidence = { gmailMessageIds: ['19e2inventedentity'], words: 'INVENTED_EVIDENCE: named in a thread.' };
@@ -103,4 +103,32 @@ export async function outreachEntitiesProperties(check: Check, db: Db) {
   check('Entities: undo removes the link and retires the person it created; undoing a relabel puts the earlier relation back',
     undo.status === 200 && after?.links === 0 && after.retired === true && undoCo.status === 200 && rel?.relation === 'portfolio-company',
     `undo ${undo.status} ${JSON.stringify(undo.json?.data ?? undo.json)?.slice(0, 100)}; links ${after?.links}, retired ${after?.retired}; company undo ${undoCo.status}, relation ${rel?.relation}`);
+
+  // Red team, 17 Oct 2026: a person linked to a company that is also on a vehicle the caller may not change is linked,
+  // with their address unconfirmed and the answer saying so.
+  const fundOnly = await token(juan, [OUTREACH_READ, OUTREACH_WRITE], [fund.id]);
+  const twoCo = await entity('Invented Two Vehicle Firm');
+  await pursuit(twoCo, fund.id, 'connecting'); await pursuit(twoCo, spv.id, 'selected');
+  const linked = await call(fundOnly, 'entities', {}, { method: 'POST', body: { type: 'person', name: 'Invented Pia Twoveh', email: 'pia@invented-twoveh-firm.example',
+    companyEntityId: twoCo, role: 'team', evidence, idempotencyKey: 'props-entity-twoveh' } });
+  const piaClaim = await db.one<{ confidence: string; verifier: string | null }>(`select confidence::text, last_verified_by::text verifier from research.claim
+    where entity_id = $1 and value = 'pia@invented-twoveh-firm.example'`, [linked.json?.data?.entityId ?? null]);
+  check('Entities: a person linked to a company also on a vehicle the caller can\'t change is linked, the address unconfirmed (medium, no verifier), and the answer says so',
+    linked.status === 200 && linked.json.data.link?.entityId === twoCo && typeof linked.json.data.unconfirmed === 'string' && piaClaim?.confidence === 'medium' && piaClaim.verifier === null,
+    `add ${linked.status} ${JSON.stringify(linked.json?.data ?? linked.json)?.slice(0, 160)}; claim ${JSON.stringify(piaClaim)}`);
+
+  // Undo of an add matched to a record already here takes back the alias it attached (red team, 17 Oct 2026).
+  const otto = await entity('Invented Otto Existing', 'person');
+  await db.query(`insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body)
+    values ('props:entities-otto', 'Invented record', 'crm', 'affinity', current_date, 'weak', 'Invented', '') on conflict do nothing`);
+  await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'office@invented-otto.example', 'props:entities-otto', current_date, 'medium')`, [otto]);
+  const ottoAdd = await post('entities', { type: 'person', name: 'Invented Otto Existing', email: 'otto@invented-otto.example', evidence, idempotencyKey: 'props-entity-otto' });
+  const aliasOf = () => db.one(`select 1 from identity.source_record where source = 'mail_desk' and source_id = 'email:otto@invented-otto.example'`);
+  const aliasBefore = Boolean(await aliasOf());
+  const ottoUndo = await call(rw, 'entities', { entityId: otto }, { method: 'DELETE' });
+  const ottoAfter = await db.one<{ retired: boolean }>('select retired_at is not null retired from identity.entity where entity_id = $1', [otto]);
+  check('Entities: undoing an add matched to a record already here removes the mail-desk alias it attached and keeps the record',
+    ottoAdd.status === 200 && ottoAdd.json.data.entityId === otto && ottoAdd.json.data.created.entity === false && aliasBefore
+    && ottoUndo.status === 200 && !(await aliasOf()) && ottoAfter?.retired === false,
+    `add ${ottoAdd.status} ${JSON.stringify(ottoAdd.json?.data ?? ottoAdd.json)?.slice(0, 140)}; alias before ${aliasBefore}; undo ${ottoUndo.status}; alias after ${Boolean(await aliasOf())}; retired ${ottoAfter?.retired}`);
 }

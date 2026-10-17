@@ -1,6 +1,7 @@
 import { readSeparationGroups, violatesSeparationGroup } from '@/modules/identity/separation-groups';
 import { businessEmailDomain, normalizeOrg, countDuplicateRule } from './duplicate-rules';
 import type { Queryable } from '@/lib/db';
+import { can, type Principal } from '@/lib/authz';
 import { identityGraphContext, identityRawContext } from './identity-context';
 import { normalizeIdentityName } from '@/modules/identity/resolution';
 import type { Finding } from './schema';
@@ -73,8 +74,14 @@ function readSignals(value: unknown, into: Signals) {
   }
 }
 
-/** Caller holds the identity lock. Original records stay put; only audited redirects change. */
-export async function mergeImportPeople(tx: Queryable, by: string, report: ImportDuplicateReport, findings: Finding[], paths: Path[]) {
+/**
+ * Caller holds the identity lock. Original records stay put; only audited redirects change.
+ * `principal` is who imports (null: the system, or an Admin's own run). When it is not an Admin and the incoming
+ * findings' evidence is what links a group holding a record pursued on a vehicle it may not change, the group goes to
+ * W13 review instead of merging (red team, 17 Oct 2026: a Team member's W1 finding merged a namesake on another vehicle).
+ */
+export async function mergeImportPeople(tx: Queryable, by: string, report: ImportDuplicateReport, findings: Finding[], paths: Path[],
+  principal: Principal | null = null) {
   const entities = await resolvedIdentities(tx);
   const personRoots = new Set(entities.filter(e => e.id === e.root && e.type === 'person').map(e => e.id));
   const people: Person[] = entities.filter(e => personRoots.has(e.root));
@@ -125,11 +132,29 @@ export async function mergeImportPeople(tx: Queryable, by: string, report: Impor
     const matches = rootsByKey.get(key);
     return matches?.size === 1 ? matches.values().next().value! : '';
   })();
+  // What was on record before this import's own findings and paths: for a non-Admin's import, a group that only
+  // they link and that holds a record pursued on a vehicle they may not change goes to review.
+  const restricted = !!principal && !can(principal, 'admin');
+  const before = restricted ? new Map([...signals].map(([k, s]) => [k, { orgs: new Set(s.orgs), urls: new Set(s.urls), domains: new Set(s.domains) }])) : null;
   for (const f of findings) if (['confirmed', 'probable'].includes(f.identity.match)) apply(keyOwner(f.key), f);
   const pathNotes = await tx.query<{ data: { paths?: Path[] } }>(`select data from research.note where kind='connection_candidates'`);
-  for (const p of [...paths, ...pathNotes.flatMap(n => n.data.paths ?? [])]) {
-    for (const d of [p.lpPerson, p.other.person]) if (d) apply(keyOwner(d.key), d);
+  for (const p of paths) for (const d of [p.lpPerson, p.other.person]) if (d) apply(keyOwner(d.key), d);
+  for (const p of pathNotes.flatMap(n => n.data.paths ?? [])) {
+    for (const d of [p.lpPerson, p.other.person]) if (d) {
+      apply(keyOwner(d.key), d);
+      const s = before?.get(roots.get(keyOwner(d.key)) ?? keyOwner(d.key)); if (s) readSignals(d, s);
+    }
   }
+  const lockedRoots = new Set<string>();
+  if (restricted) {
+    const pursued = await tx.query<{ id: string; v: string }>(`select entity_id::text id, vehicle_id::text v from strategy.active_pursuit
+      where entity_id=any($1::uuid[])`, [ids]);
+    for (const p of pursued) if (!can(principal!, 'mutate', { vehicle: p.v })) lockedRoots.add(roots.get(p.id) ?? p.id);
+  }
+  const corroboratedBefore = (a: string, b: string) => {
+    const x = before!.get(a)!, y = before!.get(b)!;
+    return [...x.orgs].some(v => y.orgs.has(v)) || [...x.urls].some(v => y.urls.has(v)) || [...x.domains].some(v => y.domains.has(v));
+  };
   const separationGroups = await readSeparationGroups(tx);
   const constraints = await tx.query<{ a: string | null; b: string | null; ls: string; lk: string; rs: string; rk: string }>(
     `select merged_entity::text a,canonical_entity::text b,left_source ls,left_source_id lk,right_source rs,right_source_id rk
@@ -177,6 +202,10 @@ export async function mergeImportPeople(tx: Queryable, by: string, report: Impor
       for (const [source, keys] of external) if (keys.size > 1) reasons.add(`different external IDs from ${source}`);
       for (const a of component) for (const b of separatedFrom.get(a) ?? [])
         if (component.has(b)) reasons.add('prior identity separation or reversed merge');
+      if (restricted && [...component].some(id => lockedRoots.has(id))) {
+        for (const a of component) for (const b of component) if (a !== b && !corroboratedBefore(a, b))
+          reasons.add('linked by an imported finding on a record pursued on a vehicle the importer cannot change');
+      }
       if (reasons.size) {
         const entityIds = (component.size === 1 ? group.map(p => p.id) : [...component]).sort();
         const key = entityIds.join(':');

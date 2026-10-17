@@ -327,4 +327,21 @@ export async function outreachWriteProperties(check: Check, db: Db) {
     k1.status === 200 && kSame.status === 200 && sameAnswer(kSame.json?.data, k1.json?.data) && kOther.status === 409 && kArgs.status === 409
       && ua.status === 200 && ub.status === 200 && ub.json?.data?.created === true && ub.json?.data?.updateId !== ua.json?.data?.updateId,
     `first ${k1.status}; same ${kSame.status} same answer ${sameAnswer(kSame.json?.data, k1.json?.data)}; other token ${kOther.status}; other args ${kArgs.status}; update ${ua.status}/${ub.status} created ${ub.json?.data?.created}`);
+
+  // Red team, 17 Oct 2026: an LP also on a vehicle the caller may not change still takes the contact, but unconfirmed.
+  const fundOnly = await token(juan, [OUTREACH_READ, OUTREACH_WRITE], [fund.id]);
+  const twoVeh = await entity('Invented Two Vehicle Contact Person', 'person');
+  await pursuit(twoVeh, fund.id, 'connecting'); await pursuit(twoVeh, spv.id, 'selected');
+  const narrow = await post('contacts', { entityId: twoVeh, email: 'twoveh@invented-twoveh.example', linkedin: 'https://linkedin.com/in/invented-twoveh',
+    source: 'gmail', confirmedBy: 'juan' }, fundOnly);
+  const wide = await post('contacts', { entityId: twoVeh, email: 'twoveh2@invented-twoveh.example', source: 'gmail', confirmedBy: 'juan' });
+  const narrowClaims = await db.query<{ field: string; confidence: string; verifier: string | null }>(`select field, confidence::text, last_verified_by::text verifier
+    from research.claim where entity_id = $1 and superseded_by is null and value in ('twoveh@invented-twoveh.example', 'https://linkedin.com/in/invented-twoveh')`, [twoVeh]);
+  const wideClaim = await db.one<{ confidence: string; verifier: string | null }>(`select confidence::text, last_verified_by::text verifier from research.claim
+    where entity_id = $1 and value = 'twoveh2@invented-twoveh.example'`, [twoVeh]);
+  check('Outreach writes: /contacts on an LP also on a vehicle the caller can\'t change writes its email and LinkedIn unconfirmed (medium, no verifier) and says so; a caller with every vehicle confirms (red team, 17 Oct 2026)',
+    narrow.status === 200 && narrow.json.data.confirmed === false && narrow.json.data.confirmedBy === null && typeof narrow.json.data.unconfirmed === 'string'
+    && narrowClaims.length === 2 && narrowClaims.every((c) => c.confidence === 'medium' && c.verifier === null)
+    && wide.status === 200 && wide.json.data.confirmed === true && !wide.json.data.unconfirmed && wideClaim?.confidence === 'high' && wideClaim.verifier === juan.id,
+    `narrow ${narrow.status}${narrow.json?.error ? ` (${narrow.json.error})` : ''} confirmed ${narrow.json?.data?.confirmed}; claims ${JSON.stringify(narrowClaims)}; wide ${wide.status} ${JSON.stringify(wideClaim)}`);
 }

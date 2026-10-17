@@ -131,4 +131,26 @@ export async function outreachResearchProperties(check: Check, db: Db) {
   check('Research on no vehicle: undoing a request keeps the address an LP added since relies on',
     rr.status === 200 && lp.status === 200 && lp.json?.data?.entityId === rid && undoReuse.status === 200 && Boolean(kept),
     `research ${rr.status}; lp ${lp.status} ${JSON.stringify(lp.json?.data ?? lp.json)?.slice(0, 120)}; undo ${undoReuse.status}; claim kept ${Boolean(kept)}`);
+
+  // Red team, 17 Oct 2026: research matched to a person already here on a vehicle the caller may not change is added,
+  // the address unconfirmed; undo takes back the mail-desk alias it attached to them.
+  const { spv, pursuit, entity } = await fixtures(db);
+  const fundOnly = await token(juan, [OUTREACH_READ, OUTREACH_WRITE], [fund.id]);
+  const rena = await entity('Invented Rena Research', 'person');
+  await pursuit(rena, spv.id, 'selected');
+  await db.query(`insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body)
+    values ('props:research-rena', 'Invented record', 'crm', 'affinity', current_date, 'weak', 'Invented', '') on conflict do nothing`);
+  await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'office@invented-rena.example', 'props:research-rena', current_date, 'medium')`, [rena]);
+  const rn = await call(fundOnly, 'research', {}, { method: 'POST', body: { address: 'rena@invented-rena.example', name: 'Invented Rena Research', source: 'props-reconcile', idempotencyKey: 'props-research-rena' } });
+  const rnClaim = await db.one<{ confidence: string; verifier: string | null }>(`select confidence::text, last_verified_by::text verifier from research.claim
+    where entity_id = $1 and value = 'rena@invented-rena.example'`, [rena]);
+  const renaAlias = () => db.one(`select 1 from identity.source_record where source = 'mail_desk' and source_id = 'email:rena@invented-rena.example'`);
+  const aliasBefore = Boolean(await renaAlias());
+  const rnUndo = await call(fundOnly, 'research', { entityId: rena }, { method: 'DELETE' });
+  const renaKept = await db.one<{ retired: boolean }>('select retired_at is not null retired from identity.entity where entity_id = $1', [rena]);
+  check('Research on no vehicle: a person already here on a vehicle the caller can\'t change is added with the address unconfirmed (medium, no verifier), said in the answer; undo removes the alias it attached and keeps them',
+    rn.status === 200 && rn.json.data.entityId === rena && rn.json.data.created === false && typeof rn.json.data.unconfirmed === 'string'
+    && rnClaim?.confidence === 'medium' && rnClaim.verifier === null && aliasBefore
+    && rnUndo.status === 200 && !(await renaAlias()) && renaKept?.retired === false,
+    `add ${rn.status} ${JSON.stringify(rn.json?.data ?? rn.json)?.slice(0, 160)}; claim ${JSON.stringify(rnClaim)}; alias before ${aliasBefore}; undo ${rnUndo.status}; alias after ${Boolean(await renaAlias())}; retired ${renaKept?.retired}`);
 }

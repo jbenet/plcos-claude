@@ -341,6 +341,14 @@ data on Juan's Mac.
   a body, which left the person's access at Admin, so the copy kept serving and a refused sync only threw. Any 403 from
   info now drops the access (the session stays), and a 401 or 403 from the sync route, which is Admins' only, turns the
   copy off whatever the info said. Deactivation and sign-out everywhere sign the app out as before.
+- **Writes that reach another vehicle's LP go ahead, marked for review instead of refused.** A Team member's pushed W1
+  finding was checked only on its own LP, yet its firm, LinkedIn or domain could merge that LP with a namesake on a
+  vehicle they can't change; the import now knows who pushed it, and such a group goes to W13 review (an Admin's or
+  the system's import still merges it). `outreach_add_lp` and `outreach_add_research` matched to a person already here,
+  `outreach_propose_contact` on an LP and `outreach_add_entity` linked to a company that are also on such a vehicle still
+  write, but the address (and the contact's LinkedIn and other details) is recorded unconfirmed, medium with no verifier, and the answer says so;
+  send-to is unchanged. Undoing `outreach_add_entity` or `outreach_add_research` matched to an existing record now also
+  removes the mail-desk alias it attached, as undoing `outreach_add_lp` does.
 
 ### Juan's calls, 17 Oct 2026
 
