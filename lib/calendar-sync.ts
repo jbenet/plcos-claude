@@ -262,7 +262,9 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
     const isOurs = (a: string) => team.has(a) || ours.has(domainOf(a));
     // A meeting someone outside sent that nobody here accepted is not a meeting held (red team, 17 Oct 2026): left out,
     // so it adds no touchpoint and no rung, and one added before is gone after a whole read.
-    for (const [k, s] of seen) if (!s.accepted && !(s.event.organizer?.email && isOurs(s.event.organizer.email.toLowerCase()))) seen.delete(k);
+    // The organizer counts only as someone on the team by address, never by domain (red team, 17 Oct 2026: anyone at
+    // a Protocol Labs domain is "ours" for matching, not one of us who set the meeting).
+    for (const [k, s] of seen) if (!s.accepted && !(s.event.organizer?.email && team.has(s.event.organizer.email.toLowerCase()))) seen.delete(k);
     r.events = seen.size;
     const nameOf = new Map(users.map((u) => [u.id, u.name]));
     const guestsOf = (e: CalendarEvent) => [...new Set([e.organizer?.email, ...e.attendees.filter((a) => !a.resource && a.responseStatus !== 'declined').map((a) => a.email)]

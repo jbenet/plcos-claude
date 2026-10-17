@@ -102,6 +102,9 @@ export async function sentByThem(entityIds: string[], q?: Queryable): Promise<Se
       select h.for_entity, m.message_id, identity.canonical_entity_id(c.entity_id) sender
         from hits h join email.comms_message m on m.message_id = h.message_id and m.direction = 'theirs'
         join research.claim c on c.superseded_by is null and c.field ~ '(^|\\.)email$' and lower(trim(c.value)) = lower(m.from_addr)
+        -- Never a licensed (Dakota) address, as the ingest's own match (red team, 17 Oct 2026).
+        left join research.source_doc d on d.doc_id = c.source
+       where c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'
     )
     select distinct s.for_entity::text, s.message_id from senders s
       join lp on lp.entity_id = s.for_entity

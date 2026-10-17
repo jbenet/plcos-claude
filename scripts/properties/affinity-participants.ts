@@ -45,7 +45,10 @@ export async function affinityParticipantProperties({ adb, check }: AffinityCont
         mt(94505, [{ emailAddress: null, person: p(94501) }, { emailAddress: null, person: { ...p(94509), type: 'internal' } }])];
       const email = (id: number, address: string) => ({ id, type: 'email' as const, sentAt: '2017-01-01T00:00:00Z',
         from: { emailAddress: address }, to: [{ emailAddress: 'team@example.invalid' }] });
-      const mail = [email(94501, ' OLDER@example.invalid '), email(94502, 'shared@example.invalid'), email(94503, 'unrelated@example.invalid')];
+      // An outsider's mail with another outsider copied: only the sender's is theirs (red team, 17 Oct 2026).
+      const copied = { id: 94506, type: 'email' as const, sentAt: '2017-02-01T00:00:00Z', from: { emailAddress: 'other@example.invalid', person: p(94503) },
+        to: [{ emailAddress: 'team@example.invalid' }], cc: [{ emailAddress: 'one@example.invalid', person: p(94501) }] };
+      const mail = [email(94501, ' OLDER@example.invalid '), email(94502, 'shared@example.invalid'), email(94503, 'unrelated@example.invalid'), copied];
       const notes = [{ id: 94501, type: 'interaction' as const, content: null, creator: null, createdAt: '2026-01-01T00:00:00Z', updatedAt: null,
         interaction: { id: 94501, type: 'meeting' as const }, personsPreview: { data: [p(94502)], totalCount: 1 } }];
       const entries = [{ id: 94501, type: 'person' as const, listId: 1, createdAt: '2026-01-01T00:00:00Z',
@@ -62,6 +65,11 @@ export async function affinityParticipantProperties({ adb, check }: AffinityCont
       check('Affinity calendar team participant resolves by canonical person ID without an email',
         named?.attendees.includes(account.name) === true,
         'A settled app_user identity link retains the named team participant for W3; no email or name guess is required.');
+      const cc = await tx.query<{ entity_id: string; direction: string | null }>(`select entity_id, direction from meetings.meeting
+        where source='affinity' and source_ref like 'interaction:email:94506:%'`);
+      check('Affinity mail from an outsider is theirs only for its sender: someone copied on it did not reply',
+        cc.some(r => r.entity_id === b && r.direction === 'theirs') && cc.some(r => r.entity_id === a && r.direction === null),
+        JSON.stringify(cc.map(r => [r.entity_id === a ? 'copied' : r.entity_id === b ? 'sender' : 'other', r.direction])));
       const sent = await tx.one<{ attendees: string[] }>(`select attendees from meetings.meeting
         where source='affinity' and source_ref like 'interaction:email:94504:%' and entity_id=$1`, [a]);
       check('Affinity list-entry outbound email retains its named sender for W3',
