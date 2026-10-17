@@ -22,7 +22,7 @@
  * started on (never with local changes, off master, or when the dependencies changed: that waits for Update).
  */
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createWriteStream, existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
@@ -30,7 +30,7 @@ import { basename, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { beginRun, realRoot } from '../lib/workflows/ledger';
 import { finishWithUsage } from '../lib/workflows/usage';
-import { batchPrefix, CAPACITY_WAIT_MS, CODEX, codexArgs, fill, MODELS, nightOf, RESEARCH_HOLD_MS, RUN_LIMIT_MS, shouldFallBack, WEB_WORKFLOWS } from '../lib/astra/runner';
+import { acceptJob, batchPrefix, CAPACITY_WAIT_MS, CODEX, codexArgs, fill, MODELS, nightOf, RESEARCH_HOLD_MS, RUN_LIMIT_MS, shouldFallBack, WEB_WORKFLOWS } from '../lib/astra/runner';
 import { RESEARCH_FILES, RESEARCH_FRESH_MS } from '../lib/astra/research';
 
 const run = promisify(execFile);
@@ -41,6 +41,11 @@ const SLOTS = Math.max(1, Math.min(12, Number(process.env.ASTRA_SLOTS ?? 8)));
 const POLL_MS = 60_000;
 const WORKFLOWS = ['w1w5', 'w1', 'w5', 'w5t', 'w1s', 'w5r'] as const;
 type Job = { id: string; workflow: (typeof WORKFLOWS)[number]; size: number; focus?: string[] };
+/**
+ * This process's id, made once at start and sent on every poll and report (migration 030), so the server tells two
+ * runners on one Mac apart: they share a host name, and each failed the other's runs as lost (red team, 17 Oct 2026).
+ */
+const INSTANCE = randomUUID();
 /** What this runner can do beyond the first runners: `focus` = cut a batch for named vehicles (the night plan, migration 027). */
 const FEATURES = ['focus'] as const;
 /** Restarted when it exits: by launchd (the login item), or by the Astra app — found by its env, or up the parent chain for app builds before it set one. */
@@ -80,7 +85,7 @@ async function call(body: Record<string, unknown>, timeoutMs = 30_000): Promise<
   return json;
 }
 const reportJob = (id: string, status: 'running' | 'done' | 'failed', extra: Record<string, unknown> = {}) =>
-  call({ op: 'report', id, status, ...extra }).catch((e) => log(`report failed: ${e instanceof Error ? e.message : e}`));
+  call({ op: 'report', id, instance: INSTANCE, status, ...extra }).catch((e) => log(`report failed: ${e instanceof Error ? e.message : e}`));
 
 /** Worker folders: the codex worktrees beside the live checkout when they exist (as in docs/codex-headless.md), else plain folders. */
 async function slots(astra: string): Promise<Slot[]> {
@@ -195,7 +200,7 @@ async function refreshResearch(enrich: string): Promise<boolean> {
   researchTriedAt = Date.now();
   try {
     const got = await call({ op: 'research' }, 300_000);
-    if (got.pending) { log(`research export: ${String(got.reason ?? 'pending')}`); return holding; }
+    if (got.pending) { log(`research export: ${String(got.reason ?? 'pending')}${got.error ? ` (${String(got.error).slice(0, 200)})` : ''}`); return holding; }
     const files = Object.entries((got.files ?? {}) as Record<string, { text: string; sha256: string }>)
       .filter(([name]) => (RESEARCH_FILES as readonly string[]).includes(name));
     if (!files.some(([name]) => name === 'candidates.jsonl')) throw new Error('the answer has no candidates.jsonl');
@@ -383,7 +388,7 @@ async function main() {
     const holding = pendingCommands.some((c) => c.op !== 'diagnose');
     const refreshing = inWindow && await refreshResearch(join(root, 'enrich'));
     try {
-      const answer = await call({ op: 'poll', host: hostname().slice(0, 60), workflows: WORKFLOWS, features: FEATURES, commands: COMMANDS, commit: startCommit.slice(0, 12), startedAt,
+      const answer = await call({ op: 'poll', host: hostname().slice(0, 60), instance: INSTANCE, workflows: WORKFLOWS, features: FEATURES, commands: COMMANDS, commit: startCommit.slice(0, 12), startedAt,
         inWindow, night, free: waiting || holding || refreshing ? 0 : idle.length,
         held: pool.flatMap((s) => (s.job ? [s.job.id] : [])), slots: pool.map((s) => ({ slot: s.name, job: s.job?.id ?? null })),
         capacityUntil: waiting ? new Date(capacityUntil).toISOString() : null,
@@ -394,7 +399,10 @@ async function main() {
         const slot = pool.find((s) => s.job?.id === id);
         if (slot) { slot.cancelled = true; slot.child?.kill('SIGTERM'); }
       }
-      for (const job of (answer.jobs ?? []) as Job[]) {
+      for (const raw of (answer.jobs ?? []) as unknown[]) {
+        // Checked before any path or argument is built from it; a job that fails is left for the server to fail as lost.
+        const job = acceptJob(raw, WORKFLOWS);
+        if (!job) { log('dropped a run the server handed over with a malformed id, workflow, size or focus'); continue; }
         const slot = pool.find((s) => !s.job);
         if (!slot) break;
         slot.job = job; slot.cancelled = false;

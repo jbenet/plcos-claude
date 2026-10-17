@@ -74,18 +74,27 @@ async function strategyFiles(dir: string): Promise<Array<{ key: string; version:
 const TIGHTEN: Record<string, number> = { committed: 0, discussing: 1, connecting: 2, selected: 3 };
 
 async function main() {
+  // Read the arguments in order: the word after --keys, --max or --vehicle is that option's value, never a flag or a
+  // positional (red team, 17 Oct 2026: a focus of "--tighten" would have turned the cut into a shorten run).
+  const VALUED = ['--keys', '--max', '--vehicle'];
+  const valued = new Map<string, string>(), flags = new Set<string>(), positional: string[] = [];
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]!;
+    if (VALUED.includes(a)) { if (!valued.has(a)) valued.set(a, argv[i + 1] ?? ''); i++; }
+    else if (a.startsWith('--')) flags.add(a);
+    else positional.push(a);
+  }
   // `--keys <file>`: listed LPs eligible for new/revised strategies, plus their firms' strategies.
-  const keysAt = process.argv.indexOf('--keys');
-  const keysFile = keysAt >= 0 ? process.argv[keysAt + 1] : null;
-  const maxAt = process.argv.indexOf('--max');
-  const max = maxAt >= 0 ? Number(process.argv[maxAt + 1]) : Infinity;
-  const vehicleAt = process.argv.indexOf('--vehicle');
-  const focusArg = vehicleAt >= 0 ? process.argv[vehicleAt + 1] ?? '' : null;
+  const keysFile = valued.get('--keys') ?? null;
+  const max = valued.has('--max') ? Number(valued.get('--max')) : Infinity;
+  const focusArg = valued.get('--vehicle') ?? null;
   if (!(max >= 1)) { console.error('--max takes a positive number.'); process.exit(2); }
-  const [mode, prefix, sizeArg] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !['--keys', '--max', '--vehicle'].includes(all[i - 1]!));
-  const withSearch = process.argv.includes('--search');
-  const tighten = process.argv.includes('--tighten');
-  const revise = !tighten && (process.argv.includes('--revise') || Boolean(keysFile));
+  if (focusArg !== null && !/^\w/.test(focusArg)) { console.error('--vehicle takes vehicle slugs or names, comma-separated.'); process.exit(2); }
+  const [mode, prefix, sizeArg] = positional;
+  const withSearch = flags.has('--search');
+  const tighten = flags.has('--tighten');
+  const revise = !tighten && (flags.has('--revise') || Boolean(keysFile));
   const only = keysFile ? new Set((await readFile(keysFile, 'utf8')).split('\n').map((k) => k.trim()).filter(Boolean)) : null;
   if ((mode !== 'w1' && mode !== 'w5') || !prefix || (tighten && (mode !== 'w5' || keysFile))) {
     console.error('usage: enrich-batch.ts w1|w5 <prefix> [size] [--search] (--tighten: w5 only, without --keys)');

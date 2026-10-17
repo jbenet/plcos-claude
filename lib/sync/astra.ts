@@ -8,9 +8,9 @@ import type { PushAnswer } from './push';
  * reports with an Admin's token. Juan, 10 Oct 2026: "should not go through claude, should be able to have a UI
  * and trigger astra automatically". Counts only, never a name; the server launches nothing.
  *
- *   POST { op: "poll", host, workflows?, commands?, commit?, startedAt?, inWindow, night, free, held: [jobId], slots: [{slot, job}],
+ *   POST { op: "poll", host, instance?, workflows?, commands?, commit?, startedAt?, inWindow, night, free, held: [jobId], slots: [{slot, job}],
  *        capacityUntil, note } → 200 { paused, batchSize, window, jobs: [{ id, workflow, size }], cancel: [jobId], commands: [{ id, op }] }
- *   POST { op: "report", id, status: "running" | "done" | "failed", batch?, slot?, model?, counts?, message? }
+ *   POST { op: "report", id, instance?, status: "running" | "done" | "failed", batch?, slot?, model?, counts?, message? }
  *   POST { op: "queue", workflow, size, count, runNow } → 200 { queued }: what Queue runs does on the page, for the
  *        Astra menu-bar app (desktop/astra), queued as the token's holder.
  *   POST { op: "status" } → 200 { runner, up, jobs, commands }: the page's runner state, recent runs and commands (counts, no names).
@@ -24,6 +24,10 @@ import type { PushAnswer } from './push';
  *        batches from (lib/astra/research.ts). Names leave the server here, as they do in a snapshot, to the Admin's Mac.
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** The runner's per-process id (migration 030): a runner from before it sends none, and is told apart by host. */
+const INSTANCE = /^[0-9a-z-]{8,64}$/i;
+/** null when absent; false when sent but malformed, which is refused rather than read as an older runner. */
+const instanceOf = (v: unknown): string | null | false => (v === undefined || v === null ? null : typeof v === 'string' && INSTANCE.test(v) ? v : false);
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 
 export async function astraCall(caller: SyncCaller, request: Request, o: { db?: Db } = {}): Promise<PushAnswer> {
@@ -42,6 +46,8 @@ export async function astraCall(caller: SyncCaller, request: Request, o: { db?: 
       const job = text((s as Record<string, unknown>)?.job, 40);
       return slot ? [{ slot, job: job && UUID.test(job) ? job : null }] : [];
     }) : [];
+    const instance = instanceOf(input.instance);
+    if (instance === false) return answer(422, 'invalid', { error: 'instance is 8 to 64 letters, digits or dashes.' }, { reason: 'poll' });
     const night = typeof input.night === 'string' && /^\d{4}-\d\d-\d\d$/.test(input.night) ? input.night : null;
     if (!night || typeof input.inWindow !== 'boolean') return answer(422, 'invalid', { error: 'A poll needs night (YYYY-MM-DD) and inWindow.' }, { reason: 'poll' });
     const capacity = typeof input.capacityUntil === 'string' && Number.isFinite(Date.parse(input.capacityUntil)) ? new Date(input.capacityUntil).toISOString() : null;
@@ -52,7 +58,7 @@ export async function astraCall(caller: SyncCaller, request: Request, o: { db?: 
     const codeStartedAt = typeof input.startedAt === 'string' && Number.isFinite(Date.parse(input.startedAt)) ? new Date(input.startedAt).toISOString() : null;
     const features = Array.isArray(input.features) ? (['focus'] as const).filter((f) => (input.features as unknown[]).includes(f)) : [];
     let result: Awaited<ReturnType<typeof astra.poll>>;
-    try { result = await astra.poll(db, { host: text(input.host, 60) ?? 'mac', workflows, commands, features, code, codeStartedAt, inWindow: input.inWindow, night, free, held, slots,
+    try { result = await astra.poll(db, { host: text(input.host, 60) ?? 'mac', instance, workflows, commands, features, code, codeStartedAt, inWindow: input.inWindow, night, free, held, slots,
       capacityUntil: capacity, note: text(input.note, 300) }); }
     catch (e) { if (e instanceof astra.AstraRunnerBusy) return answer(409, 'refused', { error: e.message }, { op: 'poll', reason: 'busy' }); throw e; }
     // Polls come every minute; only those that hand out or cancel work go in the audit log.
@@ -64,11 +70,12 @@ export async function astraCall(caller: SyncCaller, request: Request, o: { db?: 
   if (input?.op === 'report') {
     const id = typeof input.id === 'string' && UUID.test(input.id) ? input.id : null;
     const status = ['running', 'done', 'failed'].find((s) => s === input.status) as 'running' | 'done' | 'failed' | undefined;
-    if (!id || !status) return answer(422, 'invalid', { error: 'A report needs a job id and a status of running, done or failed.' }, { reason: 'report' });
+    const instance = instanceOf(input.instance);
+    if (!id || !status || instance === false) return answer(422, 'invalid', { error: 'A report needs a job id and a status of running, done or failed.' }, { reason: 'report' });
     const counts = input.counts && typeof input.counts === 'object' && !Array.isArray(input.counts) ? input.counts as Record<string, unknown> : undefined;
     const ok = await astra.report(db, { id, status, batch: text(input.batch, 80) ?? undefined, slot: text(input.slot, 40) ?? undefined,
-      model: text(input.model, 40) ?? undefined, counts, message: text(input.message, 300) ?? undefined });
-    if (!ok) return answer(409, 'refused', { error: 'That run is not claimed or running (it may have been cancelled).' }, { op: 'report', reason: 'state' });
+      model: text(input.model, 40) ?? undefined, counts, message: text(input.message, 300) ?? undefined, instance });
+    if (!ok) return answer(409, 'refused', { error: 'That run is not claimed or running (it may have been cancelled), or another runner claimed it.' }, { op: 'report', reason: 'state' });
     return status === 'running' ? { status: 200, body: { ok: true } } : answer(200, 'ok', {}, { op: 'report', status });
   }
   if (input?.op === 'queue') {

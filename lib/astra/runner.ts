@@ -2,7 +2,7 @@
  * The pure parts of the Mac's Astra runner (scripts/astra-runner.ts, docs/30-astra-runner.md), kept here so the
  * property tests reach them without a Mac, a Keychain or codex.
  */
-import { inWindow } from './jobs';
+import { FOCUS_MAX, FOCUS_PATTERN, inWindow } from './jobs';
 
 export const CODEX = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex';
 export const MODELS = ['gpt-6-astra', 'gpt-6-sol'] as const;
@@ -58,5 +58,28 @@ export function shouldFallBack(lastMessage: string, log: string): boolean {
   return !lastMessage.trim() && /model is at capacity/i.test(log);
 }
 
-/** The batch file's prefix for a job: short, unique, and recognisably the runner's. */
-export const batchPrefix = (jobId: string) => `astra-${jobId.slice(0, 8)}-`;
+/**
+ * The batch file's prefix for a job: the whole job id without dashes, so two jobs never share a batch file (8 hex
+ * characters could collide: red team, 17 Oct 2026), and recognisably the runner's (astra-<id>-NN, as enrich-batch.ts's
+ * astra-[\w-]+ holds match).
+ */
+export const batchPrefix = (jobId: string) => `astra-${jobId.replace(/-/g, '')}-`;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export interface RunnerJob<W extends string = string> { id: string; workflow: W; size: number; focus?: string[] }
+
+/**
+ * A job as the server handed it, checked before the runner builds any path or argument from it: an id that is not a
+ * UUID, a workflow this runner does not name, a size outside 1–20, or a focus the server itself would refuse (one
+ * starting `--` would read as a flag) drops the job (red team, 17 Oct 2026).
+ */
+export function acceptJob<W extends string>(raw: unknown, workflows: readonly W[]): RunnerJob<W> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const j = raw as Record<string, unknown>;
+  const workflow = workflows.find((w) => w === j.workflow);
+  if (typeof j.id !== 'string' || !UUID.test(j.id) || !workflow) return null;
+  if (!Number.isSafeInteger(j.size) || (j.size as number) < 1 || (j.size as number) > 20) return null;
+  const focus = j.focus === undefined || j.focus === null ? [] : j.focus;
+  if (!Array.isArray(focus) || focus.length > FOCUS_MAX || !focus.every((f) => typeof f === 'string' && FOCUS_PATTERN.test(f))) return null;
+  return { id: j.id.toLowerCase(), workflow, size: j.size as number, focus: focus as string[] };
+}

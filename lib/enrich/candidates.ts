@@ -2,7 +2,7 @@ import { importEntityKeys } from './entity-keys';
 import { exportAliases } from './candidate-key';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { latestRaw } from '@/modules/sources';
@@ -391,7 +391,22 @@ export const enrichDir = () => {
   return dir;
 };
 
-/** Write the research, strategy and triage files. Returns counts, never names. */
+/**
+ * Write one export file whole: to a temporary name, then renamed into place, so a reader (the Astra runner's research
+ * fetch, a batch cut) never sees half a file (red team, 17 Oct 2026).
+ */
+async function writeWhole(file: string, text: string, mode = 0o666): Promise<void> {
+  const temp = join(dirname(file), `.${basename(file)}-${randomUUID()}.tmp`);
+  try {
+    await writeFile(temp, text, { encoding: 'utf8', flag: 'wx', mode });
+    await rename(temp, file);
+  } finally { await rm(temp, { force: true }).catch(() => {}); }
+}
+
+/**
+ * Write the research, strategy and triage files. Returns counts, never names. export-status.json is written last, so
+ * its time says when the whole export finished (lib/astra/research.ts judges freshness by it).
+ */
 export async function exportResearchSet(): Promise<{ candidates: number; people: number; orgs: number; withDomain: number; withOrg: number; byStatus: Record<string, number>; dir: string; identityReviewError: ResearchExportStatus['identityReviewError']; lpUnitReviewError: ResearchExportStatus['lpUnitReviewError'] }> {
   // A record with no searchable name ("-" from a source's blank) can't be researched; W1 wrote
   // empty placeholders for them (27 Sep). It stays in the pipeline, just not in the export.
@@ -404,27 +419,27 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
     enriched: Object.fromEntries(Object.entries(c.enriched).filter(([k]) => IDENTITY_FIELDS.includes(k))),
     ...(c.contacts ? { contacts: c.contacts.map(contact => ({ ...identity(contact), contactRole: contact.contactRole })) } : {}),
   });
-  await writeFile(join(dir, 'research-set.jsonl'), set.map((c) => JSON.stringify(identity(c))).join('\n') + '\n', 'utf8');
-  await writeFile(join(dir, 'candidates.jsonl'), set.map((c) => JSON.stringify(c)).join('\n') + '\n', 'utf8');
+  await writeWhole(join(dir, 'research-set.jsonl'), set.map((c) => JSON.stringify(identity(c))).join('\n') + '\n');
+  await writeWhole(join(dir, 'candidates.jsonl'), set.map((c) => JSON.stringify(c)).join('\n') + '\n');
   // Our side (W2): the team, for finding who of us is connected to whom. Names and roles only — no
   // address and no domain, since agents read this file and a personal domain is one step from a
   // personal address (Juan, 24 Sep: nothing that identifies us goes into a request).
   const db = await getDb();
   // Use the importer's ambiguity and canonical-identity rules; batch cutting stays file-only.
   const aliases = exportAliases(await importEntityKeys(db), set);
-  await writeFile(join(dir, 'entity-keys.json'), JSON.stringify(Object.fromEntries(aliases)) + '\n', 'utf8');
+  await writeWhole(join(dir, 'entity-keys.json'), JSON.stringify(Object.fromEntries(aliases)) + '\n');
   // The voice rides on the same query, so the export's query count stays bounded (triage-export property).
   const team = await db.query<{ handle: string; name: string; role: string; style: string | null; samples: string[] | null }>(
     `select u.handle, u.name, u.role, v.style, v.samples from platform.app_user u left join email.voice v on v.user_id = u.id
       where u.active order by u.name`);
-  await writeFile(join(dir, 'vehicles.json'), JSON.stringify(await db.query('select slug, name, kind::text as kind from platform.vehicle')) + '\n', 'utf8');
-  await writeFile(join(dir, 'team.json'), JSON.stringify(team.map((u) => ({
+  await writeWhole(join(dir, 'vehicles.json'), JSON.stringify(await db.query('select slug, name, kind::text as kind from platform.vehicle')) + '\n');
+  await writeWhole(join(dir, 'team.json'), JSON.stringify(team.map((u) => ({
     handle: u.handle, name: u.name, role: u.role,
-  })), null, 1) + '\n', 'utf8');
+  })), null, 1) + '\n');
   // Each sender's voice (docs/email-guidelines.md §Voice): their own notes and sample emails, which
   // they chose for whoever drafts for them. W5 writes a first message in its sender's voice from it.
   await mkdir(join(dir, 'us'), { recursive: true });
-  await writeFile(join(dir, 'us', 'voice.json'), JSON.stringify({ voices: team.filter((u) => u.style || u.samples?.length).map((u) => ({ handle: u.handle, name: u.name, style: u.style ?? '', samples: u.samples ?? [] })) }, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 });
+  await writeWhole(join(dir, 'us', 'voice.json'), JSON.stringify({ voices: team.filter((u) => u.style || u.samples?.length).map((u) => ({ handle: u.handle, name: u.name, style: u.style ?? '', samples: u.samples ?? [] })) }, null, 1) + '\n', 0o600);
   await writeTriageExport(dir, await makeTriageExport(dir, snapshot.candidates, snapshot.touches, snapshot.entries, team));
   // Identity review is independent. A cancelled statement rolls back its own transaction,
   // after the other research files have been written, and never suppresses their receipt.
@@ -461,7 +476,8 @@ export async function exportResearchSet(): Promise<{ candidates: number; people:
       console.error('[enrich.export] stale lp-unit-review.jsonl could not be removed.');
     });
   } finally { await rm(lpTemp, { force: true }).catch(() => {}); }
-  await writeFile(join(dir, 'export-status.json'), JSON.stringify(status) + '\n', { encoding: 'utf8', mode: 0o600 });
+  // Last, and whole: its time is the export's (lib/astra/research.ts).
+  await writeWhole(join(dir, 'export-status.json'), JSON.stringify(status) + '\n', 0o600);
   const byStatus: Record<string, number> = {};
   for (const c of set) for (const p of c.pursuits) byStatus[p.status] = (byStatus[p.status] ?? 0) + 1;
   return {

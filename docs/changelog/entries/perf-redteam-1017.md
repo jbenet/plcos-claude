@@ -328,6 +328,17 @@ data on Juan's Mac.
   held the server's memory.
 - **A second Astra runner is refused while the first is alive.** Any Admin-scope token's poll marked every run the real
   runner held as lost.
+- **Astra runners are told apart by process, take only well-formed runs, and a failing export waits an hour.** Two
+  runners on one Mac share a host name, so both passed the one-runner check, failed each other's runs as lost, got 409
+  on their reports and ended plan steps early. The runner now sends a random id made once per process on each poll and
+  report; the server compares it when sent (the host when not, so an older runner works as before), records which one
+  claimed each run (migration 030), and takes a report naming an id only from that claimer. The runner drops a run whose
+  id isn't a UUID, whose workflow it doesn't know, or whose focus the server would refuse, before building any path or
+  argument; a focus must start with a letter, digit or underscore (a leading `--` passed), and the batch cutter reads
+  the word after `--vehicle` as its value, never as a flag. Batch files carry the whole job id, not its first 8
+  characters. A research export that failed within the hour is answered with its error rather than queued again on
+  every poll; its files are written to temporary names and renamed, `export-status.json` last, and freshness is judged
+  by that file. The runner's side reaches the Mac when the Astra runner next updates.
 - **Two finishes of one run can't freeze the ledger.** Appends now go one at a time; two at once both passed the
   "already finished" check, and the conflict stopped every later run, the cloud's W1 and W5 included.
 - **The example-case harness no longer records a pass it didn't check.** Any proposal was stored as "matched the
