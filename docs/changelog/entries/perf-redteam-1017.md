@@ -60,6 +60,22 @@ data on Juan's Mac.
 - **LP stats starts its own reads beside the pipeline's rows**, from the same cached per-vehicle lists, and checks
   them against the rows before use (any difference reads again). In-process rebuild medians: stats about 200 → 185 ms,
   conversion 190 → 170 ms; the output hashes are unchanged. Now bound by the pipeline rows themselves.
+- **The Mac app reads from its copy two seconds sooner after launch.** The core's first pass at launch (and at every
+  new server build) only prepared the build, then waited the usual two seconds and asked the server's state again
+  before syncing. A quick prepare now syncs at once from the state it has just read; a long one (a download, an
+  install) reads the state again with no wait. Measured with the core's sync driven against two local databases
+  (perf4 fixture, prepare stubbed at 300 ms, `next start` stubbed): launch to ready 2,406 → 393 ms, two state calls
+  to one. The local server's own start (about 0.9 s here) still follows the sync, so it never warms pages from a
+  copy in the middle of one.
+- **A second write is read back from the copy at once.** After a sync the core rebuilds the last 8 pages, for up to
+  15 s, and the sync for a write made meanwhile waited for that to finish, its reads on the live server. A newer write
+  now stops the rebuild between pages (the sync that catches it up rebuilds them again). Two writes 0.3 s apart, pages
+  at 500 ms each: the second write is back on the copy after 3,749 → 239 ms.
+- **An idle sync asks the Mac's database nothing.** Each 15 s tick read the catalog for the copy's tables and the
+  foreground revision even when no counter had moved. The tables are read once per build (and again after a failed
+  tick), and the revision only when a table will be pulled: 2 → 0 local queries, about 12 → 6 ms a tick, one call
+  to the server as before. The copy still matches the server row for row (checked by md5 after a whole copy and
+  two incremental syncs).
 
 ### Red team
 
