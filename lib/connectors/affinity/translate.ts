@@ -514,8 +514,11 @@ export async function touchpoints(
       ].filter((p): p is Participant => !!p && (!!who(p.person, p.emailAddress) || p.person?.type === 'internal'));
       await put({
         entity, ref: `interaction:${d.type}:${d.id}:${key}`, channel: CHANNEL_OF[d.type], at, exact: true,
+        // Theirs only when they sent it (red team, 17 Oct 2026): a person copied on an outsider's mail did not reply, and
+        // Reconciliation reads a reply as the LP opting in. A firm's entry keeps any outside sender as the firm's.
         direction: d.type === 'email' || d.type === 'chat-message'
-          ? d.from?.person?.type === 'internal' ? 'ours' : d.from?.person?.type === 'external' ? 'theirs' : null
+          ? d.from?.person?.type === 'internal' ? 'ours'
+            : d.from?.person?.type === 'external' && (e.type !== 'person' || (d.from && index.person(d.from) === entity)) ? 'theirs' : null
           : 'both',
         owner: who(d.from?.person, d.from?.emailAddress) ?? internal.map((p) => who(p.person, p.emailAddress)).find(Boolean) ?? placeholder,
         attendees: [...new Set(internal.map(p => {
@@ -569,7 +572,8 @@ export async function touchpoints(
       linked.add(entity);
       const key = a.person?.id ? `person:${a.person.id}` : `entity:${entity}`;
       await put({ entity, ref: `interaction:${d.type}:${d.id}:${key}`, channel: CHANNEL_OF[d.type], at, exact: true,
-        direction: d.type === 'call' ? 'both' : who(d.from?.person, d.from?.emailAddress) ? 'ours' : d.from?.person?.type === 'external' ? 'theirs' : null,
+        direction: d.type === 'call' ? 'both' : who(d.from?.person, d.from?.emailAddress) ? 'ours'
+          : d.from?.person?.type === 'external' && a === d.from ? 'theirs' : null,
         owner: who(d.from?.person, d.from?.emailAddress) ?? internal[0] ?? placeholder,
         attendees: [...new Set(internal.map(id => displayByUser.get(id) ?? '').filter(Boolean))],
         about: read(d.subject ?? d.title ?? '', d.type === 'email' || d.type === 'chat-message' ? [addressOf(d.from), ...to.map(addressOf)] : []),
