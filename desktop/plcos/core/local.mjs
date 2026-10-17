@@ -13,7 +13,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { rm } from 'node:fs/promises';
-import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, statSync } from 'node:fs';
+import { createWriteStream, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -36,6 +36,24 @@ const DIGEST_RUN = 5000;
 /** A build's folder name under builds/: a plain name (a commit), or null, so `../..` cannot leave the folder. */
 export function buildName(s) {
   return typeof s === 'string' && /^[0-9A-Za-z][0-9A-Za-z_-]{0,63}$/.test(s) ? s : null;
+}
+
+/**
+ * The socket folder when the copy's own is too deep for a socket path: <tmp>/plcos-pg if it is a real folder (not a
+ * link) of this user's that no one else can open, else a fresh private one. The database trusts whoever reaches the
+ * socket, so another account must not be able to make or own the folder first (red team, 17 Oct 2026).
+ */
+export function privateSocketDir(tmp = os.tmpdir(), port = PG_PORT) {
+  // The socket path must stay under the system's 103 characters; a very deep temporary folder falls back to /tmp.
+  const base = `${tmp}/plcos-pg-XXXXXX/.s.PGSQL.${port}`.length <= 100 ? tmp : '/tmp';
+  const dir = path.join(base, 'plcos-pg');
+  try { mkdirSync(dir, { mode: 0o700 }); } catch { /* there already, or not makeable: checked below */ }
+  try {
+    const st = lstatSync(dir);
+    const uid = typeof process.getuid === 'function' ? process.getuid() : st.uid;
+    if (st.isDirectory() && !st.isSymbolicLink() && st.uid === uid && (st.mode & 0o077) === 0) return dir;
+  } catch { /* missing: make a fresh one */ }
+  return mkdtempSync(path.join(base, 'plcos-pg-'));
 }
 
 export function splitRowsPage(text) {
@@ -109,7 +127,7 @@ export class LocalCopy {
     // copy as superuser, with no password (red-team pass, 17 Oct 2026). A folder whose socket path would pass the
     // system's 103-character limit puts the socket in this user's own temporary folder instead.
     const pgDir = path.join(DATA_DIR, 'pg');
-    this.pgSocket = `${pgDir}/.s.PGSQL.${PG_PORT}`.length <= 100 ? pgDir : path.join(os.tmpdir(), 'plcos-pg');
+    this.pgSocket = !this.pgManaged || `${pgDir}/.s.PGSQL.${PG_PORT}`.length <= 100 ? pgDir : privateSocketDir();
     // localhost with `?host=<socket folder>`: node-pg and psql both take the folder from it, and the build's own checks
     // (config/deployment.ts, scripts/desktop-migrate.ts) accept a loopback name with only that parameter.
     this.dbUrl = env.PLCOS_DESKTOP_DATABASE_URL || `postgres://plcos@localhost:${PG_PORT}/${DB_NAME}?host=${encodeURIComponent(this.pgSocket)}`;

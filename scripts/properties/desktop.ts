@@ -1,6 +1,6 @@
 /** The desktop app's pairing and build excludes (docs/31). Pure: no database, no network. */
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { BUILD_INCLUDES, buildExcludes } from '../../lib/desktop/build';
@@ -89,6 +89,29 @@ export async function desktopProperties(check: Check) {
   check('desktop build folder is named only by a plain name: a header naming anything else is refused (no ../ out of builds/)',
     buildName('5bcf0b12') === '5bcf0b12' && buildName('5bcf0b120b4b7515777986080f06a225cf446afb') !== null
       && [null, '', '../..', '..', '.hidden', '5bcf0b12/../x', 'a b', 'x'.repeat(65)].every((x) => buildName(x) === null), 'names');
+  // Red team, 17 Oct 2026: the fallback socket folder in the temporary folder is used only when it is this user's own
+  // private folder; a link, a file or an open folder there (another account's, made first) is passed over for a fresh one.
+  const { privateSocketDir } = await import(core) as { privateSocketDir: (tmp?: string, port?: number) => string };
+  const tmpRoot = mkdtempSync(path.join(os.tmpdir(), 'plcos-sock-prop-'));
+  try {
+    const fixed = path.join(tmpRoot, 'plcos-pg');
+    const mine = privateSocketDir(tmpRoot, 57435);
+    const again = privateSocketDir(tmpRoot, 57435);
+    const privateOk = mine === fixed && again === fixed && (statSync(fixed).mode & 0o077) === 0;
+    const passedOver: string[] = [];
+    const tryShape = (label: string, make: () => void) => {
+      rmSync(fixed, { recursive: true, force: true }); make();
+      const got = privateSocketDir(tmpRoot, 57435);
+      const st = lstatSync(got);
+      if (got !== fixed && path.dirname(got) === tmpRoot && st.isDirectory() && (st.mode & 0o077) === 0) passedOver.push(label);
+    };
+    const elsewhere = mkdtempSync(path.join(tmpRoot, 'target-'));
+    tryShape('open', () => { mkdirSync(fixed); chmodSync(fixed, 0o755); });
+    tryShape('link', () => { symlinkSync(elsewhere, fixed); });
+    tryShape('file', () => { writeFileSync(fixed, ''); });
+    check('desktop socket fallback folder is used only when it is a private folder of this user, never a link, a file or an open folder',
+      privateOk && passedOver.length === 3, `private ${privateOk}; passed over ${passedOver.join(',')}`);
+  } finally { rmSync(tmpRoot, { recursive: true, force: true }); }
   // Red team, 17 Oct 2026: an Admin demoted with no vehicles gets a 403 with a JSON body from the info route, which left
   // `access` at 'admin', so the copy kept serving. A refusal from the sync route (Admins only) now stops it whatever the
   // info said, and the core's info refresh drops the access on any 403.
