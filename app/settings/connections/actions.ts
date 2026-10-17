@@ -97,3 +97,20 @@ export async function syncDocsendAction(formData: FormData): Promise<void> {
   await queueImportJob(await getDb(), 'docsend', user.id);
   revalidatePath('/settings/connections');
 }
+
+/**
+ * DocSend: finish a sign-in that DocSend returned to a loopback address (lib/connectors/docsend/connection.ts): the
+ * person pastes the address their browser ended on; its state must match their own signed cookie.
+ */
+export async function finishDocsendPasteAction(formData: FormData): Promise<void> {
+  const user = await requireAction('app/settings/connections/actions.ts#finishDocsendPasteAction', formData);
+  const { headers, cookies } = await import('next/headers');
+  const { redirect } = await import('next/navigation');
+  const { publicUrl } = await import('@/lib/settings/setup');
+  const { finishDocsendFromPaste } = await import('@/lib/connectors/docsend/signin');
+  const h = await headers();
+  const { outcome, clear } = await finishDocsendFromPaste(user, publicUrl(h), String(formData.get('url') ?? '').slice(0, 4096), h.get('cookie'));
+  if (outcome !== 'pasted-wrong') (await cookies()).set(clear.name, '', { maxAge: 0, path: '/', httpOnly: true, sameSite: 'lax', secure: clear.secure });
+  revalidatePath('/settings/connections');
+  redirect(`/settings/connections?docsend=${outcome}#docsend`);
+}

@@ -14,7 +14,8 @@ import { settingsReady, settingsView, type SettingView } from '@/lib/settings/st
 import { ago } from '@/lib/time';
 import { docsendConnection, listSpaces } from '@/modules/docsend';
 import { appendAudit, auditSince, listUsers, listVehicles } from '@/modules/platform';
-import { disconnectDocsendAction, mapDocsendSpaceAction, syncDocsendAction } from './actions';
+import { disconnectDocsendAction, finishDocsendPasteAction, mapDocsendSpaceAction, syncDocsendAction } from './actions';
+import { signInReturnsToLoopback } from '@/lib/connectors/docsend/connection';
 import { SettingRow, type RowView } from './SettingRow';
 import s from './connections.module.css';
 
@@ -38,6 +39,7 @@ const DOCSEND_OUTCOME: Record<string, string> = {
   expired: 'The DocSend sign-in took too long or came from another browser. Connect again.',
   failed: 'DocSend refused the sign-in.',
   unavailable: 'DocSend’s sign-in could not be reached from this server.',
+  'pasted-wrong': 'That is not the address DocSend sent your browser to. It starts with http://localhost:8976/callback or http://127.0.0.1:8976/callback.',
 };
 
 export default async function ConnectionsPage({ searchParams }: { searchParams?: Promise<{ docsend?: string }> } = {}) {
@@ -58,7 +60,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams?:
   const key = secretSource();
   const storage = storageWarning();
   const people = (await listUsers()).filter((p) => p.email);
-  const [docsend, spaces, vehicles] = await Promise.all([docsendConnection(), listSpaces(), listVehicles()]);
+  const [docsend, spaces, vehicles, docsendPaste] = await Promise.all([docsendConnection(), listSpaces(), listVehicles(), signInReturnsToLoopback(user.id)]);
   const docsendParam = (await searchParams)?.docsend ?? '';
   const docsendOutcome = DOCSEND_OUTCOME[docsendParam] ?? null;
   // The reason the last sign-in failed, from the audit log, so nobody has to go and look it up.
@@ -146,6 +148,18 @@ export default async function ConnectionsPage({ searchParams }: { searchParams?:
             </>
           ) : readOnly ? <p>Connect DocSend on the deployed server.</p> : (
             <a className="btn p" href="/api/connectors/docsend/connect">Connect DocSend</a>
+          )}
+          {docsendPaste && !readOnly && docsendParam !== 'connected' && (
+            <form action={finishDocsendPasteAction} style={{ marginTop: 12 }}>
+              <p className={s.help}>
+                DocSend sends its sign-in back to this computer&rsquo;s own address, so after you approve, your browser lands on a page
+                that does not load. Copy that page&rsquo;s whole address from the address bar and paste it here within ten minutes.
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input name="url" type="url" required placeholder="http://localhost:8976/callback?code=…" style={{ flex: 1 }} autoComplete="off" />
+                <button className="btn p" type="submit">Finish connecting</button>
+              </div>
+            </form>
           )}
           {spaces.length > 0 && (
             <>

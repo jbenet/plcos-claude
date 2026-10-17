@@ -8,7 +8,10 @@
  *   - viewers match an LP by email, our team's visits are marked and never returned, an unknown viewer stays null;
  *   - a visit's vehicle follows its data room's mapping, and visitsFor returns time per page and an as-of time.
  */
+import { withDb } from '../../lib/db';
 import { migrate } from '../../lib/db/migrate';
+import { signInReturnsToLoopback, startConnect } from '../../lib/connectors/docsend/connection';
+import { finishDocsendFromPaste } from '../../lib/connectors/docsend/signin';
 import { docsendClient, NotSignedIn, parseAnswer, type McpTransport } from '../../lib/connectors/docsend/mcp';
 import { allowedUrl, discover, DocsendSignInError, register, type OAuthTransport } from '../../lib/connectors/docsend/oauth';
 import { normalizeVisit, syncDocsend, visitKey } from '../../lib/connectors/docsend/sync';
@@ -214,6 +217,34 @@ export async function docsendProperties(check: Check) {
     const v = normalizeVisit({ ...VISITS[0]!, contact_email: '  ADA@lp-one.example ' });
     check('DOCSEND a visit\'s key ignores the address\'s case and spacing, so a replay is the same row',
       v?.visitId === visitKey(VISITS[0]!) && normalizeVisit({ ...VISITS[0]!, visit_created_at: 'not a date' }) === null, v?.visitId ?? 'none');
+
+    // DocSend refuses our own callback (invalid_redirect_uri, 17 Oct 2026): the loopback address is registered instead,
+    // and a pasted address is read only when it is that loopback address.
+    const registered: string[] = [];
+    const loopbackOnly: OAuthTransport = async (url, init) => {
+      const u = new URL(url);
+      if (u.pathname === '/.well-known/oauth-protected-resource/mcp') return { status: 200, text: async () => JSON.stringify({ resource: 'https://docsend.com/mcp', authorization_servers: ['https://docsend.com'] }) };
+      if (u.pathname === '/.well-known/oauth-authorization-server') {
+        return { status: 200, text: async () => JSON.stringify({ authorization_endpoint: 'https://docsend.com/oauth/authorize', token_endpoint: 'https://docsend.com/oauth/token', registration_endpoint: 'https://docsend.com/oauth/register' }) };
+      }
+      if (u.pathname === '/oauth/register') {
+        const uri = (JSON.parse(init.body ?? '{}') as { redirect_uris: string[] }).redirect_uris[0]!;
+        registered.push(uri);
+        return uri.startsWith('http://localhost') ? { status: 201, text: async () => JSON.stringify({ client_id: 'invented-client' }) }
+          : { status: 400, text: async () => JSON.stringify({ error: 'invalid_redirect_uri' }) };
+      }
+      return { status: 404, text: async () => '' };
+    };
+    const started = await withDb(db, () => startConnect(user!.id, 'https://app.example', loopbackOnly));
+    const remembered = await withDb(db, () => signInReturnsToLoopback(user!.id));
+    const authorize = new URL(started.url);
+    const appUser = { id: user!.id } as Parameters<typeof finishDocsendFromPaste>[0];
+    const wrong = await withDb(db, () => finishDocsendFromPaste(appUser, 'https://app.example', `https://elsewhere.example/callback?code=x&state=${started.state}`, null));
+    const noCookie = await withDb(db, () => finishDocsendFromPaste(appUser, 'https://app.example', `http://localhost:8976/callback?code=x&state=${started.state}`, null));
+    check('DOCSEND when DocSend refuses our callback, the loopback address is registered and Settings asks for the pasted address; only that address, with its own cookie, is read',
+      started.pasteBack && remembered && authorize.searchParams.get('redirect_uri') === 'http://localhost:8976/callback'
+        && registered[0] === 'https://app.example/api/connectors/docsend/callback' && wrong.outcome === 'pasted-wrong' && noCookie.outcome === 'expired',
+      `registered ${registered.join(', ')}; ${wrong.outcome}, ${noCookie.outcome}`);
   } finally {
     await db.close();
   }
