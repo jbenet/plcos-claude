@@ -115,6 +115,12 @@ is the only way to get duration and pages for visits before B is switched on.
   client registration as a public client, the authorization code with PKCE (S256), refresh. Only https on DocSend's or
   Dropbox's hosts is fetched (a GUESS that its sign-in lives on one of them; anything else is refused and Settings says
   the sign-in could not be reached).
+- DocSend refused the server's own callback address (`invalid_redirect_uri`, 17 Oct 2026). Registration now tries it,
+  then the loopback addresses `http://localhost:8976/callback` and `http://127.0.0.1:8976/callback` (native-app
+  redirects, RFC 8252; a GUESS that DocSend accepts them). With a loopback address the browser ends on a page that does
+  not load; the Admin pastes that address on Settings, and the code in it is exchanged only with the PKCE verifier in
+  their own signed state cookie (ten minutes). If DocSend refuses those too, the remaining route is asking DocSend to
+  allow our callback.
 - Settings → Connections → DocSend: **Connect DocSend** (an Admin signs in as themselves; the registration and tokens are
   that person's encrypted secret, purpose `docsend`), **Read now**, **Disconnect**, and a vehicle picker per data room.
   Routes `/api/connectors/docsend/connect` and `/callback`, Admins only, with a signed state cookie.

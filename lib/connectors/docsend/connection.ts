@@ -24,18 +24,44 @@ const save = (userId: string, s: Stored) => setPersonSecret(userId, DOCSEND_PURP
 
 export const redirectUriFor = (base: string) => `${base}/api/connectors/docsend/callback`;
 
+/**
+ * GUESS: DocSend refused our own callback address (invalid_redirect_uri, 17 Oct 2026), as servers do that accept only
+ * listed apps plus a native app's loopback address (RFC 8252 §7.3). So the loopback addresses are tried next. With one
+ * of them the browser ends on a page that does not load, and the person pastes that page's address on Settings
+ * (finishFromPaste); the code in it is useless without the PKCE verifier in their own signed cookie.
+ */
+export const LOOPBACK_REDIRECTS = ['http://localhost:8976/callback', 'http://127.0.0.1:8976/callback'];
+export const isLoopback = (redirectUri: string) => LOOPBACK_REDIRECTS.includes(redirectUri);
+
 /** Step one: find DocSend's sign-in, register this server, and return where to send the browser. */
-export async function startConnect(userId: string, base: string, t: OAuthTransport = httpsOAuth): Promise<{ url: string; state: string; verifier: string }> {
-  const redirectUri = redirectUriFor(base);
+export async function startConnect(userId: string, base: string, t: OAuthTransport = httpsOAuth): Promise<{ url: string; state: string; verifier: string; pasteBack: boolean }> {
+  const candidates = [redirectUriFor(base), ...LOOPBACK_REDIRECTS];
   const prior = await stored(userId);
   const meta = await discover(t);
-  // Register again when the address changed; the registration is bound to the redirect URI.
-  const clientId = prior && prior.redirectUri === redirectUri && prior.meta.registrationEndpoint === meta.registrationEndpoint
-    ? prior.clientId : await register(t, meta, redirectUri);
+  // Keep a registration while it is for one of today's addresses at the same server; otherwise register again,
+  // trying each address in turn.
+  let clientId: string | null = null, redirectUri = candidates[0]!;
+  if (prior && candidates.includes(prior.redirectUri) && prior.meta.registrationEndpoint === meta.registrationEndpoint) {
+    clientId = prior.clientId; redirectUri = prior.redirectUri;
+  }
+  const refusals: string[] = [];
+  for (const candidate of clientId ? [] : candidates) {
+    try { clientId = await register(t, meta, candidate); redirectUri = candidate; break; } catch (e) {
+      if (!(e instanceof DocsendSignInError)) throw e;
+      refusals.push(e.message.replace(/^DocSend sign-in: /, ''));
+    }
+  }
+  if (!clientId) throw new DocsendSignInError(`DocSend sign-in: every return address was refused: ${refusals.join(' | ').slice(0, 600)}`);
   await save(userId, { meta, clientId, redirectUri, tokens: prior?.clientId === clientId ? prior.tokens : null });
   const state = randomBytes(24).toString('base64url');
   const { verifier, challenge } = pkce();
-  return { url: authorizeUrl(meta, clientId, redirectUri, state, challenge), state, verifier };
+  return { url: authorizeUrl(meta, clientId, redirectUri, state, challenge), state, verifier, pasteBack: isLoopback(redirectUri) };
+}
+
+/** Whether this person's sign-in returns to a loopback address, so Settings asks them to paste where it ended. */
+export async function signInReturnsToLoopback(userId: string): Promise<boolean> {
+  const s = await stored(userId);
+  return !!s && isLoopback(s.redirectUri);
 }
 
 /** Step two: DocSend sent the browser back with a code. The sync then uses this person's sign-in. */
