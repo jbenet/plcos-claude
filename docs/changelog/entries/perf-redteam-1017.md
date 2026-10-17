@@ -130,6 +130,16 @@ data on Juan's Mac.
   calendar warm 10 → 8 ms and after a write 9 → 7 ms, all vehicles 15 → 13 ms and 14 → 10 ms; conversion's own
   work after LP stats 8–9 → 5–6 ms. Conversion is otherwise at its floor: 6 ms warm, and about 190 ms after a write,
   all but a few ms of it the pipeline rows and LP stats it is built from. Same output by hash, clock frozen.
+- **The Neurotech pipeline rebuilds a fifth faster after a status or next-step change.** The rebuild is bound by
+  the server's own work, not the database. A pursuit's people, contacts, firms and organisations are now cached on
+  the touch revision, which a status or next-step change does not move. Organisations are read as a slim id list,
+  not whole entities. The plan and the strategic marks share one read of profile keys, where they each made one.
+  SPV readings look up canonical ids only for entities that have SPV evidence or settings. The row map works out each
+  value once. Timestamps and dates are parsed by a fast path for Postgres's UTC layout, with the old parser for
+  anything else; 6.7M values compared, none differed, also under New York time. On perf4, alternating runs, medians
+  of 3×25 after a write: Neurotech pipeline 104 → 82 ms (−21%), all vehicles 114 → 99 ms, the scored pipeline
+  90 → 75 ms. Pipeline, LP stats, conversion and plan data hash the same as before, warm and after each of eight
+  kinds of write, with the clock frozen. Authorization, the vehicle filters and Dakota redaction are untouched.
 
 ### Red team
 
