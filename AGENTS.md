@@ -120,7 +120,8 @@ The [full domain rules](docs/agent-rules/domain.md) define the evidence and exce
   cannot modify its own pass criteria or runtime permissions to win. Add real failures to
   the set continuously — a fixed set overfits.
 - **Circuit breaker:** if correction burden exceeds `config.agents.correctionBudgetHoursPerWeek`,
-  freeze new agent autonomy.
+  freeze new agent autonomy. *Not wired yet (17 Oct 2026):* nothing records corrections, Astra runs don't check
+  the breaker, and the example-case harness has no grader or caller, so neither can trip or pass today.
 - Putting a tool name in a prompt does not enable it. The server controls which tools exist.
 
 ---

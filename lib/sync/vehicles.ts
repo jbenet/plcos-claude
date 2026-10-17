@@ -1,4 +1,5 @@
 import { createVehicle, setRaiseWindow, VehicleRefused, type NewVehicle } from '@/modules/platform';
+import { cappedText } from '@/lib/body-cap';
 import type { Queryable } from '@/lib/db';
 import { auditSync, type SyncCaller } from './auth';
 import { pushRefusal, type PushAnswer } from './push';
@@ -32,8 +33,8 @@ export async function addVehicle(caller: SyncCaller, request: Request, o: Vehicl
   };
   const refusal = pushRefusal();
   if (refusal) return answer(403, 'refused', { error: refusal }, { reason: 'profile' });
-  const raw = await request.text();
-  if (Buffer.byteLength(raw, 'utf8') > MAX_BYTES) return answer(413, 'invalid', { error: `A vehicle is at most ${MAX_BYTES} bytes.` }, { reason: 'size' });
+  const raw = await cappedText(request, MAX_BYTES);
+  if (raw === null) return answer(413, 'invalid', { error: `A vehicle is at most ${MAX_BYTES} bytes.` }, { reason: 'size' });
   let input: unknown;
   try { input = JSON.parse(raw); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
   if (!input || typeof input !== 'object' || Array.isArray(input)) return answer(422, 'invalid', { error: 'Send one vehicle as a JSON object.' }, { reason: 'shape' });
@@ -66,8 +67,8 @@ export async function moveRaiseWindow(caller: SyncCaller, request: Request, o: V
   };
   const refusal = pushRefusal();
   if (refusal) return answer(403, 'refused', { error: refusal }, { reason: 'profile' });
-  const raw = await request.text();
-  if (Buffer.byteLength(raw, 'utf8') > MAX_BYTES) return answer(413, 'invalid', { error: `A raise window is at most ${MAX_BYTES} bytes.` }, { reason: 'size' });
+  const raw = await cappedText(request, MAX_BYTES);
+  if (raw === null) return answer(413, 'invalid', { error: `A raise window is at most ${MAX_BYTES} bytes.` }, { reason: 'size' });
   let input: unknown;
   try { input = JSON.parse(raw); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
   if (!input || typeof input !== 'object' || Array.isArray(input)) return answer(422, 'invalid', { error: 'Send one raise window as a JSON object.' }, { reason: 'shape' });

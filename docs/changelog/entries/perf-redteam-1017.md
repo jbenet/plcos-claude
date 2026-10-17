@@ -259,6 +259,16 @@ data on Juan's Mac.
   count words, so one long "word" passed.
 - **The LP page says when a route is only the strategy's suggestion, and when no route search could run.** Both
   read as a found route or as "No supported route found" (invariant 7).
+- **Token routes stop reading a body at their cap.** The outreach API, the Astra, jobs, ledger, vehicles, Affinity
+  writes and entity-type routes read the whole body before checking its size, so a chunked upload of hundreds of MB
+  held the server's memory.
+- **A second Astra runner is refused while the first is alive.** Any Admin-scope token's poll marked every run the real
+  runner held as lost.
+- **Two finishes of one run can't freeze the ledger.** Appends now go one at a time; two at once both passed the
+  "already finished" check, and the conflict stopped every later run, the cloud's W1 and W5 included.
+- **The example-case harness no longer records a pass it didn't check.** Any proposal was stored as "matched the
+  expectation"; with no grader built, none is a pass. AGENTS.md now says the circuit breaker and the harness are not
+  wired yet.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -354,3 +364,7 @@ data on Juan's Mac.
   the push would stop Astra's night runs on a rule they already apply.
 - A later finding citing the same page still sets that source's title, date and strength, even behind a claim a
   person verified: the import takes the first finding's reading of a page over a placeholder, by design.
+- The Astra poll still takes the night and "in the window" from the runner: the Mac knows its own time zone. One
+  runner at a time is enforced instead.
+- Child work envelopes may outlast their parent (deadline, seconds, an unset token budget), and a finished run row can
+  still be updated. Nothing outside the tests makes a child envelope yet.

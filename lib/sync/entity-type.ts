@@ -1,4 +1,5 @@
 import { config } from '@/config/deployment';
+import { cappedText } from '@/lib/body-cap';
 import { isLiveServer } from '@/config/ports';
 import { getDb, type Db } from '@/lib/db';
 import { isEntityKey } from '@/lib/enrich/connection-check';
@@ -88,7 +89,9 @@ export async function writeEntityType(caller: SyncCaller, request: Request, db?:
     return { status, body: { ok: false, error } };
   };
   if (refusedHere()) return fail(403, 'copy', 'Correct entity types on the live server.');
-  const input = await request.json().catch(() => null) as Record<string, unknown> | null;
+  const body = await cappedText(request, 64 * 1024);
+  let input: Record<string, unknown> | null = null;
+  try { input = body === null ? null : JSON.parse(body) as Record<string, unknown> | null; } catch { input = null; }
   if (!input || typeof input.reason !== 'string' || !input.reason.trim()) return fail(400, 'reason', 'A reason is required.');
   const reason = input.reason.trim().slice(0, 500);
   const handle = db ?? await getDb();

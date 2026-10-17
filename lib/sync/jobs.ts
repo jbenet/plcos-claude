@@ -1,4 +1,5 @@
 import { getDb, type Db } from '@/lib/db';
+import { cappedText } from '@/lib/body-cap';
 import type { ImportKind } from '@/lib/import-jobs/types';
 import { auditSync, type SyncCaller } from './auth';
 import { pushRefusal, type PushAnswer } from './push';
@@ -38,7 +39,7 @@ export async function queueJob(caller: SyncCaller, request: Request, o: { db?: D
   const refusal = pushRefusal();
   if (refusal) return answer(403, 'refused', { error: refusal }, { reason: 'profile' });
   let input: { kind?: unknown; operation?: unknown };
-  try { input = JSON.parse((await request.text()).slice(0, 1024)); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
+  try { input = JSON.parse(((await cappedText(request, 16 * 1024)) ?? '').slice(0, 1024)); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
   const kind = KINDS.find((k) => k === input?.kind);
   if (!kind) return answer(422, 'invalid', { error: `kind must be ${KINDS.join(' or ')}.` }, { reason: 'kind' });
   const operation = kind === 'affinity' ? AFFINITY_OPERATIONS.find((x) => x === input.operation) : undefined;

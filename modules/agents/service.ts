@@ -201,7 +201,7 @@ export async function runEvals(promptText: string): Promise<{ ran: number; passe
   );
   const promptHash = hash(promptText);
   const ag = await resolveAgent();
-  let passed = 0;
+  const passed = 0;
 
   for (const c of cases) {
     // With no agent runtime the only honest result is a refusal to claim a pass. A
@@ -216,14 +216,15 @@ export async function runEvals(promptText: string): Promise<{ ran: number; passe
       input: c.input,
       parse: (raw) => raw as Record<string, unknown>,
     });
-    const ok = outcome.status === 'proposed';
-    if (ok) passed += 1;
+    // A proposal is not a pass: nothing here compares it with the expectation yet, so none is recorded as one
+    // (red team, 17 Oct 2026: every proposal was stored as "matched the expectation").
+    const produced = outcome.status === 'proposed';
     await db.query(
       'insert into agents.eval_result (case_id, prompt_hash, passed, detail) values ($1,$2,$3,$4)',
       [
-        c.case_id, promptHash, ok,
-        ok ? 'Proposal produced and matched the expectation.'
-           : `Not run: ${outcome.status === 'refused' ? outcome.why : outcome.why}`,
+        c.case_id, promptHash, false,
+        produced ? 'Proposal produced; not yet compared with the expectation (no grader is built).'
+           : `Not run: ${outcome.why}`,
       ],
     );
   }
