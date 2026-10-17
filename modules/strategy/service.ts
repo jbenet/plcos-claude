@@ -316,7 +316,7 @@ function checkStatus(change: { status: PursuitStatus; passedBy?: PassedBy | null
  * change as a consequence of the update rather than as a second event.
  */
 export async function setStatus(
-  actorId: string, pursuitId: string, change: StatusChange, opts: { q?: Queryable; updateId?: string } = {},
+  actorId: string, pursuitId: string, change: StatusChange, opts: { q?: Queryable; updateId?: string; source?: 'us' | 'rule' } = {},
 ): Promise<void> {
   const { passed, reason } = checkStatus(change);
   const nextStep = change.nextStep?.trim() || null;
@@ -330,7 +330,7 @@ export async function setStatus(
     await tx.query(
       `update strategy.pursuit set
          status = $2::strategy.pursuit_status, passed_by = $3, status_reason = $4,
-         status_source = 'us', status_set_at = now(), status_set_by = $5,
+         status_source = $9, status_set_at = now(), status_set_by = $5,
          next_step = $6, next_step_on = $7,
          -- A pass ends the pursuit; reopening one un-ends it — unless its vehicle is history.
          closed_at = case when $2 = 'passed' then coalesce(closed_at, now())
@@ -339,7 +339,7 @@ export async function setStatus(
                              when $8 then close_reason else null end
        where pursuit_id = $1`,
       [pursuitId, change.status, passed ? change.passedBy : null, reason, actorId, nextStep,
-       change.nextStepOn ?? null, pursuit.historical],
+       change.nextStepOn ?? null, pursuit.historical, opts.source ?? 'us'],
     );
     await tx.query(
       `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)

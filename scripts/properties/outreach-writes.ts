@@ -197,4 +197,27 @@ export async function outreachWriteProperties(check: Check, db: Db) {
     Boolean(t3) && personLink.status === 200 && personLink.json?.data?.ticketUsed !== true && keptOpen?.open === true && agentLink.status === 200
     && (disguised === null || disguised.status === 409),
     `ticket ${t3 ? 'opened' : 'NONE'}; person ${personLink.status} used ${personLink.json?.data?.ticketUsed}; open after ${keptOpen?.open}; agent ${agentLink.status}${agentLink.json?.error ? ` (${agentLink.json.error})` : ''}; disguised ${disguised?.status ?? 'no team address'}`);
+
+  // Red-team pass, 17 Oct 2026. An autonomous status is the system's ('rule'), as outreach_add_lp sets it.
+  const lpS = await pursuit(await entity('Invented Outreach Rule Status Org'), fund.id, 'connecting');
+  const sAgent = await agent('update', { pursuitId: lpS, words: 'They replied: keen to talk.', idempotencyKey: 'props-desk-update-rule', applied: { status: { to: 'discussing' } } });
+  const sRow = await db.one<{ status: string; source: string }>('select status::text, status_source source from strategy.pursuit where pursuit_id = $1', [lpS]);
+  check('Outreach writes: an autonomous /update status is recorded as the system\'s (rule), so a person\'s later choice wins (17 Oct 2026)',
+    sAgent.status === 200 && sRow?.status === 'discussing' && sRow.source === 'rule', `${sAgent.status}${sAgent.json?.error ? ` (${sAgent.json.error})` : ''}; ${sRow?.status} by ${sRow?.source}`);
+  // An intro ask's ticket covers mail to its connector; a ticketed send names its recipients.
+  const introTicket = intro.json?.data?.ticketId as string | undefined;
+  if (introTicket) await decideTicket(juan.id, introTicket, 'approve', 'props');
+  await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'connector@invented-connector.example', 'affinity:props-outreach', current_date, 'medium')`, [connector]);
+  const toLp = await agent('link', msg({ pursuitId: introLp, ticketId: introTicket, to: ['lp@invented-intro.example'] }));
+  const noOne = await agent('link', msg({ pursuitId: introLp, ticketId: introTicket, to: [] }));
+  const toConnector = await agent('link', msg({ pursuitId: introLp, ticketId: introTicket, to: ['Connector@Invented-Connector.example'] }));
+  check('Outreach writes: an INTRO_ASK ticket links only mail to its connector, and no ticket is spent on a message naming no recipients (17 Oct 2026)',
+    Boolean(introTicket) && toLp.status === 409 && String(toLp.json?.error).includes('connector') && noOne.status === 409 && toConnector.status === 200,
+    `to the LP ${toLp.status}; no recipients ${noOne.status}; to the connector ${toConnector.status}${toConnector.json?.error ? ` (${toConnector.json.error})` : ''}`);
+  // A confirmed address and where an LP's mail goes are a person's.
+  const cAgent = await agent('contacts', { entityId: personE, email: 'agent@invented-person.example', source: 'gmail', confirmedBy: 'juan' });
+  const sendTo = await agent('contacts', { entityId: personE, email: 'agent2@invented-person.example', source: 'gmail-signature', role: 'send-to' });
+  const sig = await agent('contacts', { entityId: personE, email: 'agent3@invented-person.example', source: 'gmail-signature' });
+  check('Outreach writes: an autonomous /contacts cannot confirm an address or set where mail goes; an unconfirmed address from a signature it may add (17 Oct 2026)',
+    cAgent.status === 400 && sendTo.status === 400 && sig.status === 200, `confirmed ${cAgent.status}; send-to ${sendTo.status}; signature ${sig.status}${sig.json?.error ? ` (${sig.json.error})` : ''}`);
 }

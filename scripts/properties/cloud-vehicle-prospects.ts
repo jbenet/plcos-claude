@@ -19,6 +19,7 @@ import { createServer, type Server } from 'node:http';
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { config } from '../../config/deployment';
 import { AuthorizationError } from '../../lib/authz';
 import { authorizeAction } from '../../lib/authz/server';
 import { readRevision } from '../../lib/build-cache';
@@ -167,6 +168,26 @@ async function pushProperties(check: Check, db: Db, admin: AppUser, team: AppUse
       && r2.status === 422 && said(r2).includes('line 2: Unknown vehicle slug') && r3.status === 422 && said(r3).includes('line 1: vehicle \\"neurotech\\" is not one you can change')
       && JSON.stringify(macSide).includes('line 2:') && stillEmpty,
       `statuses ${r1.status}, ${r2.status}, ${r3.status}; the Mac's own check names line 2 too; nothing written ${stillEmpty}`);
+
+    // ── Red-team pass, 17 Oct 2026: a vehicle named another way, a file already held, a merge by records, an unsized body ──
+    await mkdir(join(root, 'enrich', 'strategy'), { recursive: true });
+    await writeFile(join(root, 'enrich', 'strategy', 'cvp-held.json'), JSON.stringify({ key: 'cvp-held', ask: { vehicle: ' NEUROTECH ' } }));
+    const retireHeld = await accept(teamToken.secret, { workflow: 'W5', files: [{ path: 'strategy/cvp-held.json', content: { retire: true, reason: 'Invented duplicate' } }] });
+    const held = await readFile(join(root, 'enrich', 'strategy', 'cvp-held.json'), 'utf8').then(() => true, () => false);
+    const merge = { decision: 'merge', members: ['00000000-0000-4000-8000-00000000c0a1', '00000000-0000-4000-8000-00000000c0a2'], decided_by: 'juan',
+      evidence: [{ source: 'invented', as_of: '2026-10-01', quote: 'Same real person: invented a = invented b' }] };
+    const teamMerge = await accept(teamToken.secret, { workflow: 'W13', files: [{ path: 'identity-decisions-cvp.jsonl', content: [merge] }] });
+    const adminMerge = await accept(adminToken.secret, { workflow: 'W13', files: [{ path: 'identity-decisions-cvp.jsonl', content: [merge] }] });
+    const big = config.sync.maxPushBytes + 1;
+    const chunked = new Request(`${base}/api/sync/push`, { method: 'POST', headers: { authorization: `Bearer ${teamToken.secret}` }, duplex: 'half',
+      body: new ReadableStream({ start(c) { for (let n = 0; n < big; n += 1 << 20) c.enqueue(new Uint8Array(Math.min(1 << 20, big - n)).fill(32)); c.close(); } }) } as RequestInit);
+    const guard = await syncGuard(req(teamToken.secret, {}), 'push');
+    const unsized = 'caller' in guard ? await acceptPush(guard.caller, chunked, { root, db, queue }) : null;
+    check('PUSH red team: a Team member cannot retire a held strategy of a vehicle named in another case, nor push a merge by records; an unsized body over the limit is refused unread',
+      retireHeld.status === 422 && said(retireHeld).includes('is not one you can change') && held
+      && teamMerge.status === 422 && said(teamMerge).includes("comes from an Admin's push") && adminMerge.status === 201
+      && unsized?.status === 413 && queued.length === 0,
+      `retire ${retireHeld.status} (file kept ${held}); merge by a Team member ${teamMerge.status}, by an Admin ${adminMerge.status}; unsized ${unsized?.status}`);
 
     // ── Accepted: a new file, queued as the token's owner, imported at once ──────────────────
     await mkdir(dir, { recursive: true });
