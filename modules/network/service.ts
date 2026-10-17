@@ -1,8 +1,8 @@
 import { lpContactsFor } from '@/modules/strategy/lp-contacts';
 import { routePolicyFacts, routeIdentityGroups, routeOrganizations } from './route-policy';
 import { badTermsOn, badTermsReason, busyReason, emptyRuleCounts, oversizedOrganization, organizationPenalty } from './route-rules';
-import { cachedRoutes } from './cache';
-import { promotedBasisHashes, compactStructuralRoutes, overlayRoutes, routeCheckpoint, selectDisplayRoutes, sortRouteCandidates, type RouteSelectionOptions } from './route-overlay';
+import { cachedRoutes, preloadCachedRoutes } from './cache';
+import { promotedBasisHashes, compactStructuralRoutes, overlayRoutes, overlayRoutesMany, routeCheckpoint, selectDisplayRoutes, sortRouteCandidates, type RouteSelectionOptions } from './route-overlay';
 import { setImmediate } from 'node:timers/promises';
 import { config } from '@/config/deployment';
 import { connectorLoad, restrictionsFor } from '@/modules/coordination';
@@ -48,6 +48,41 @@ export async function planRoutes(
   if (!live || !(selection.exclude || selection.minimumWarmth || selection.preferred)) return live;
   const routes = await selectDisplayRoutes(live.routes, selection, at ?? new Date());
   return { ...live, routes, topRoutes: routes.filter((r) => r.verdict === 'recommend'), graph: routeGraph(routes, targetId, true) };
+}
+
+// GUESS — stored searches read and decoded at once inside a batch: what planRoutes callers ran side by side before.
+const BATCH_READ_CONCURRENCY = 4;
+
+/**
+ * planRoutes for many targets on one vehicle kind: each answer is what planRoutes(fromHandle, targetId, …) returns.
+ * The kept team search (scope 'team', three hops, now) reads its inputs once for the batch: the targets' canonical
+ * records and stored searches in two statements, then the live guards, money, evidence and influence as set-based
+ * reads (overlayRoutesMany). Any other search is planned one target at a time, as planRoutes plans it. Performance
+ * pass, 17 Oct 2026: top_connectors issued about twelve statements per LP after every write, 9,500 for 782 LPs.
+ */
+export async function planRoutesMany(
+  fromHandle: string, targetIds: string[], maxHops = 3, vehicleKind = 'fund', scope: 'current' | 'team' = 'current', at?: Date,
+  selection: RouteSelectionOptions = {},
+): Promise<Array<RouteSearch | null>> {
+  if (!(scope === 'team' && maxHops === 3 && !at)) {
+    const out: Array<RouteSearch | null> = [];
+    for (const id of targetIds) out.push(await planRoutes(fromHandle, id, maxHops, vehicleKind, scope, at, selection));
+    return out;
+  }
+  const preload = await preloadCachedRoutes(targetIds, vehicleKind);
+  const structural: Array<RouteSearch | null> = new Array(targetIds.length).fill(null);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(BATCH_READ_CONCURRENCY, targetIds.length) }, async () => {
+    for (let i = next++; i < targetIds.length; i = next++) {
+      const targetId = preload.canonical.get(targetIds[i]!) ?? await canonicalRouteEntity(targetIds[i]!);
+      structural[i] = await cachedRoutes(targetId, vehicleKind, () => computeStructuralRoutes(fromHandle, targetId, maxHops, vehicleKind, scope), preload);
+    }
+  }));
+  const found = structural.flatMap((s, i) => s ? [{ s, i }] : []);
+  const overlaid = await overlayRoutesMany(found.map((x) => x.s), vehicleKind, new Date(), selection);
+  const out: Array<RouteSearch | null> = new Array(targetIds.length).fill(null);
+  found.forEach((x, n) => { out[x.i] = overlaid[n]!; });
+  return out;
 }
 
 export async function planRoutesLive(

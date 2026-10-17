@@ -17,6 +17,11 @@ export async function planRoutes(...args: Parameters<typeof raw.planRoutes>) {
   const [user, data] = await Promise.all([currentUser(), raw.planRoutes(...args)]);
   return !data || licensedAccess(user) ? data : redactLicensedRoutes(data);
 }
+/** planRoutes for many targets, redacted exactly as planRoutes redacts each one. */
+export async function planRoutesMany(...args: Parameters<typeof raw.planRoutesMany>) {
+  const [user, data] = await Promise.all([currentUser(), raw.planRoutesMany(...args)]);
+  return licensedAccess(user) ? data : data.map((search) => search && redactLicensedRoutes(search));
+}
 export async function listEdgesForEntities(...args: Parameters<typeof raw.listEdgesForEntities>) {
   const [user, data] = await Promise.all([currentUser(), raw.listEdgesForEntities(...args)]);
   return licensedAccess(user) ? data : data.map(edgeForDisplay);

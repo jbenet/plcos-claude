@@ -90,6 +90,15 @@ data on Juan's Mac.
   done 4.9–5.4 → 3.4–3.7 s after `next start`; a visitor 1 s after the server first answers paid 560–960 →
   150–350 ms, 2 s after 400–570 → 60–170 ms, 3 s after 80–410 → 50–110 ms (Neurotech's pipeline, an LP, stats). One who arrives the instant the server answers shares it with the
   warm-up and pays about 0.2 s more (600–760 → 750–1,000 ms). After a write nothing changes.
+- **Top connectors re-plans after a write in a third of the time.** Its plan asked about twelve small questions of
+  each open LP (the stored routes, restrictions, connector load, bad-terms marks, headcount claims, and influence's
+  standings, asks, affiliations and fit records): 9,478 statements for Neurotech's 782 invented LPs. LPs are now
+  planned 64 at a time (`planRoutesMany`), and each batch asks each question once for all of them
+  (`overlayRoutesMany`, `routePolicyFactsMany`, `influenceForMany`, `restrictionsForMany`); a single route search
+  takes the same path as a batch of one. On perf4: after a write 3.9–4.6 → 1.6–1.9 s, 9,478 → 246 statements; the
+  first plan 5.5 → 2.0 s. The same answers, by hash, for both people (licensed and not), and the same route
+  searches for 60 sampled targets one at a time and in batches. Authorization and licensed-data redaction are
+  unchanged and applied to each search as before.
 
 ### Red team
 
@@ -402,3 +411,8 @@ data on Juan's Mac.
   the team's record of what the LP indicated. Their own ladder rung, when there is one, still wins.
 - The visualization lenses call A/B ties and reviewed ties "confirmed" and C/D ties "a clue, not a route". Wording for
   a later pass; routing itself ranks every tier.
+- The mail desk may still set any status from mail, passing an LP included, over a status a person chose earlier, and
+  even with money on file. Juan wants many automated actions from JuanMail and no new blocking rules without asking;
+  the desk's writes are being made attributable and undoable instead.
+- The circuit breaker still gates only drafts. It cannot trip today (nothing records corrections), so wiring it into
+  every autonomous write would block nothing; it waits until corrections are recorded.

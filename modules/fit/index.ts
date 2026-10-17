@@ -9,4 +9,4 @@ export {
 } from './types';
 export type { Contribution } from './contribution';
 export { contributions } from './contribution';
-export { assessmentFor, assessmentsForEntity, firmProfile, listAssessments, listFirmProfiles } from './repo';
+export { assessmentFor, assessmentsForEntity, assessmentsForEntities, firmProfile, listAssessments, listFirmProfiles } from './repo';

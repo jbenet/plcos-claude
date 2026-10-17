@@ -108,10 +108,39 @@ export async function peopleAt(orgId: string): Promise<Affiliation[]> {
 export async function orgsFor(personId: string): Promise<Affiliation[]> {
   const db = await getDb();
   return (await db.query<Row>(`${SELECT} where a.person_entity = any(identity.alias_ids(array[identity.canonical_entity_id($1::uuid)]))`, [personId]))
-    .map(toAffiliation).sort((a, b) =>
-      Number(b.current) - Number(a.current)
-      || Number(b.isPrimary) - Number(a.isPrimary)
-      || RANK[a.kind] - RANK[b.kind]);
+    .map(toAffiliation).sort(orgOrder);
+}
+const orgOrder = (a: Affiliation, b: Affiliation) =>
+  Number(b.current) - Number(a.current)
+  || Number(b.isPrimary) - Number(a.isPrimary)
+  || RANK[a.kind] - RANK[b.kind];
+
+/**
+ * peopleAt and orgsFor for many records in one statement each: every requested id, as given, to the list the single
+ * call returns, in its order. The route planner scores a batch of targets at once (performance pass, 17 Oct 2026).
+ */
+async function affiliationsByRequest(ids: string[], column: 'org_entity' | 'person_entity'): Promise<Map<string, Affiliation[]>> {
+  const wanted = [...new Set(ids)];
+  const out = new Map<string, Affiliation[]>(wanted.map((id) => [id, []]));
+  if (!wanted.length) return out;
+  const db = await getDb();
+  // The single reads come back in the index's order, which for one record is storage order; ties in the sort below keep
+  // it, so each list is read in that order here too rather than in whatever order the join's plan picks.
+  const rows = await db.query<Row & { requested: string; heap_pos: unknown }>(`select req.requested::text as requested, s.* from unnest($1::uuid[]) req(requested)
+    cross join lateral (${SELECT.replace(/^\s*select /, 'select a.ctid as heap_pos, ')}
+      where a.${column} = any(identity.alias_ids(array[identity.canonical_entity_id(req.requested)]))) s order by s.heap_pos`, [wanted]);
+  for (const { requested, heap_pos: _pos, ...row } of rows) out.get(requested)?.push(toAffiliation(row));
+  return out;
+}
+export async function peopleAtMany(orgIds: string[]): Promise<Map<string, Affiliation[]>> {
+  const out = await affiliationsByRequest(orgIds, 'org_entity');
+  for (const list of out.values()) list.sort(order);
+  return out;
+}
+export async function orgsForMany(personIds: string[]): Promise<Map<string, Affiliation[]>> {
+  const out = await affiliationsByRequest(personIds, 'person_entity');
+  for (const list of out.values()) list.sort(orgOrder);
+  return out;
 }
 
 /** Only relationships involving the shown identities. Raw FK filtering retains the
