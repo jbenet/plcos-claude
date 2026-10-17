@@ -7,10 +7,11 @@
 import { randomUUID } from 'node:crypto';
 import { withDb, type Db } from '../../lib/db';
 import { pipelineData } from '../../lib/pipeline-data';
+import { publicProfiles } from '../../modules/strategy/profile-parts';
 import { config } from '../../config/deployment';
 import { EMPTY, filtersFrom, matches, rankRows, type PipelineRow } from '../../components/strategy/pipeline-model';
 import {
-  mentions, spvCompany, strategicMark, strategicScope, UNKNOWN_MARK, type StrategicInputs, type StrategicScope,
+  mentions, spvCompany, strategicMark, strategicRecords, strategicScope, UNKNOWN_MARK, type StrategicInputs, type StrategicScope,
 } from '../../modules/strategy';
 import type { Check } from './harness';
 
@@ -129,5 +130,25 @@ export async function strategicProperties(check: Check, db: Db) {
     check('Strategic is a separate lens: the scores on the list are the same before and after strategic evidence lands',
       before.length > 0 && JSON.stringify(before) === JSON.stringify(after),
       'Never blended into the score (issue 0120).');
+
+    // Profiles are read whole only when new or changed (profile-parts.ts, 17 Oct 2026): a profile researched again is
+    // read again, an unchanged one is served as it was, and the latest per LP still wins on the plan.
+    const profile = (summary: string, at: string) => JSON.stringify({ researched: { at, by: 'invented' }, profile: { summary, interests: ['invented interest'], capacity: { band: '$1M+', basis: 'Invented.' } } });
+    const note = (await db.one<{ id: string }>(`insert into research.note (entity_id,kind,body,data,created_at) values ($1,'public_profile','Invented.',$2::jsonb,'2026-09-01') returning note_id::text id`,
+      [blank, profile('Funds an invented neuroscience lab.', '2026-09-01')]))!.id;
+    const words = ['neuro', 'brain'];
+    const said = async () => (await strategicRecords(db, [blank], words)).texts.get(blank)?.map((t) => `${t.value} (${t.asOf})`).join(' | ') ?? '';
+    const first = await said(), again = await said();
+    await db.query(`update research.note set data = $2::jsonb where note_id = $1`, [note, profile('Funds an invented logistics firm.', '2026-10-01')]);
+    const changed = await said();
+    await db.query(`insert into research.note (entity_id,kind,body,data,created_at) values ($1,'public_profile','Invented.',$2::jsonb,'2026-10-05')`,
+      [blank, profile('Advises an invented brain-imaging company.', '2026-10-05')]);
+    const both = await said();
+    const latest = (await publicProfiles(db, [blank]))[0];
+    check('Strategic profiles: one researched again is read again, an unchanged one reads the same, and the latest comes first',
+      first === 'Funds an invented neuroscience lab.. invented interest (2026-09-01)' && again === first && changed === ''
+        && both === 'Advises an invented brain-imaging company.. invented interest (2026-10-05)'
+        && latest?.parts.data.researched?.at === '2026-10-05' && latest.parts.data.profile?.capacity?.band === '$1M+',
+      JSON.stringify({ first, changed, both }));
   });
 }
