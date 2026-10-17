@@ -6,6 +6,19 @@ import { syncCountersignature } from '@/modules/close';
 import { closeTracksFor, getExposure } from './repo';
 
 /**
+ * Another open commitment of the same LP (merged identities resolve to one) on the same vehicle and instrument. A merge
+ * leaves both rows, and hardening each would count one commitment twice (red team, 17 Oct 2026): refused until one is
+ * closed or the two are combined.
+ */
+async function twinOf(q: Queryable, exposureId: string): Promise<string | null> {
+  return (await q.one<{ id: string }>(`select t.exposure_id::text id from pipeline.exposure x join pipeline.exposure t
+      on t.vehicle_id = x.vehicle_id and t.instrument = x.instrument and t.exposure_id <> x.exposure_id and t.closed_at is null
+     and identity.canonical_entity_id(t.entity_id) = identity.canonical_entity_id(x.entity_id)
+    where x.exposure_id = $1 limit 1`, [exposureId]))?.id ?? null;
+}
+const TWIN = 'Refused: this LP has another open commitment on this vehicle (two records of them were merged). Withdraw or revise one first, so it is counted once.';
+
+/**
  * Ask to move a soft commitment onto the hard track. This opens a MONEY ticket and
  * changes nothing — the conversion happens when the ticket is approved, and the ticket
  * states on its face that cash is a separate matter.
@@ -24,6 +37,7 @@ export async function requestHardening(
     );
   }
 
+  if (await twinOf(await getDb(), exposure.exposureId)) throw new Error(TWIN);
   // 506(c) verification is an obligation, not a formality. Refuse before the ticket exists.
   const gate = await accreditationGate(exposure.entityId, exposure.vehicleId);
   if (!gate.ok) {
@@ -70,6 +84,7 @@ export async function harden(
     const exposure = await getExposure(args.exposureId, tx);
     if (!exposure) throw new Error(`No exposure ${args.exposureId}`);
     if (exposure.track === 'hard') return; // idempotent
+    if (await twinOf(tx, args.exposureId)) throw new Error(`${TWIN} Nothing was recorded.`);
     // Bounded: the amount can change after the ask (an Affinity read, a revision), and an approval of $1M is not one
     // of $10M. A ticket that names no amount predates this and is asked again.
     if (args.amount === null || !Number.isFinite(args.amount)) {
@@ -239,8 +254,10 @@ export async function reviseSoft(actorId: string, exposureId: string, args: { on
   if (!(args.amount > 0)) throw new CloseRefused('A soft commitment is an amount. None is a withdrawal — record that instead.');
   const db = await getDb();
   await db.transaction(async (tx) => {
+    // Under the row's lock, as hardening takes it: a revision racing an approval changes nothing (red team, 17 Oct 2026).
+    const changed = await tx.query(`update pipeline.exposure set amount = $2 where exposure_id = $1 and track = 'soft' and closed_at is null returning 1`, [exposureId, args.amount]);
+    if (!changed.length) throw new CloseRefused('That commitment was countersigned or closed meanwhile; nothing was revised.');
     await event(tx, actorId, exposureId, { step: 'soft', on: dated(args.on), amount: args.amount });
-    await tx.query(`update pipeline.exposure set amount = $2 where exposure_id = $1 and track = 'soft'`, [exposureId, args.amount]);
   });
 }
 
@@ -252,7 +269,9 @@ export async function withdraw(actorId: string, exposureId: string, args: { on: 
   if (!args.reason.trim()) throw new CloseRefused('Say why they withdrew.');
   const db = await getDb();
   await db.transaction(async (tx) => {
+    // A countersigned one is never withdrawn with a click, even when it was hardened after the page was read.
+    const changed = await tx.query(`update pipeline.exposure set closed_at = now() where exposure_id = $1 and track = 'soft' and closed_at is null returning 1`, [exposureId]);
+    if (!changed.length) throw new CloseRefused('That commitment was countersigned or closed meanwhile; nothing was withdrawn.');
     await event(tx, actorId, exposureId, { step: 'withdrawn', on: dated(args.on), reason: args.reason.trim() });
-    await tx.query(`update pipeline.exposure set closed_at = now() where exposure_id = $1`, [exposureId]);
   });
 }

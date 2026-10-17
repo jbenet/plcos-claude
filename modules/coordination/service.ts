@@ -354,7 +354,8 @@ export async function adjudicateConflict(
   const db = await getDb();
   await db.transaction(async (tx) => {
     const row = await tx.one<{ claimant_a: string; claimant_b: string; status: string; entity_id: string }>(
-      'select claimant_a, claimant_b, status, entity_id from coordination.conflict_case where case_id = $1',
+      // Locked: two adjudications at once must not leave the case naming one winner and the asks the other.
+      'select claimant_a, claimant_b, status, entity_id from coordination.conflict_case where case_id = $1 for update',
       [args.caseId],
     );
     if (!row) throw new Error(`No conflict case ${args.caseId}`);

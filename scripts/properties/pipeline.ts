@@ -73,6 +73,35 @@ export async function pipelineProperties({ check, db }: SeedContext) {
 }
 
 export async function hardeningVariations(check: Check) {
+  // Two records of one LP merged leave two commitments on the vehicle: hardening either would count it twice, and a
+  // withdrawal or revision of a commitment no longer soft and open changes nothing (red team, 17 Oct 2026).
+  {
+    const d = await freshDb();
+    const { getTicket, decideTicket } = await import('../../modules/governance');
+    const { applyApprovedTicket } = await import('../../app/approvals/apply');
+    const pl = await import('../../modules/pipeline');
+    const t = (await d.one<{ id: string; exposure: string }>(
+      "select id, scope->'apply'->'args'->>'exposureId' exposure from governance.approval_ticket where kind = 'MONEY' and decision is null"))!;
+    const juan = (await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'"))!;
+    const twin = (await d.one<{ id: string }>(`with alias as (
+        insert into identity.entity (entity_type, display_name, merged_into)
+        select e.entity_type, 'Invented duplicate record', e.entity_id from pipeline.exposure x join identity.entity e on e.entity_id = x.entity_id where x.exposure_id = $1
+        returning entity_id)
+      insert into pipeline.exposure (entity_id, vehicle_id, instrument, track, amount, owner_id)
+      select a.entity_id, x.vehicle_id, x.instrument, 'soft', x.amount, x.owner_id from alias a, pipeline.exposure x where x.exposure_id = $1
+      returning exposure_id::text id`, [t.exposure]))!.id;
+    await decideTicket(juan.id, t.id, 'approve', 'Countersigned copy on file.');
+    let refused: string | null = null;
+    try { await applyApprovedTicket(juan.id, (await getTicket(t.id))!); } catch (e) { refused = (e as Error).message; }
+    const asked = await pl.requestHardening(juan.id, { exposureId: twin, evidenceRef: 'invented-ref', note: 'x' }).then(() => null, (e: Error) => e.message);
+    await d.query("update pipeline.exposure set closed_at = now() where exposure_id = $1", [twin]);
+    const tryWithdraw = await pl.withdraw(juan.id, twin, { on: new Date('2026-09-20T12:00:00Z'), reason: 'Invented' }).then(() => null, (e: Error) => e);
+    const events = await d.one<{ n: number }>("select count(*)::int n from pipeline.commitment_event where exposure_id = $1", [twin]);
+    check('Variation — an LP with two open commitments on one vehicle (merged records) is hardened by neither; a closed one is not withdrawn again',
+      !!refused && /another open commitment/.test(refused) && !!asked && /another open commitment/.test(asked)
+        && tryWithdraw instanceof Error && events?.n === 0,
+      `apply: ${refused ?? 'HARDENED'}; ask: ${asked ?? 'OPENED'}; withdraw of a closed one: ${tryWithdraw ? 'refused' : 'RECORDED'}, events ${events?.n}`);
+  }
   // A MONEY ticket approves an amount: if the commitment changed after the ask (an Affinity read, a revision),
   // approving it hardens nothing (red team, 17 Oct 2026).
   {
