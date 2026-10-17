@@ -39,8 +39,8 @@ export async function strategicRecords(q: Queryable, entityIds: string[], words:
          from identity.alias_pairs($1::uuid[]) o join research.claim c on c.entity_id = o.entity_id
         where c.superseded_by is null and c.field = any($2::text[])
         order by c.as_of desc nulls last`, [ids, STRATEGIC_FIELDS.map((f) => `public.${f}`)]) : Promise.resolve([]),
-    loose ? q.query<{ id: string; text: string; at: Date | string | null; searched: string | null }>(
-      `select o.canonical_id::text id, n.profile_text searched,
+    loose ? q.query<{ id: string; text: string; at: Date | string | null }>(
+      `select o.canonical_id::text id,
               concat_ws('. ', n.data->'profile'->>'summary',
                 (select string_agg(x, ', ') from jsonb_array_elements_text(case when jsonb_typeof(n.data->'profile'->'interests') = 'array'
                   then n.data->'profile'->'interests' else '[]'::jsonb end) x)) text,
@@ -58,7 +58,9 @@ export async function strategicRecords(q: Queryable, entityIds: string[], words:
         order by o.canonical_id, n.data->>'vehicleId', n.created_at desc`, [ids]),
   ]);
   const claims = near ? claimRows.filter((c) => c.value !== null && near.test(c.value)) : [];
-  const profiles = near ? profileRows.filter((p) => p.searched !== null && near.test(p.searched)) : [];
+  // Tested on the text kept, not the whole profile: the marks read only that text, so a profile whose words were
+  // elsewhere was kept for nothing, and the whole profiles were 2.7 MB a rebuild of every vehicle's list (17 Oct 2026).
+  const profiles = near ? profileRows.filter((p) => near.test(p.text)) : [];
   const add = (id: string, t: StrategicText) => texts.set(id, [...(texts.get(id) ?? []), t]);
   for (const c of claims) add(c.id, { field: c.field, value: c.value, asOf: day(c.as_of) });
   for (const p of profiles) if (p.text.trim()) add(p.id, { field: 'profile', value: p.text, asOf: day(p.at) });

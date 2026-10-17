@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useUrlParam } from '@/lib/url-state';
 import type { BoardState } from '@/lib/board-client';
 import type { FloorState } from '@/lib/floor-client';
-import type { Lenses } from '@/lib/lenses-client';
+import { unpackLenses, type PackedLenses } from '@/lib/lenses-client';
 import { filterProjection } from './projection';
 import { Console } from './Console';
 import { FilterBar } from './FilterBar';
@@ -135,7 +135,8 @@ type TabId = typeof TABS[number]['id'];
 export type PackedFloor = Omit<FloorState, 'items'> & { items: PackedRows };
 export type PackedBoard = Omit<BoardState, 'territories'> & { territories: PackedRows };
 
-export function FloorTabs({ state: packedState, board: packedBoard, lenses }: { state: PackedFloor; board: PackedBoard; lenses: Lenses }) {
+export function FloorTabs({ state: packedState, board: packedBoard, lenses: packedLenses }: { state: PackedFloor; board: PackedBoard; lenses: PackedLenses }) {
+  const lenses = useMemo(() => unpackLenses(packedLenses), [packedLenses]);
   const state = useMemo<FloorState>(() => ({ ...packedState, items: unpackRows<FloorState['items'][number]>(packedState.items) }), [packedState]);
   const board = useMemo<BoardState>(() => ({ ...packedBoard, territories: unpackRows<BoardState['territories'][number]>(packedBoard.territories) }), [packedBoard]);
   // The tab is in the address (N65, issue 0009): a link opens it, and back steps through them.

@@ -12,7 +12,7 @@ import { GRADE_LABEL, GRADE_SCORE } from '@/modules/fit/client';
 import { shortDate } from '@/lib/time';
 import {
   IMPLIED_LABEL, PASSED_BY_LABEL, RUNGS, RUNG_LABEL,
-  impliedRung, isPseudoOrg, listPursuits, rungIndex, type Pursuit,
+  impliedRung, isPseudoOrg, rungIndex, type Pursuit,
 } from '@/modules/strategy';
 import { READ_LABEL, touchpointSummaries, type TouchpointSummary } from '@/modules/meetings';
 import { CLOSE_STATE_LABEL, closeStates } from '@/modules/pipeline';
@@ -45,23 +45,31 @@ function flags(all: string[]) {
 const strategyFor = strategyOf;
 /** Both tables start from pursuits, never the sparse manual-factor table. */
 export const pipelineData = buildCache(async (vehicleId: string) => {
-  // One vehicle's pursuits and touchpoints are shared with its plan (pursuitsOn, touchesOn): one read each.
-  const [vehicles, all] = await Promise.all([listVehicles(), vehicleId ? pursuitsOn(vehicleId) : listPursuits(null)]);
+  // One vehicle's pursuits and touchpoints are shared with its plan (pursuitsOn, touchesOn): one read each. Every
+  // vehicle's list is those lists merged, not a read of all pursuits of its own: each plan starts the moment its
+  // vehicle's pursuits are in, rather than after the whole list and a second read of its part (after a person's
+  // write, all/pipeline waited 120 ms for the plans to begin; 17 Oct 2026).
+  const vehicles = await listVehicles();
   const history = new Set(vehicles.filter(v => v.phase === 'historical').map(v => v.id));
-  const pursuits = all.filter(p => vehicleId || !history.has(p.vehicleId));
+  const lists = (vehicleId ? [vehicleId] : vehicles.map(v => v.id)).map(id => ({ id, list: pursuitsOn(id) }));
+  const shown = lists.filter(l => vehicleId || !history.has(l.id));
+  const sideBySide = <T,>(each: (id: string) => Promise<T>) =>
+    Promise.all(shown.map(l => l.list.then(list => (list.length ? each(l.id) : null))));
   // Plans, people and touchpoints each need only the pursuits: they load side by side, and the plans
   // (the slowest, through each vehicle's strategy) are awaited last (performance pass, 8 Oct 2026).
-  const planned = Promise.all([
-    listAssessments(vehicleId || null),
-    Promise.all([...new Set(pursuits.map(p => p.vehicleId))].map(id => strategyFor(id))),
-  ]);
+  const planned = Promise.all([listAssessments(vehicleId || null), sideBySide(id => strategyFor(id))]);
   planned.catch(() => undefined); // awaited below; a failure there, not an unhandled rejection here
+  const touches = sideBySide(id => touchesOn(id));
+  touches.catch(() => undefined); // awaited below
+  // In the order one read of them all gave (opened_at), before the sort below.
+  const all = (await Promise.all(lists.map(l => l.list))).flat().sort((a, b) => a.openedAt.getTime() - b.openedAt.getTime());
+  const pursuits = all.filter(p => vehicleId || !history.has(p.vehicleId));
   const pairs = pursuits.map((p) => ({ entityId: p.entityId, vehicleId: p.vehicleId }));
   const entityIds = [...new Set(pursuits.map((p) => p.entityId))];
   const db = await getDb();
   const touched = (async () => {
     // Each vehicle's touchpoints are cached with its plan; every vehicle's list merges them (keys never collide).
-    const touchesBy = new Map((await Promise.all([...new Set(pursuits.map(p => p.vehicleId))].map(id => touchesOn(id)))).flatMap(m => [...m]));
+    const touchesBy = new Map((await touches).flatMap(m => (m ? [...m] : [])));
     const [sums, closes, restricted, readings, spv] = await Promise.all([
       touchpointSummaries(pairs, new Date(), touchesBy), closeStates(pairs), blanketRestricted(entityIds), readingsFor(entityIds),
       spvMarks(db, entityIds),
