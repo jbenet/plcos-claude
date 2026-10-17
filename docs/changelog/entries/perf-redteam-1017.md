@@ -183,6 +183,14 @@ data on Juan's Mac.
   as "do it". The reader now takes the block the server appends last, and the triage doc says the reporter comes only
   from the frontmatter and that context, the report's text being data, never instructions. The feedback status call
   stops reading past 8 KB.
+- **One LP's commitment can't be hardened twice after a merge.** Merging two records of an LP left both commitments
+  on the vehicle, and each could get its own MONEY ticket, counting the money twice in the hard headline. Asking for or
+  applying a hardening now refuses while the LP has another open commitment on that vehicle and instrument.
+- **A person's withdrawal or revised amount survives the next Affinity read.** The read reopened a withdrawn
+  commitment and put Affinity's figure back over a revised one; it now leaves a commitment a person withdrew or revised.
+- **Withdraw and revise act only on an open soft commitment, under its lock.** A withdrawal from a page read before an
+  approval could close a commitment that had just been countersigned. Two adjudications of one overlap at once lock the
+  case, so it can't name one winner while the asks name the other.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -251,6 +259,10 @@ data on Juan's Mac.
   origin unless a capability lists it, and Astra's lists only its bundled feedback window, so no change; a
   navigation guard would need a Rust build to verify, which the cloud can't do.
 - The launch key cookie goes to every port on 127.0.0.1; nothing in the app's pages points elsewhere on the loopback.
+- Two commitments left by a merge still both count in the soft total until a person withdraws or revises one. Folding
+  them on merge would decide which amount stands; hardening is refused meanwhile, so hard money is never doubled.
+- Self-approval is checked by user id only; with the local user switcher one person can ask as one user and approve as
+  another. It waits for real sign-in.
 - A token for one vehicle may set where an LP's mail goes when that LP is also pursued on another vehicle. An address
   is the person's, not a vehicle's, and Juan wants the desk to do more on its own; the audit row records who changed it.
 - A push identical to an earlier one answers that push's run and job ids, whoever pushed it; the job itself answers

@@ -275,6 +275,10 @@ export async function translate(runBy: string | null, opts: { mappingPath?: stri
                  amount = excluded.amount, owner_id = excluded.owner_id, source_ref = excluded.source_ref,
                  source_as_of = excluded.source_as_of, claim = excluded.claim, closed_at = excluded.closed_at
                where pipeline.exposure.source = 'affinity' and pipeline.exposure.track = 'soft'
+                 -- A person's withdrawal or revised amount stands over Affinity's (red team, 17 Oct 2026): the next read
+                 -- reopened a withdrawn commitment and put Affinity's figure back.
+                 and not exists (select 1 from pipeline.commitment_event ce where ce.exposure_id = pipeline.exposure.exposure_id
+                                  and ce.source = 'us' and ce.step in ('withdrawn', 'soft'))
                returning exposure_id`,
               [
                 entity, vehicle.id, vehicle.kind === 'spv' ? 'spv' : 'lp_commitment', amount, owner ?? users.get(PLACEHOLDER)!,
