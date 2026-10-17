@@ -1,4 +1,5 @@
 import { getDb } from '@/lib/db';
+import { cappedText } from '@/lib/body-cap';
 import { openWriteBatch, proposeAffinityWrites } from '@/lib/affinity-writes';
 import { checkParties, MAX_PARTIES } from '@/lib/outreach/parties';
 import { auditSync, type SyncCaller } from './auth';
@@ -39,8 +40,8 @@ export async function readAffinityBatch(caller: SyncCaller): Promise<PushAnswer>
 }
 
 export async function proposeFromSentMail(caller: SyncCaller, request: Request): Promise<PushAnswer> {
-  const raw = await request.text();
-  if (Buffer.byteLength(raw, 'utf8') > MAX_BYTES) return bad(caller, 413, 'size', `At most ${MAX_BYTES} bytes.`);
+  const raw = await cappedText(request, MAX_BYTES);
+  if (raw === null) return bad(caller, 413, 'size', `At most ${MAX_BYTES} bytes.`);
   let input: { since?: unknown; dryRun?: unknown };
   try { input = JSON.parse(raw); } catch { return bad(caller, 400, 'json', 'The call is not JSON.'); }
   if (!input || typeof input !== 'object' || Array.isArray(input)) return bad(caller, 422, 'shape', 'Send { since, dryRun? }.');

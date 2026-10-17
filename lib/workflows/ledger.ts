@@ -162,6 +162,16 @@ export async function readRuns(context: Context = {}) {
   try { return foldRuns(await readFile(file, 'utf8')); }
   catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return foldRuns(''); throw e; }
 }
+/**
+ * One ledger change at a time in this process: two finishes of one run at once both passed the "already finished"
+ * check and both appended, and the conflict froze every later append (red team, 17 Oct 2026). One server writes it.
+ */
+let queue: Promise<unknown> = Promise.resolve();
+function serial<T>(work: () => Promise<T>): Promise<T> {
+  const run = queue.then(work, work);
+  queue = run.catch(() => undefined);
+  return run;
+}
 async function append(line: RunLine, context: Context) {
   const text = encodeLine(line); // reject oversized metadata before creating anything
   const file = await ledgerPath(context);
@@ -177,11 +187,14 @@ export async function beginRun(metadata: Begin, context: Context = {}): Promise<
   const line: RunLine = { ...metadata, event: 'started', runId: randomUUID(), startedAt: new Date().toISOString(), endedAt: null,
     counts: { selected: metadata.batch.planned, written: null, valid: null, failed: null, skipped: null },
     checks: [], usage: null, outcome: 'unknown', reason: null };
-  await append(line, context);
+  await serial(() => append(line, context));
   return line.runId;
 }
 export async function finishRun(runId: string, result: Finish, context: Context & { endedAt?: string } = {}): Promise<void> {
   requireValue(Boolean(result.usage) && ['measured', 'estimated'].includes(result.usage?.source), 'usage required at finish');
+  return serial(() => finishOnce(runId, result, context));
+}
+async function finishOnce(runId: string, result: Finish, context: Context & { endedAt?: string }): Promise<void> {
   const ledger = await readRuns(context);
   const run = ledger.runs.find((r) => r.runId === runId);
   if (ledger.issues.length || !run?.start || run.conflict) throw new Error('No unambiguous start; inspect the ledger before finishing.');

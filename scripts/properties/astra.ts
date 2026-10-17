@@ -59,6 +59,10 @@ export async function astraProperties(check: Check) {
   const night1 = await poll({ inWindow: true, free: 1, held: [nowId] });
   check('astra claims no more than the free slots', night1.body.jobs.length === 1 && night1.body.jobs[0].workflow === 'w1w5', JSON.stringify(night1.body.jobs));
   const nightId = night1.body.jobs[0]?.id as string;
+  const rival = await call(admin.secret, { op: 'poll', host: 'props-other', inWindow: true, night: '2026-10-10', free: 4, held: [], slots: [] });
+  const stillHeld = await db.query<{ status: string }>(`select status from platform.astra_job where id = any($1::uuid[])`, [[nowId, nightId]]);
+  check('astra refuses a second runner while the first is alive, and its poll fails none of the first one\'s runs',
+    rival.status === 409 && stillHeld.every((j) => j.status === 'claimed'), `${rival.status}; ${stillHeld.map((j) => j.status).join(',')}`);
   const report = await call(admin.secret, { op: 'report', id: nightId, status: 'running', batch: 'astra-x-01', counts: { selected: 5, names: 'Invented Person', valid: 'x' } });
   const row = (await recentJobs(db)).find((j) => j.id === nightId);
   check('astra reports keep numeric counts only', report.status === 200 && row?.status === 'running' && row.counts.selected === 5 && !('names' in row.counts) && !('valid' in row.counts), JSON.stringify(row?.counts));

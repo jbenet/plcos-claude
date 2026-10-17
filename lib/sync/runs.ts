@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { cappedText } from '@/lib/body-cap';
 import { config } from '@/config/deployment';
 import { beginRun, finishRun, readRuns, validateLine, type Begin, type Finish, type RunLine } from '@/lib/workflows/ledger';
 import { auditSync, type SyncCaller } from './auth';
@@ -36,8 +37,8 @@ export async function recordRun(caller: SyncCaller, request: Request, o: RunsOpt
   };
   const refusal = pushRefusal();
   if (refusal) return answer(403, 'refused', { error: refusal }, { reason: 'profile' });
-  const raw = await request.text();
-  if (Buffer.byteLength(raw, 'utf8') > MAX_BYTES) return answer(413, 'invalid', { error: `A ledger call is at most ${MAX_BYTES} bytes; a run line is under 4 KB.` }, { reason: 'size' });
+  const raw = await cappedText(request, MAX_BYTES);
+  if (raw === null) return answer(413, 'invalid', { error: `A ledger call is at most ${MAX_BYTES} bytes; a run line is under 4 KB.` }, { reason: 'size' });
   let input: { event?: unknown; run?: unknown; runId?: unknown; result?: unknown };
   try { input = JSON.parse(raw); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
   const root = resolve(o.root ?? resolve(process.cwd(), config.data.root));

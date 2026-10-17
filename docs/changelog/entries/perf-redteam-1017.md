@@ -60,6 +60,22 @@ data on Juan's Mac.
 - **LP stats starts its own reads beside the pipeline's rows**, from the same cached per-vehicle lists, and checks
   them against the rows before use (any difference reads again). In-process rebuild medians: stats about 200 → 185 ms,
   conversion 190 → 170 ms; the output hashes are unchanged. Now bound by the pipeline rows themselves.
+- **The Mac app reads from its copy two seconds sooner after launch.** The core's first pass at launch (and at every
+  new server build) only prepared the build, then waited the usual two seconds and asked the server's state again
+  before syncing. A quick prepare now syncs at once from the state it has just read; a long one (a download, an
+  install) reads the state again with no wait. Measured with the core's sync driven against two local databases
+  (perf4 fixture, prepare stubbed at 300 ms, `next start` stubbed): launch to ready 2,406 → 393 ms, two state calls
+  to one. The local server's own start (about 0.9 s here) still follows the sync, so it never warms pages from a
+  copy in the middle of one.
+- **A second write is read back from the copy at once.** After a sync the core rebuilds the last 8 pages, for up to
+  15 s, and the sync for a write made meanwhile waited for that to finish, its reads on the live server. A newer write
+  now stops the rebuild between pages (the sync that catches it up rebuilds them again). Two writes 0.3 s apart, pages
+  at 500 ms each: the second write is back on the copy after 3,749 → 239 ms.
+- **An idle sync asks the Mac's database nothing.** Each 15 s tick read the catalog for the copy's tables and the
+  foreground revision even when no counter had moved. The tables are read once per build (and again after a failed
+  tick), and the revision only when a table will be pulled: 2 → 0 local queries, about 12 → 6 ms a tick, one call
+  to the server as before. The copy still matches the server row for row (checked by md5 after a whole copy and
+  two incremental syncs).
 
 ### Red team
 
@@ -243,6 +259,16 @@ data on Juan's Mac.
   count words, so one long "word" passed.
 - **The LP page says when a route is only the strategy's suggestion, and when no route search could run.** Both
   read as a found route or as "No supported route found" (invariant 7).
+- **Token routes stop reading a body at their cap.** The outreach API, the Astra, jobs, ledger, vehicles, Affinity
+  writes and entity-type routes read the whole body before checking its size, so a chunked upload of hundreds of MB
+  held the server's memory.
+- **A second Astra runner is refused while the first is alive.** Any Admin-scope token's poll marked every run the real
+  runner held as lost.
+- **Two finishes of one run can't freeze the ledger.** Appends now go one at a time; two at once both passed the
+  "already finished" check, and the conflict stopped every later run, the cloud's W1 and W5 included.
+- **The example-case harness no longer records a pass it didn't check.** Any proposal was stored as "matched the
+  expectation"; with no grader built, none is a pass. AGENTS.md now says the circuit breaker and the harness are not
+  wired yet.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -338,3 +364,7 @@ data on Juan's Mac.
   the push would stop Astra's night runs on a rule they already apply.
 - A later finding citing the same page still sets that source's title, date and strength, even behind a claim a
   person verified: the import takes the first finding's reading of a page over a placeholder, by design.
+- The Astra poll still takes the night and "in the window" from the runner: the Mac knows its own time zone. One
+  runner at a time is enforced instead.
+- Child work envelopes may outlast their parent (deadline, seconds, an unset token budget), and a finished run row can
+  still be updated. Nothing outside the tests makes a child envelope yet.

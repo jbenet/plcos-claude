@@ -74,6 +74,8 @@ const RECENT_PAGES = 8;
 const WARM_RECENT_MS = 15_000;
 const IDLE_SYNC_MS = 15_000;
 const BUSY_SYNC_MS = 2_000;
+// GUESS — how old the server's state may be when a prepare finishes and the sync goes ahead with it.
+const STATE_FRESH_MS = 5_000;
 /** Paths the live server always answers: sign-in, the app's own pages, server state (jobs, Astra, imports). */
 // Server actions that only read, by file#export (16 Oct 2026). A POST, so it still goes to the live server, but it is
 // not a write the copy must catch up with: counted as one, it sent every page after it to the live server until the
@@ -132,6 +134,7 @@ class LocalCopy {
     this.stopped = false;
     this.failures = 0;
     this.meta = new Map();            // table → { counter, since }
+    this.tables = null;               // this database's tables, per build (schema())
   }
 
   api() {
@@ -220,9 +223,12 @@ class LocalCopy {
    */
   async warmRecent() {
     const until = Date.now() + WARM_RECENT_MS;
+    const write = this.lastWriteAt;
     for (const page of this.recent) {
       const left = until - Date.now();
-      if (left <= 0 || this.stopped) return;
+      // A write made meanwhile stops the rebuild: the sync that catches it up rebuilds them again, and it waited
+      // behind this one, reads on the live server, for the rest of up to 15 s (17 Oct 2026).
+      if (left <= 0 || this.stopped || this.lastWriteAt !== write) return;
       try {
         const res = await fetch(`${this.origin}${page}`, { headers: { 'x-plcos-desktop': this.secret }, redirect: 'manual', signal: AbortSignal.timeout(left) });
         await res.arrayBuffer();
@@ -238,6 +244,9 @@ class LocalCopy {
     await this.pg.query('update network.read_revision set foreground = $1::bigint where singleton and foreground <> $1::bigint', [value]);
   }
 
+  /** The build here is the one the server runs (a prepare that did not catch up waits as before, never spins). */
+  caughtUpBuild() { return Boolean(this.build) && (!this.serverCommit || this.build.commit === this.serverCommit); }
+
   poke() { const w = this.wake; this.wake = null; w?.(); }
   sleep(ms) { return new Promise((r) => { const t = setTimeout(() => { this.wake = null; r(); }, ms); this.wake = () => { clearTimeout(t); r(); }; }); }
 
@@ -245,9 +254,14 @@ class LocalCopy {
     while (!this.stopped) {
       const syncedBefore = this.lastSyncStartedAt;
       try {
-        await this.tick();
+        // A tick that only prepared a new build syncs again at once: waiting the usual two seconds first held every
+        // launch (and every new server build) that long before the copy could answer (17 Oct 2026).
+        const ticked = await this.tick();
         this.failures = 0;
+        if (ticked === 'prepared' && this.caughtUpBuild()) continue;
       } catch (e) {
+        // The schema is read again: whatever failed may have changed it.
+        this.tables = null;
         this.failures++;
         this.log('local copy:', String(e?.stack ?? e).slice(0, 1500));
         this.detail = String(e?.message ?? e).slice(0, 300);
@@ -275,8 +289,10 @@ class LocalCopy {
     if (!this.build || (this.serverCommit && this.build.commit !== this.serverCommit)) {
       if (this.phase === 'ready') this.log('the server runs', this.serverCommit, '— updating the local copy from', this.build?.commit);
       await this.prepare(this.serverCommit);
-      // A new build may bring new tables: read state again after its migrations.
-      return;
+      // The server's state is read again after a long prepare (a download, an install): its counters have moved on. A
+      // quick one, the build already here (every launch), syncs from the state it has just read, one round trip sooner;
+      // the tables its migrations made are read below either way.
+      if (!this.caughtUpBuild() || Date.now() - syncStarted > STATE_FRESH_MS) return 'prepared';
     }
     this.lastSyncStartedAt = syncStarted;
     // The write this sync catches up with: one made at least a settle (less a second) before it started.
@@ -289,8 +305,10 @@ class LocalCopy {
     // foreground stays where it was: the copy answers from its last build at once and rebuilds behind it, as the
     // server does for its import workers (lib/build-cache.ts), and the change shows a rebuild later.
     const own = write > 0 && this.settledFor < write;
-    const heldForeground = this.phase === 'ready' && !own ? await this.foreground().catch(() => null) : null;
-    const r = await this.sync(st);
+    // Read only when some table will be pulled: an idle tick, nothing changed, now asks this database nothing.
+    const local = await this.schema();
+    const heldForeground = this.phase === 'ready' && !own && this.changedTables(st, local).length ? await this.foreground().catch(() => null) : null;
+    const r = await this.sync(st, local);
     const holdFailed = (e) => this.log('foreground hold:', String(e?.message ?? e).slice(0, 200));
     // Held only if no write of this person's was made while the sync ran: that write may be in what it brought.
     if (heldForeground !== null && this.lastWriteAt === write && (r.rows || r.deleted)) {
@@ -395,6 +413,7 @@ class LocalCopy {
       await this.pg.query('insert into _desktop.migrated (commit) values ($1) on conflict (singleton) do update set commit = excluded.commit', [commitHere]);
     }
     this.build = { commit: commitHere, dir };
+    this.tables = null; // this build's migrations may have made or changed tables
     this.pruneBuilds(builds, commitHere);
     // Counters are kept across builds: a migration that changes rows moves the server's counters, and a new table has
     // no entry yet, so only those are read again. (Re-reading every table on each deploy scanned the big ones for
@@ -403,7 +422,7 @@ class LocalCopy {
     // Tables not copied yet (all of them, on a fresh copy) start from this Mac's own copy of the server's database
     // when there is one (docs/31 §3): the sync then checks each against the server's digest and downloads only what
     // differs.
-    if ([...(await this.localTables()).keys()].some((t) => !this.meta.has(t) && !SEED_SKIP.has(t))) await this.seed().catch((e) => this.log('seeding from this Mac skipped:', String(e?.message ?? e).slice(0, 300)));
+    if ([...(await this.schema()).keys()].some((t) => !this.meta.has(t) && !SEED_SKIP.has(t))) await this.seed().catch((e) => this.log('seeding from this Mac skipped:', String(e?.message ?? e).slice(0, 300)));
     // A copy made before the sync analyzed what it wrote: every table never analyzed gets its statistics once.
     const { rows: blind } = await this.pg.query(`select schemaname || '.' || relname as t from pg_stat_user_tables
       where schemaname <> '_desktop' and last_analyze is null and last_autoanalyze is null`);
@@ -610,17 +629,29 @@ class LocalCopy {
     return new Map(rows.map((r) => [r.t, r]));
   }
 
-  async sync(st) {
-    const local = await this.localTables();
+  /**
+   * This database's tables, read once per build: only the build's migrations (prepare) change them, and every idle tick
+   * read the catalog again for nothing. Read afresh after a prepare and after any failed tick.
+   */
+  async schema() {
+    return (this.tables ??= await this.localTables());
+  }
+
+  /** Tables whose server counters moved since this copy last read them, biggest first. */
+  changedTables(st, local) {
+    return st.tables
+      .filter((info) => local.has(info.t) && this.meta.get(info.t)?.counter !== info.counter && !this.background.has(info.t))
+      .sort((a, b) => (b.rows ?? 0) - (a.rows ?? 0));
+  }
+
+  async sync(st, local) {
     let tables = 0, rows = 0, deleted = 0;
     // Biggest first, so the long tables start early and the short ones fill the gaps.
     // Only a copy never made whole waits on every table. A new server build (which stops the local server, so the
     // phase leaves 'ready') or a restart of the app keeps the slow tables in the background: on 15 Oct 2026 a deploy
     // re-read route_cache in the foreground and sent every page to Railway for its 13 minutes.
     const first = this.phase !== 'ready' && !this.hadCopy;
-    const changed = st.tables
-      .filter((info) => local.has(info.t) && this.meta.get(info.t)?.counter !== info.counter && !this.background.has(info.t))
-      .sort((a, b) => (b.rows ?? 0) - (a.rows ?? 0));
+    const changed = this.changedTables(st, local);
     // Once the copy is whole, slow tables (a big derived cache rewritten daily, say) catch up in the background, so a
     // write's settle never waits minutes on them: what a person writes lands in the ordinary tables.
     const slow = first ? [] : changed.filter((info) => this.slow.has(info.t));

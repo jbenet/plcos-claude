@@ -170,8 +170,15 @@ export interface PollAnswer {
  * workflows it says it can run (a runner that names none is an older one: the first three only), and any queued
  * commands of the kinds it says it takes.
  */
+/** A poll from a second runner while the first is alive: it would fail the first's runs as lost (red team, 17 Oct 2026). */
+export class AstraRunnerBusy extends Error {}
+const RUNNER_ALIVE = '3 minutes';
+
 export async function poll(db: Db, p: Poll): Promise<PollAnswer> {
   return db.transaction(async (tx) => {
+    const live = await tx.one<{ host: string }>(`select host from platform.astra_runner where id = 1 and host is not null and host <> $1
+      and heartbeat_at > clock_timestamp() - interval '${RUNNER_ALIVE}' for update`, [p.host]);
+    if (live) throw new AstraRunnerBusy(`Another runner (${live.host}) is polling; one runner at a time.`);
     await tx.query(`update platform.astra_runner set heartbeat_at = clock_timestamp(), host = $1, slots = $2::jsonb, in_window = $3,
       capacity_until = $4, note = $5, code = $6, code_started_at = $7 where id = 1`,
       [p.host, JSON.stringify(p.slots), p.inWindow, p.capacityUntil, p.note, p.code ?? null, p.codeStartedAt ?? null]);

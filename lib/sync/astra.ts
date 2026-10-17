@@ -1,4 +1,5 @@
 import { getDb, type Db } from '@/lib/db';
+import { cappedText } from '@/lib/body-cap';
 import { auditSync, type SyncCaller } from './auth';
 import type { PushAnswer } from './push';
 
@@ -31,7 +32,7 @@ export async function astraCall(caller: SyncCaller, request: Request, o: { db?: 
     return { status, body: { ok: status < 300, ...body } };
   };
   let input: Record<string, unknown>;
-  try { input = JSON.parse((await request.text()).slice(0, 8192)); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
+  try { input = JSON.parse(((await cappedText(request, 64 * 1024)) ?? '').slice(0, 8192)); } catch { return answer(400, 'invalid', { error: 'The call is not JSON.' }, { reason: 'json' }); }
   const db = o.db ?? await getDb();
   const astra = await import('@/lib/astra/jobs');
   if (input?.op === 'poll') {
@@ -50,8 +51,10 @@ export async function astraCall(caller: SyncCaller, request: Request, o: { db?: 
     const code = typeof input.commit === 'string' && /^[0-9a-f]{7,40}$/.test(input.commit) ? input.commit : null;
     const codeStartedAt = typeof input.startedAt === 'string' && Number.isFinite(Date.parse(input.startedAt)) ? new Date(input.startedAt).toISOString() : null;
     const features = Array.isArray(input.features) ? (['focus'] as const).filter((f) => (input.features as unknown[]).includes(f)) : [];
-    const result = await astra.poll(db, { host: text(input.host, 60) ?? 'mac', workflows, commands, features, code, codeStartedAt, inWindow: input.inWindow, night, free, held, slots,
-      capacityUntil: capacity, note: text(input.note, 300) });
+    let result: Awaited<ReturnType<typeof astra.poll>>;
+    try { result = await astra.poll(db, { host: text(input.host, 60) ?? 'mac', workflows, commands, features, code, codeStartedAt, inWindow: input.inWindow, night, free, held, slots,
+      capacityUntil: capacity, note: text(input.note, 300) }); }
+    catch (e) { if (e instanceof astra.AstraRunnerBusy) return answer(409, 'refused', { error: e.message }, { op: 'poll', reason: 'busy' }); throw e; }
     // Polls come every minute; only those that hand out or cancel work go in the audit log.
     if (result.jobs.length || result.cancel.length || result.commands.length) {
       await auditSync(caller, 'astra', 'ok', { op: 'poll', claimed: result.jobs.length, cancelled: result.cancel.length, commands: result.commands.map((c) => c.op) });

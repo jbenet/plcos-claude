@@ -1,4 +1,5 @@
 import { config } from '@/config/deployment';
+import { cappedText } from '@/lib/body-cap';
 import { getDb } from '@/lib/db';
 import { withQueryTimings } from '@/lib/db/timing';
 import { autonomousOf, correlationOf } from '@/lib/mcp/audit';
@@ -154,7 +155,10 @@ async function serve(request: Request, op: string, method: Method): Promise<Resp
   let args: Record<string, unknown>;
   if (method === 'GET' || method === 'DELETE') args = queryArgs(new URL(request.url), spec.rename);
   else {
-    try { args = (await request.json()) as Record<string, unknown>; } catch { return fail(400, 'The body is not JSON.'); }
+    // Read up to the cap, whatever Content-Length says: a chunked body sends none (red team, 17 Oct 2026).
+    const body = await cappedText(request, config.mcp.maxRequestBytes);
+    if (body === null) return fail(413, 'The request is too large.');
+    try { args = JSON.parse(body) as Record<string, unknown>; } catch { return fail(400, 'The body is not JSON.'); }
     if (!args || typeof args !== 'object' || Array.isArray(args)) return fail(400, 'The body is a JSON object.');
   }
   const r = await runTool(env, spec.tool, args, meta);
