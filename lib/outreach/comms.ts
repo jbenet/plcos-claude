@@ -63,17 +63,36 @@ async function pursuitFor(ctx: Ctx, pursuitId: string, q: Queryable, write: bool
   return p;
 }
 
-/** The people and firms on record behind outside addresses: email claims (never licensed ones), and each person's current firm. */
-async function entitiesOf(addresses: string[], q: Queryable): Promise<string[]> {
-  if (!addresses.length) return [];
-  const people = (await q.query<{ id: string }>(`select distinct identity.canonical_entity_id(c.entity_id)::text id
-      from research.claim c left join research.source_doc d on d.doc_id = c.source
-     where c.superseded_by is null and c.field ~ '(^|\\.)email$' and lower(trim(c.value)) = any($1::text[])
-       and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'`, [addresses])).map((r) => r.id);
-  if (!people.length) return [];
-  const firms = (await q.query<{ id: string }>(`select distinct identity.canonical_entity_id(org_entity)::text id from identity.affiliation
-     where ended_on is null and coalesce(source, '') !~* '^dakota' and identity.canonical_entity_id(person_entity) = any($1::uuid[])`, [people])).map((r) => r.id);
-  return [...new Set([...people, ...firms])].sort();
+/**
+ * The people and firms on record behind outside addresses: email claims (never licensed ones), and each person's current firm.
+ * Read once for a whole batch (performance pass, 17 Oct 2026: two reads per message, the firms' a scan of every affiliation):
+ * the answer for a message's addresses is the same set as reading them alone.
+ */
+async function entitiesOfAll(addresses: string[], q: Queryable): Promise<(outside: string[]) => string[]> {
+  const peopleOf = new Map<string, Array<string | null>>();
+  const firmsOf = new Map<string, string[]>();
+  if (addresses.length) {
+    for (const r of await q.query<{ a: string; id: string | null }>(`select distinct lower(trim(c.value)) a, identity.canonical_entity_id(c.entity_id)::text id
+        from research.claim c left join research.source_doc d on d.doc_id = c.source
+       where c.superseded_by is null and c.field ~ '(^|\\.)email$' and lower(trim(c.value)) = any($1::text[])
+         and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'`, [addresses])) {
+      const l = peopleOf.get(r.a); if (l) l.push(r.id); else peopleOf.set(r.a, [r.id]);
+    }
+    const people = [...new Set([...peopleOf.values()].flat().filter((x): x is string => x !== null))];
+    // Each person's aliases first (identity.alias_ids): an index probe, not identity.canonical_entity_id() on every row.
+    if (people.length) {
+      for (const r of await q.query<{ person: string; id: string | null }>(`select distinct identity.canonical_entity_id(person_entity)::text person, identity.canonical_entity_id(org_entity)::text id
+          from identity.affiliation where ended_on is null and coalesce(source, '') !~* '^dakota' and person_entity = any(identity.alias_ids($1::uuid[]))`, [people])) {
+        const l = firmsOf.get(r.person); if (l) l.push(r.id as string); else firmsOf.set(r.person, [r.id as string]);
+      }
+    }
+  }
+  return (outside) => {
+    const people = [...new Set(outside.flatMap((x) => peopleOf.get(x) ?? []))];
+    if (!people.length) return [];
+    const firms = people.flatMap((id) => (id === null ? [] : firmsOf.get(id) ?? []));
+    return [...new Set([...people, ...firms])].sort() as string[];
+  };
 }
 
 /** Reconcile the LPs a batch of new messages is about, ours and theirs: their active pursuits, each once (our email moves to Connecting, docs/29 §4a). */
@@ -99,6 +118,44 @@ const message = z.object({
 }).strict();
 export const ingestInput = z.object({ messages: z.array(message).min(1).max(100) }).strict();
 
+const UPSERT_TAIL = `
+      on conflict (message_id) do update set
+        entity_ids = array(select distinct x from unnest(email.comms_message.entity_ids || excluded.entity_ids) x order by x),
+        pursuit_id = coalesce(email.comms_message.pursuit_id, excluded.pursuit_id),
+        thread_id = coalesce(email.comms_message.thread_id, excluded.thread_id),
+        seen_by = array(select distinct x from unnest(email.comms_message.seen_by || excluded.seen_by) x order by x),
+        updated_at = case when email.comms_message.entity_ids @> excluded.entity_ids and email.comms_message.seen_by @> excluded.seen_by
+                            and (email.comms_message.pursuit_id is not null or excluded.pursuit_id is null) then email.comms_message.updated_at else now() end`;
+const UPSERT_HEAD = `insert into email.comms_message (message_id, has_message_id, gmail_id, thread_id, sent_at, direction, from_addr, to_addrs, cc_addrs,
+        subject, entity_ids, pursuit_id, about, about_vehicles, about_basis, mailbox_of, token_id, seen_by)
+      values `;
+const valuesAt = (o: number) => `($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, $${o + 5}, $${o + 6}, $${o + 7}, $${o + 8}, $${o + 9}, $${o + 10}, $${o + 11}::uuid[], $${o + 12}, $${o + 13}, $${o + 14}, $${o + 15}, $${o + 16}, $${o + 17}, array[$${o + 16}]::uuid[])`;
+
+interface Pending { at: number; key: string; params: unknown[] }
+type Upserted = { fresh: boolean; changed: boolean } | null;
+
+/**
+ * The batch's messages in one statement (performance pass, 17 Oct 2026: one round trip each). Distinct Message-IDs only:
+ * the same one twice in a batch, or a refused statement, goes one message at a time in order, as before — a refused
+ * statement wrote nothing, so the messages before the one refused are still written.
+ */
+async function upsertMessages(rows: Pending[], q: Queryable): Promise<Array<{ at: number; key: string; r: Upserted }>> {
+  const one = async (p: Pending) => ({ at: p.at, key: p.key, r: await q.one<{ fresh: boolean; changed: boolean }>(
+    `${UPSERT_HEAD}${valuesAt(0)}${UPSERT_TAIL}
+      returning (xmax = 0) as fresh, updated_at = now() as changed`, p.params) });
+  if (rows.length > 1 && new Set(rows.map((p) => p.key)).size === rows.length) {
+    try {
+      const got = new Map((await q.query<{ message_id: string; fresh: boolean; changed: boolean }>(
+        `${UPSERT_HEAD}${rows.map((_, i) => valuesAt(i * 17)).join(', ')}${UPSERT_TAIL}
+      returning message_id, (xmax = 0) as fresh, updated_at = now() as changed`, rows.flatMap((p) => p.params))).map((r) => [r.message_id, { fresh: r.fresh, changed: r.changed }]));
+      return rows.map((p) => ({ at: p.at, key: p.key, r: got.get(p.key) ?? null }));
+    } catch { /* one at a time below */ }
+  }
+  const done = [];
+  for (const p of rows) done.push(await one(p));
+  return done;
+}
+
 export async function ingest(ctx: Ctx, raw: Record<string, unknown>) {
   requireMutationProfile();
   const a = raw as z.infer<typeof ingestInput>;
@@ -113,37 +170,35 @@ export async function ingest(ctx: Ctx, raw: Record<string, unknown>) {
     db.query<{ slug: string; name: string; aliases: string[] }>(`select slug, name, coalesce(aliases, '{}') aliases from platform.vehicle`)]);
   const out: Array<{ messageId: string; status: 'new' | 'already' | 'unmatched' }> = [];
   const relinked: string[] = [];
-  for (const m of a.messages) {
-    const at = new Date(m.date);
-    if (at.getTime() > Date.now() + SKEW_MS) throw new OutreachRefused(400, `A message is dated in the future (${m.gmailMessageId}).`);
-    const { key, real } = keyOf(m.messageId, m.gmailMessageId);
-    const outside = [m.from, ...m.to, ...m.cc].filter((x) => !team.has(x));
-    let entities = await entitiesOf(outside, db);
-    let pursuitId: string | null = null;
-    if (m.pursuitId) {
-      const p = await pursuitFor(ctx, m.pursuitId, db, false);
-      pursuitId = p.pursuit_id;
-      entities = [...new Set([...entities, p.entity_id])].sort();
+  const entitiesOf = await entitiesOfAll([...new Set(a.messages.flatMap((m) => [m.from, ...m.to, ...m.cc]).filter((x) => !team.has(x)))], db);
+  const rows: Pending[] = [];
+  try {
+    for (const m of a.messages) {
+      const at = new Date(m.date);
+      if (at.getTime() > Date.now() + SKEW_MS) throw new OutreachRefused(400, `A message is dated in the future (${m.gmailMessageId}).`);
+      const { key, real } = keyOf(m.messageId, m.gmailMessageId);
+      const outside = [m.from, ...m.to, ...m.cc].filter((x) => !team.has(x));
+      let entities = entitiesOf(outside);
+      let pursuitId: string | null = null;
+      if (m.pursuitId) {
+        const p = await pursuitFor(ctx, m.pursuitId, db, false);
+        pursuitId = p.pursuit_id;
+        entities = [...new Set([...entities, p.entity_id])].sort();
+      }
+      // A message with nobody on record is not kept: it is about no LP here.
+      if (!entities.length) { out.push({ messageId: key, status: 'unmatched' }); continue; }
+      const ab = aboutRaise(m.subject ?? '', [m.from, ...m.to], about, []);
+      rows.push({ at: out.length, key, params: [key, real, m.gmailMessageId, m.threadId ?? null, at, m.direction === 'sent' ? 'ours' : 'theirs', m.from, m.to, m.cc, m.subject ?? null,
+        entities, pursuitId, ab.about, ab.vehicles, ab.basis, owner.id, ctx.env.tokenId] });
+      out.push({ messageId: key, status: 'already' });
     }
-    // A message with nobody on record is not kept: it is about no LP here.
-    if (!entities.length) { out.push({ messageId: key, status: 'unmatched' }); continue; }
-    const ab = aboutRaise(m.subject ?? '', [m.from, ...m.to], about, []);
-    const r = await db.one<{ fresh: boolean; changed: boolean }>(`insert into email.comms_message (message_id, has_message_id, gmail_id, thread_id, sent_at, direction, from_addr, to_addrs, cc_addrs,
-        subject, entity_ids, pursuit_id, about, about_vehicles, about_basis, mailbox_of, token_id, seen_by)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::uuid[], $12, $13, $14, $15, $16, $17, array[$16]::uuid[])
-      on conflict (message_id) do update set
-        entity_ids = array(select distinct x from unnest(email.comms_message.entity_ids || excluded.entity_ids) x order by x),
-        pursuit_id = coalesce(email.comms_message.pursuit_id, excluded.pursuit_id),
-        thread_id = coalesce(email.comms_message.thread_id, excluded.thread_id),
-        seen_by = array(select distinct x from unnest(email.comms_message.seen_by || excluded.seen_by) x order by x),
-        updated_at = case when email.comms_message.entity_ids @> excluded.entity_ids and email.comms_message.seen_by @> excluded.seen_by
-                            and (email.comms_message.pursuit_id is not null or excluded.pursuit_id is null) then email.comms_message.updated_at else now() end
-      returning (xmax = 0) as fresh, updated_at = now() as changed`,
-    [key, real, m.gmailMessageId, m.threadId ?? null, at, m.direction === 'sent' ? 'ours' : 'theirs', m.from, m.to, m.cc, m.subject ?? null,
-      entities, pursuitId, ab.about, ab.vehicles, ab.basis, owner.id, ctx.env.tokenId]);
-    out.push({ messageId: key, status: r?.fresh ? 'new' : 'already' });
-    // Sent again with the LP it is about (a pursuit it lacked), or another LP on it: Reconciliation reads it again.
-    if (!r?.fresh && r?.changed) relinked.push(key);
+  } finally {
+    // What was read before a refused message is written, as when each message was written in turn.
+    for (const { at, key, r } of await upsertMessages(rows, db)) {
+      out[at] = { messageId: key, status: r?.fresh ? 'new' : 'already' };
+      // Sent again with the LP it is about (a pursuit it lacked), or another LP on it: Reconciliation reads it again.
+      if (!r?.fresh && r?.changed) relinked.push(key);
+    }
   }
   const n = (s: string) => out.filter((x) => x.status === s).length;
   // A new reply from an LP is a reply on file: Reconciliation records the conversation rungs it supports, as it

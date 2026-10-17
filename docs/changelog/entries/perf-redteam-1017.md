@@ -38,6 +38,15 @@ data on Juan's Mac.
 - **LP stats rebuilds a little sooner after a write.** Its LP-only reads start alongside the firms' people read,
   country lookups and number formatters are kept, Dakota estimates stop at each LP's newest row, and packed ids keep
   their codes: on the large invented data stats 330 → 294 ms, pipeline 168 → 158 ms (medians of 20 cycles).
+- **The mail desk's calls answer sooner.** comms_ingest read each message's people and firms on its own, the firms'
+  read a pass over every affiliation, and wrote each message in its own round trip; a batch is now read once and written
+  in one statement. Reconciliation's "did they send it themselves", the emailed-parties check and the firms behind a
+  domain reach records through their aliases rather than resolving every row; the parties check's reads run together.
+  A long queue page cut to fit an MCP answer was re-measured whole after every row it dropped; each row is measured once
+  (`fitRows`, also for contacts and connectors). As the mail desk's token on the invented perf data with 6,000 invented
+  addresses: comms_ingest of 50 messages already on file 2,670 → 49 ms, of 50 new ones 5,440 → 555 ms;
+  outreach_check_parties for 101 addresses 296 → 41 ms; outreach_queue at 500 rows 1,053 → 115 ms; outreach_update
+  with a touch 172 → 49 ms. Answers and the resulting database are the same, hashed with a frozen clock.
 
 - **Rebuilds after a write are cheaper.** LP stats read each firm's contacts once instead of once per affiliation
   (firms' people 60 → 17 ms); a vehicle's readings find each LP's latest proposal by its index (47 → 13 ms); packed

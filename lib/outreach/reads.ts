@@ -6,6 +6,7 @@ import { getDb } from '@/lib/db';
 import { addressesFor, detailsFor, emailBarredAmong } from './addresses';
 import { sendToFor } from './entity-reads';
 import { redactHealth } from '@/lib/redact-health';
+import { fitRows } from '@/lib/mcp/output';
 import { SPV_STAGE_LABEL, spvRooms, workingDaysUntil, type SpvStage } from '@/modules/close';
 import { INSUFFICIENT_FOR_506C } from '@/modules/compliance';
 import { checkWrap, listAssets, type Audience, type PermittedUse } from '@/modules/content';
@@ -465,10 +466,7 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
   });
   // Over MCP the answer must fit the response limit: rows are held back from the end until it does, and nextCursor
   // continues from the last row sent, so nothing is skipped (render would otherwise halve the list with no cursor).
-  let fitted = rows;
-  if (fit.maxBytes) {
-    while (fitted.length > 1 && Buffer.byteLength(JSON.stringify(fitted)) > fit.maxBytes) fitted = fitted.slice(0, -1);
-  }
+  const fitted = fit.maxBytes ? fitRows(rows, fit.maxBytes) : rows;
   return {
     data: { rows: fitted, total: chosen.length, offset, limit, nextCursor: next(fitted.length), counts, cursor,
       ...(fitted.length < rows.length ? { heldBack: `${rows.length - fitted.length} row${rows.length - fitted.length === 1 ? '' : 's'} held back to fit the answer's size limit; nextCursor continues from here.` } : {}),
@@ -566,10 +564,8 @@ export async function outreachContacts(user: AppUser, a: ContactsArgs, fit: Queu
   };
   if (a.ifChanged && a.ifChanged === version) return { data: { unchanged: true as const, version, cursor }, coverage };
   const offset = Math.min(a.offset ?? 0, rows.length);
-  let fitted = rows.slice(offset);
-  if (fit.maxBytes) {
-    while (fitted.length > 1 && Buffer.byteLength(JSON.stringify(fitted)) > fit.maxBytes) fitted = fitted.slice(0, fitted.length - Math.max(1, Math.floor(fitted.length / 10)));
-  }
+  const rest = rows.slice(offset);
+  const fitted = fit.maxBytes ? fitRows(rest, fit.maxBytes, (n) => Math.max(1, Math.floor(n / 10))) : rest;
   const nextOffset = offset + fitted.length < rows.length ? offset + fitted.length : null;
   return { data: { rows: fitted, total: rows.length, offset, nextOffset, version, cursor }, coverage };
 }

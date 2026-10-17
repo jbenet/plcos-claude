@@ -106,13 +106,15 @@ export async function sentByThem(entityIds: string[], q?: Queryable): Promise<Se
         left join research.source_doc d on d.doc_id = c.source
        where c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'
     )
+    -- Through each side's aliases (performance pass, 17 Oct 2026): an index probe per sender, where
+    -- identity.canonical_entity_id() on every pursuit, contact and affiliation row cost most of a reconcile.
     select distinct s.for_entity::text, s.message_id from senders s
       join lp on lp.entity_id = s.for_entity
      where s.sender = lp.canon
         or exists (select 1 from strategy.active_pursuit p join strategy.pursuit_contact pc on pc.pursuit_id = p.pursuit_id
-                    where identity.canonical_entity_id(p.entity_id) = lp.canon and identity.canonical_entity_id(pc.person_entity) = s.sender)
+                    where p.entity_id = any(identity.alias_ids(array[lp.canon])) and pc.person_entity = any(identity.alias_ids(array[s.sender])))
         or exists (select 1 from identity.affiliation a where a.ended_on is null
-                    and identity.canonical_entity_id(a.person_entity) = s.sender and identity.canonical_entity_id(a.org_entity) = lp.canon)`, [entityIds]);
+                    and a.person_entity = any(identity.alias_ids(array[s.sender])) and a.org_entity = any(identity.alias_ids(array[lp.canon])))`, [entityIds]);
   return new Set(rows.map((r) => `${r.for_entity}|${r.message_id}`));
 }
 

@@ -57,6 +57,12 @@ const domainOf = (a: string) => a.slice(a.lastIndexOf('@') + 1);
 export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
   const a = raw as z.infer<typeof partiesInput>;
   const db = await getDb();
+  // The reads that need only the call's own input start together (performance pass, 17 Oct 2026).
+  const vehiclesRead = db.query<{ id: string; slug: string; name: string; aliases: string[]; phase: string; kind: string }>(
+    `select id::text, slug, name, coalesce(aliases, '{}') aliases, phase, kind from platform.vehicle`);
+  const notLpRead = notLpEntities(db);
+  const copyRead = db.one<{ at: Date }>(`select max(finished_at) at from sources.sync_run where source = 'affinity' and kind in ('slice', 'history') and status in ('ok', 'held')`);
+  for (const r of [vehiclesRead, notLpRead, copyRead]) r.catch(() => undefined);
   const team = await teamAddresses(db);
   let fundraise: string[] = [], firmNames: string[] = [];
   try {
@@ -67,8 +73,7 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
   const oursDomains = new Set([...[...team.keys()].map(domainOf).filter((d) => !PUBLIC_MAIL.has(d)), ...fundraise, ...PL_DOMAINS].map((d) => d.toLowerCase()));
   const isOurs = (x: string) => team.has(x) || oursDomains.has(domainOf(x)) || NOT_A_PERSON.test(x);
 
-  const vehicles = (await db.query<{ id: string; slug: string; name: string; aliases: string[]; phase: string; kind: string }>(
-    `select id::text, slug, name, coalesce(aliases, '{}') aliases, phase, kind from platform.vehicle`)).filter((v) => can(u, 'read', { vehicle: v.id }));
+  const vehicles = (await vehiclesRead).filter((v) => can(u, 'read', { vehicle: v.id }));
   const about: AboutVehicle[] = vehicles.map((v) => ({ slug: v.slug, name: v.name, aliases: v.aliases }));
   const slugOf = new Map(vehicles.map((v) => [v.id, v.slug]));
   const raising = new Set(vehicles.filter((v) => v.phase === 'active' && v.kind !== 'grant_rail').map((v) => v.slug));
@@ -85,22 +90,29 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
   const byClaim = new Map<string, string>();
   const byAffinity = new Map<string, string>();
   const affinityPeople = new Map<string, string | null>();
+  // A portfolio company's people are never LPs, as on the calendar's candidates (red-team pass, 14 Oct 2026: a mail to
+  // a founder about their own company's SPV suggested adding them to it). Unknown addresses go by their domain's firms.
+  const orgsAtRead = firmsByDomain([...new Set(addresses.map((x) => x.slice(x.lastIndexOf('@') + 1)).filter((d) => !PUBLIC_MAIL.has(d)))], null, db);
+  orgsAtRead.catch(() => undefined);
   if (addresses.length) {
-    for (const r of await db.query<{ a: string; id: string }>(`select distinct on (lower(trim(c.value))) lower(trim(c.value)) a, identity.canonical_entity_id(c.entity_id)::text id
+    const [claims, affinity, held] = await Promise.all([
+      db.query<{ a: string; id: string }>(`select distinct on (lower(trim(c.value))) lower(trim(c.value)) a, identity.canonical_entity_id(c.entity_id)::text id
         from research.claim c left join research.source_doc d on d.doc_id = c.source
        where c.superseded_by is null and c.field ~ '(^|\\.)email$' and lower(trim(c.value)) = any($1::text[])
-         and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota' order by lower(trim(c.value)), c.as_of desc nulls last`, [addresses])) byClaim.set(r.a, r.id);
-    for (const r of await db.query<{ email: string; id: string }>(`select distinct on (email) email, id from (${AFFINITY_PERSON_EMAILS}) x where email = any($1::text[])`, [addresses])) {
-      byAffinity.set(r.email, r.id);
-    }
-    // Affinity holds the person when any person record in our copy has the address, linked to someone of ours or not.
-    for (const r of await db.query<{ email: string; name: string | null }>(`select distinct on (lower(trim(e.v))) lower(trim(e.v)) email,
+         and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota' order by lower(trim(c.value)), c.as_of desc nulls last`, [addresses]),
+      db.query<{ email: string; id: string }>(`select distinct on (email) email, id from (${AFFINITY_PERSON_EMAILS}) x where email = any($1::text[])`, [addresses]),
+      // Affinity holds the person when any person record in our copy has the address, linked to someone of ours or not.
+      db.query<{ email: string; name: string | null }>(`select distinct on (lower(trim(e.v))) lower(trim(e.v)) email,
           nullif(trim(concat_ws(' ', r.payload->>'firstName', r.payload->>'lastName')), '') name
         from sources.raw_record r
         cross join lateral (select r.payload->>'primaryEmailAddress' v
                             union select jsonb_array_elements_text(case when jsonb_typeof(r.payload->'emailAddresses') = 'array' then r.payload->'emailAddresses' else '[]'::jsonb end)) e
        where r.source = 'affinity' and r.kind = 'person' and lower(trim(e.v)) = any($1::text[])
-       order by lower(trim(e.v)), r.fetched_at desc`, [addresses])) affinityPeople.set(r.email, r.name);
+       order by lower(trim(e.v)), r.fetched_at desc`, [addresses]),
+    ]);
+    for (const r of claims) byClaim.set(r.a, r.id);
+    for (const r of affinity) byAffinity.set(r.email, r.id);
+    for (const r of held) affinityPeople.set(r.email, r.name);
   }
   const entities = [...new Set([...byClaim.values(), ...byAffinity.values()])];
   const names = new Map<string, string>();
@@ -108,34 +120,36 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
   const lastEmail = new Map<string, string>();
   const firmsOf = new Map<string, string[]>();
   if (entities.length) {
-    // Never through a licensed (Dakota) employment row: a token is never licensed, and "their firm is in our pipeline"
-    // would tell it where they work (red team, 17 Oct 2026).
-    for (const r of await db.query<{ id: string; org: string }>(`select distinct identity.canonical_entity_id(a.person_entity)::text id, identity.canonical_entity_id(a.org_entity)::text org
-        from identity.affiliation a where a.ended_on is null and coalesce(a.source, '') !~* '^dakota' and identity.canonical_entity_id(a.person_entity) = any($1::uuid[])`, [entities])) {
-      firmsOf.set(r.id, [...(firmsOf.get(r.id) ?? []), r.org]);
-    }
-    for (const r of await db.query<{ id: string; name: string }>(`select entity_id::text id, display_name name from identity.entity where entity_id = any($1::uuid[])`, [entities])) names.set(r.id, r.name);
-    for (const r of await db.query<{ id: string; vehicle_id: string; status: string; via: 'self' | 'firm' | 'contact' }>(`
+    // Each record through its aliases (identity.alias_ids; the ids here are canonical): an index probe, never
+    // identity.canonical_entity_id() on every affiliation, pursuit, contact or meeting (performance pass, 17 Oct 2026).
+    const [firms, named, pursuits, emails] = await Promise.all([
+      // Never through a licensed (Dakota) employment row: a token is never licensed, and "their firm is in our pipeline"
+      // would tell it where they work (red team, 17 Oct 2026).
+      db.query<{ id: string; org: string }>(`select distinct identity.canonical_entity_id(a.person_entity)::text id, identity.canonical_entity_id(a.org_entity)::text org
+        from identity.affiliation a where a.ended_on is null and coalesce(a.source, '') !~* '^dakota' and a.person_entity = any(identity.alias_ids($1::uuid[]))`, [entities]),
+      db.query<{ id: string; name: string }>(`select entity_id::text id, display_name name from identity.entity where entity_id = any($1::uuid[])`, [entities]),
+      db.query<{ id: string; vehicle_id: string; status: string; via: 'self' | 'firm' | 'contact' }>(`
         select identity.canonical_entity_id(p.entity_id)::text id, p.vehicle_id::text, p.status::text status, 'self' via from strategy.active_pursuit p
-         where identity.canonical_entity_id(p.entity_id) = any($1::uuid[])
+         where p.entity_id = any(identity.alias_ids($1::uuid[]))
         union select identity.canonical_entity_id(a.person_entity)::text, p.vehicle_id::text, p.status::text, 'firm' from identity.affiliation a
-          join strategy.active_pursuit p on identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id(a.org_entity)
-         where a.ended_on is null and coalesce(a.source, '') !~* '^dakota' and identity.canonical_entity_id(a.person_entity) = any($1::uuid[])
+          join strategy.active_pursuit p on p.entity_id = any(identity.alias_ids(array[identity.canonical_entity_id(a.org_entity)]))
+         where a.ended_on is null and coalesce(a.source, '') !~* '^dakota' and a.person_entity = any(identity.alias_ids($1::uuid[]))
         union select identity.canonical_entity_id(c.person_entity)::text, p.vehicle_id::text, p.status::text, 'contact' from strategy.pursuit_contact c
-          join strategy.active_pursuit p on p.pursuit_id = c.pursuit_id where identity.canonical_entity_id(c.person_entity) = any($1::uuid[])`, [entities])) {
+          join strategy.active_pursuit p on p.pursuit_id = c.pursuit_id where c.person_entity = any(identity.alias_ids($1::uuid[]))`, [entities]),
+      db.query<{ id: string; d: string }>(`select identity.canonical_entity_id(entity_id)::text id, max(held_on)::text d from meetings.meeting
+        where source = 'affinity' and channel = 'email' and entity_id = any(identity.alias_ids($1::uuid[])) group by 1`, [entities]),
+    ]);
+    for (const r of firms) firmsOf.set(r.id, [...(firmsOf.get(r.id) ?? []), r.org]);
+    for (const r of named) names.set(r.id, r.name);
+    for (const r of pursuits) {
       const slug = slugOf.get(r.vehicle_id);
       if (!slug) continue;
       pursuitsOf.set(r.id, [...(pursuitsOf.get(r.id) ?? []), { vehicle: slug, status: r.status, via: r.via }]);
     }
-    for (const r of await db.query<{ id: string; d: string }>(`select identity.canonical_entity_id(entity_id)::text id, max(held_on)::text d from meetings.meeting
-        where source = 'affinity' and channel = 'email' and identity.canonical_entity_id(entity_id) = any($1::uuid[]) group by 1`, [entities])) lastEmail.set(r.id, r.d);
+    for (const r of emails) lastEmail.set(r.id, r.d);
   }
-  const notLp = await notLpEntities(db);
-  // A portfolio company's people are never LPs, as on the calendar's candidates (red-team pass, 14 Oct 2026: a mail to
-  // a founder about their own company's SPV suggested adding them to it). Unknown addresses go by their domain's firms.
-  const orgsAt = await firmsByDomain([...new Set(addresses.map((x) => x.slice(x.lastIndexOf('@') + 1)).filter((d) => !PUBLIC_MAIL.has(d)))], null, db);
+  const [notLp, orgsAt, copy] = await Promise.all([notLpRead, orgsAtRead, copyRead]);
   const onlyNotLp = (ids: string[]) => ids.length > 0 && ids.every((id) => notLp.has(id));
-  const copy = await db.one<{ at: Date }>(`select max(finished_at) at from sources.sync_run where source = 'affinity' and kind in ('slice', 'history') and status in ('ok', 'held')`);
   const copyAsOf = copy?.at ? new Date(copy.at).toISOString() : null;
 
   const parties = [...merged.values()].map((p) => {

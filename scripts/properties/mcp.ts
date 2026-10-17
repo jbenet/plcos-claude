@@ -19,7 +19,7 @@ import { currentUser } from '../../lib/auth';
 import { DATA_NOTICE, oneLine, render } from '../../lib/mcp/output';
 import { auditArgs, narrowedPrincipal, resetWindows } from '../../lib/mcp/envelope';
 import { READ_TOOLS, TOOLS, TOOL_NAMES } from '../../lib/mcp/tools';
-import { createMcpToken, revokeMcpToken, type AppUser } from '../../modules/platform';
+import { createMcpToken, revokeAllMcpTokens, revokeMcpToken, type AppUser } from '../../modules/platform';
 import type { Check, Db } from './harness';
 
 type Result = { isError?: boolean; content: Array<{ type: string; text: string }> };
@@ -238,6 +238,14 @@ export async function mcpProperties(check: Check, db: Db) {
     `${big.bytes} bytes after cutting ${5000 - parsed.data.rows.length} rows; currentUser() = ${seen}`);
 
   for (const c of [scoped, narrowed, adminNarrow, v, admin, live, budget, rate]) await c.close().catch(() => undefined);
+
+  // "Sign out everywhere" with "and their tokens" (red-team pass, 17 Oct 2026): every live token of theirs stops.
+  const [t1, t2] = [await token(gpAll, READ_TOOLS), await token(gpAll, READ_TOOLS)];
+  const revokedAll = await revokeAllMcpTokens(gpAll, gpAll.id, db);
+  const [r1, r2] = [await raw({ authorization: `Bearer ${t1}` }), await raw({ authorization: `Bearer ${t2}` })];
+  const left = await db.one<{ n: number }>('select count(*)::int n from platform.mcp_token where user_id = $1 and revoked_at is null', [gpAll.id]);
+  check('MCP: revoking all of a person\'s tokens stops every one of them, each audited',
+    revokedAll >= 2 && r1.status === 401 && r2.status === 401 && left?.n === 0, `revoked ${revokedAll}; ${r1.status}/${r2.status}; ${left?.n} left`);
   // Leave the invented users inactive: the audit log is append-only and references them.
   await db.query(`update platform.app_user set active = false where handle in ('mcp-gp-a', 'mcp-gp-all', 'mcp-viewer')`);
   await db.query(`update platform.mcp_token set revoked_at = coalesce(revoked_at, now())`);
