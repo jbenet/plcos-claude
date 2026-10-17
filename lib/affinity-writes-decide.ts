@@ -2,8 +2,8 @@ import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
 import { requireMutationProfile } from '@/lib/mutation-policy';
 import { appendAudit, type AppUser } from '@/modules/platform';
-import { affinityWriter, type AffinityWriter } from '@/lib/connectors/affinity/write';
-import { callsFor, day, ROW, type WriteItem } from '@/lib/affinity-writes';
+import { AffinityWriteError, AffinityWriteRefused, affinityWriter, type AffinityWriter } from '@/lib/connectors/affinity/write';
+import { callsFor, day, ROW, UNCERTAIN, type WriteItem } from '@/lib/affinity-writes';
 
 /**
  * Deciding a batch of Affinity writes, and writing it (lib/affinity-writes.ts says what the batch is). Only the
@@ -89,8 +89,11 @@ export async function decideWriteBatch(user: AppUser, batchId: string, approve: 
       written++;
     } catch (err) {
       failed++;
+      // Refused before sending, or answered with an error: nothing landed. Anything else (no answer, or a failure after
+      // Affinity said yes) may have, so the item is marked and its mail is not proposed again (17 Oct 2026).
+      const none = err instanceof AffinityWriteRefused || (err instanceof AffinityWriteError && err.status !== null && (err.status < 200 || err.status >= 300));
       await db.query(`update sources.affinity_write_item set state = 'failed', error = $2 where item_id = $1`,
-        [it.itemId, (err instanceof Error ? err.message : String(err)).slice(0, 300)]);
+        [it.itemId, `${none ? '' : UNCERTAIN}${err instanceof Error ? err.message : String(err)}`.slice(0, 300)]);
     }
   }
   await db.query(`update sources.affinity_write_batch set finished_at = now() where batch_id = $1`, [batchId]);

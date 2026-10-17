@@ -465,8 +465,13 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/__desktop/enter') {
       const k = url.searchParams.get('k') ?? '';
       if (!KEY || k !== KEY) { res.writeHead(403).end('wrong key'); return; }
-      const to = url.searchParams.get('to') ?? '/';
-      res.writeHead(303, { location: to.startsWith('/') && !to.startsWith('//') ? to : '/', 'set-cookie': `${KEY_COOKIE}=${KEY}; Path=/; HttpOnly; SameSite=Strict` }).end();
+      // Same origin only, parsed as a browser would: a prefix check let `/\host` through, which browsers read as `//host`.
+      let to = '/';
+      try {
+        const asked = new URL(url.searchParams.get('to') ?? '/', ORIGIN);
+        if (asked.origin === ORIGIN) to = asked.pathname + asked.search + asked.hash;
+      } catch { /* not an address: home */ }
+      res.writeHead(303, { location: to, 'set-cookie': `${KEY_COOKIE}=${KEY}; Path=/; HttpOnly; SameSite=Strict` }).end();
       return;
     }
     // The browser, sent here by the server after you press Allow: no launch key (it is another browser), but it

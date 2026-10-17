@@ -338,3 +338,4 @@ eleventh entry of a batch starts the next one. Each entry opens on its own page 
 - [Astra works from a fresh LP list each night](entries/astra-fresh-export.md)
 - [DocSend data-room visits, read only](entries/docsend.md)
 - [Send-to addresses, and companies and people who are not LPs](entries/sendto-entities.md)
+- [Perf and red-team loop, 17 Oct 2026](entries/perf-redteam-1017.md)

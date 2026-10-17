@@ -100,6 +100,11 @@ export const ingestInput = z.object({ messages: z.array(message).min(1).max(100)
 export async function ingest(ctx: Ctx, raw: Record<string, unknown>) {
   requireMutationProfile();
   const a = raw as z.infer<typeof ingestInput>;
+  // Ingesting runs Reconciliation, which moves statuses and rungs: the token's owner must be one who may change
+  // records. A Viewer's token was let through when no message named its LP (17 Oct 2026).
+  if (!can(ctx.env.principal, 'mutate', { vehicle: ctx.env.principal.vehicles ?? null })) {
+    throw new OutreachRefused(403, 'Not ingested: this token\'s owner may not change records here.');
+  }
   const db = await getDb();
   const owner = ctx.env.owner;
   const [team, about] = await Promise.all([teamAddresses(db),

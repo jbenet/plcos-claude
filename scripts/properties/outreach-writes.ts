@@ -39,6 +39,12 @@ export async function outreachWriteProperties(check: Check, db: Db) {
     && after?.status === 'discussing' && after.updates === 1 && after.ind === 1 && after.touches === 1 && u1.json.data.applied.indicated?.touchpointId === u1.json.data.applied.touchpointId,
     `first ${u1.status} (created ${u1.json?.data?.created}${u1.json?.error ? `, ${u1.json.error}` : ''}), again ${u2.status} (created ${u2.json?.data?.created}), read token ${uRo.status}; status ${after?.status}, ${after?.updates} update, ${after?.ind} indication, ${after?.touches} touchpoint`);
 
+  // An amount is a person's to record (outreach_add_lp's rule): an autonomous /update with one is refused, unwritten.
+  const uAgent = await agent('update', { ...body, idempotencyKey: 'props-desk-update-agent' });
+  const indAfter = await db.one<{ n: number }>('select count(*)::int n from pipeline.indication where pursuit_id = $1', [onFund]);
+  check('Outreach writes: an autonomous /update carrying an indicated amount is refused and writes nothing (17 Oct 2026)',
+    uAgent.status === 400 && indAfter?.n === 1, `autonomous ${uAgent.status}; ${indAfter?.n} indication`);
+
   // ── tickets: none for a person; opened for an agent, for a person to approve, never approved by the desk ──
   const sendBody = (pursuitId: string, extra: Record<string, unknown> = {}) =>
     ({ kind: 'SEND', pursuitId, scope: { recipients: ['Partner@Invented-Writer.example'], purpose: 'invite' }, ...extra });

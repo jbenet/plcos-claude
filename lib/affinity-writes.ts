@@ -44,6 +44,8 @@ export const statusInput = z.object({
 
 type Message = z.infer<typeof message>;
 export type Plan = 'person+note' | 'note' | 'skip';
+/** How a failed write that may still have reached Affinity begins its error (lib/affinity-writes-decide.ts). */
+export const UNCERTAIN = 'Uncertain: ';
 export type ItemState = 'proposed' | 'approved' | 'skipped' | 'rejected' | 'written' | 'failed';
 
 export interface WriteItem {
@@ -130,10 +132,14 @@ async function proposeOnce(env: ProposeEnv, a: z.infer<typeof proposeInput>) {
   const ids = await affinityPersonIds([...merged.keys()]);
   // The mail already written to Affinity for each address: a message noted once is not noted again. By message, not
   // by day: mail sent later on the day of a write still needs its note (red-team pass, 14 Oct 2026).
-  const written = new Map<string, { at: string; keys: Set<string> }>();
-  for (const r of await db.query<{ address: string; at: Date; messages: Message[] }>(`select address, written_at at, messages from sources.affinity_write_item
-      where state = 'written' and address = any($1::text[])`, [[...merged.keys()]])) {
-    const w = written.get(r.address) ?? { at: new Date(r.at).toISOString(), keys: new Set<string>() };
+  // A write that failed with no answer from Affinity may still have landed (UNCERTAIN, lib/affinity-writes-decide.ts),
+  // so its mail counts as noted too: proposing it again could put the same note in Affinity twice (17 Oct 2026).
+  const written = new Map<string, { at: string; keys: Set<string>; uncertain: boolean }>();
+  for (const r of await db.query<{ address: string; at: Date; messages: Message[]; uncertain: boolean }>(`select address, coalesce(written_at, proposed_at) at, messages,
+      state = 'failed' uncertain from sources.affinity_write_item
+      where (state = 'written' or (state = 'failed' and error like '${UNCERTAIN}%')) and address = any($1::text[])`, [[...merged.keys()]])) {
+    const w = written.get(r.address) ?? { at: new Date(r.at).toISOString(), keys: new Set<string>(), uncertain: false };
+    if (r.uncertain) w.uncertain = true;
     if (new Date(r.at).toISOString() > w.at) w.at = new Date(r.at).toISOString();
     for (const m of r.messages) w.keys.add(messageKey(m));
     written.set(r.address, w);
@@ -149,7 +155,11 @@ async function proposeOnce(env: ProposeEnv, a: z.infer<typeof proposeInput>) {
     const personId = ids.get(it.address) ?? null;
     let plan: Plan, reason: string;
     if (p?.internal) { plan = 'skip'; reason = 'Internal: the team or one of our domains.'; }
-    else if (done && it.messages.every((m) => done.keys.has(messageKey(m)))) { plan = 'skip'; reason = `Already written to Affinity on ${day(done.at)}.`; }
+    else if (done && it.messages.every((m) => done.keys.has(messageKey(m)))) {
+      plan = 'skip';
+      reason = done.uncertain ? `A write of this mail on ${day(done.at)} got no answer from Affinity and may have landed: check Affinity before noting it by hand.`
+        : `Already written to Affinity on ${day(done.at)}.`;
+    }
     else if (aff?.covered) { plan = 'skip'; reason = `Affinity already has an email with them on ${aff.lastEmail}, on or after the last send.`; }
     else if (personId) { plan = 'note'; reason = `In Affinity${aff?.name ? ` as ${aff.name}` : ''}; its last email with them is ${aff?.lastEmail ?? 'none'}.`; }
     else { plan = 'person+note'; reason = 'No person in Affinity has this address.'; }
@@ -165,7 +175,13 @@ async function proposeOnce(env: ProposeEnv, a: z.infer<typeof proposeInput>) {
       const row = await tx.one<{ id: string }>(`insert into sources.affinity_write_item (batch_id, address, name, firm, messages, plan, reason, affinity_person_id, proposed_by, token_id)
           values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10)
           on conflict (batch_id, address) do update set name = coalesce(sources.affinity_write_item.name, excluded.name), firm = coalesce(sources.affinity_write_item.firm, excluded.firm),
-            messages = excluded.messages, plan = excluded.plan, reason = excluded.reason, affinity_person_id = excluded.affinity_person_id
+            messages = excluded.messages, plan = excluded.plan, reason = excluded.reason, affinity_person_id = excluded.affinity_person_id,
+            proposed_by = excluded.proposed_by, token_id = excluded.token_id,
+            -- A changed item is a new item (red-team pass, 17 Oct 2026): an Admin who has the batch open saw the old
+            -- mail and plan, so its old id must not approve the new ones; a new id moves it to the next batch, as an
+            -- unseen item does. The note names whoever proposed this mail, not the first proposer.
+            item_id = case when (sources.affinity_write_item.messages, sources.affinity_write_item.plan, sources.affinity_write_item.affinity_person_id, sources.affinity_write_item.proposed_by)
+                is distinct from (excluded.messages, excluded.plan, excluded.affinity_person_id, excluded.proposed_by) then gen_random_uuid() else sources.affinity_write_item.item_id end
           returning item_id::text id`,
       [batchId, it.address, it.name ?? null, it.firm ?? null, JSON.stringify(it.messages), plan, reason, personId, env.owner.id, env.tokenId]);
       rows.push({ address: it.address, itemId: row!.id, plan, reason });

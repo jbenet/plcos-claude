@@ -86,11 +86,20 @@ export async function outreachResearchProperties(check: Check, db: Db) {
   const { researchSet } = await import('../../lib/enrich/candidates');
   resetWindows();
   const call = await outreachClient();
-  const { juan, token } = await fixtures(db);
+  const { juan, token, user } = await fixtures(db);
   const rw = await token(juan, [OUTREACH_READ, OUTREACH_WRITE]);
   const ro = await token(juan, [OUTREACH_READ]);
+  const viewerRw = await token(await user('outreach-research-viewer', 'viewer', null), [OUTREACH_READ, OUTREACH_WRITE]);
   const body = { address: 'Quill@Invented-Research.example', name: 'Invented Quill Research', firm: 'Invented Research Partners', note: 'Invented: emailed about a talk.', source: 'props-reconcile', idempotencyKey: 'props-research-1' };
   const refused = await call(ro, 'research', {}, { method: 'POST', body });
+  // A Viewer's write token may not add research, nor ingest mail (which runs Reconciliation): 17 Oct 2026.
+  const viewerAdd = await call(viewerRw, 'research', {}, { method: 'POST', body: { ...body, idempotencyKey: 'props-research-viewer' } });
+  const viewerMail = await call(viewerRw, 'comms', {}, { method: 'POST', body: { messages: [{ gmailMessageId: 'props-viewer-mail-1', date: new Date().toISOString(),
+    direction: 'received', from: 'quill@invented-research.example', to: ['juan@example.invalid'] }] } });
+  check('Research on no vehicle: a Viewer\'s write token adds no research and ingests no mail',
+    viewerAdd.status === 403 && viewerMail.status === 403
+    && !await db.one(`select 1 from identity.entity where display_name = 'Invented Quill Research'`),
+    `viewer research ${viewerAdd.status}, mail ${viewerMail.status}`);
   const r = await call(rw, 'research', {}, { method: 'POST', body });
   const id = r.json?.data?.entityId as string;
   const again = await call(rw, 'research', {}, { method: 'POST', body: { ...body, idempotencyKey: 'props-research-2' } });
