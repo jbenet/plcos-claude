@@ -39,11 +39,12 @@ export async function outreachWriteProperties(check: Check, db: Db) {
     && after?.status === 'discussing' && after.updates === 1 && after.ind === 1 && after.touches === 1 && u1.json.data.applied.indicated?.touchpointId === u1.json.data.applied.touchpointId,
     `first ${u1.status} (created ${u1.json?.data?.created}${u1.json?.error ? `, ${u1.json.error}` : ''}), again ${u2.status} (created ${u2.json?.data?.created}), read token ${uRo.status}; status ${after?.status}, ${after?.updates} update, ${after?.ind} indication, ${after?.touches} touchpoint`);
 
-  // An amount is a person's to record (outreach_add_lp's rule): an autonomous /update with one is refused, unwritten.
+  // An autonomous /update may tick every box (Juan, 17 Oct 2026), an amount too; its words say it was the mail desk's.
   const uAgent = await agent('update', { ...body, idempotencyKey: 'props-desk-update-agent' });
-  const indAfter = await db.one<{ n: number }>('select count(*)::int n from pipeline.indication where pursuit_id = $1', [onFund]);
-  check('Outreach writes: an autonomous /update carrying an indicated amount is refused and writes nothing (17 Oct 2026)',
-    uAgent.status === 400 && indAfter?.n === 1, `autonomous ${uAgent.status}; ${indAfter?.n} indication`);
+  const indAfter = await db.one<{ n: number; body: string }>(`select count(*)::int n, max(u.body) filter (where u.body like 'By the mail desk%') body
+    from pipeline.indication i join strategy.pursuit_update u on u.update_id = i.update_id where i.pursuit_id = $1`, [onFund]);
+  check('Outreach writes: an autonomous /update carrying an indicated amount records it, its update marked as the mail desk\'s (17 Oct 2026)',
+    uAgent.status === 200 && indAfter?.n === 2 && !!indAfter.body, `autonomous ${uAgent.status}${uAgent.json?.error ? ` (${uAgent.json.error})` : ''}; ${indAfter?.n} indications`);
 
   // ── tickets: none for a person; opened for an agent, for a person to approve, never approved by the desk ──
   const sendBody = (pursuitId: string, extra: Record<string, unknown> = {}) =>
@@ -214,10 +215,10 @@ export async function outreachWriteProperties(check: Check, db: Db) {
   check('Outreach writes: an INTRO_ASK ticket links only mail to its connector, and no ticket is spent on a message naming no recipients (17 Oct 2026)',
     Boolean(introTicket) && toLp.status === 409 && String(toLp.json?.error).includes('connector') && noOne.status === 409 && toConnector.status === 200,
     `to the LP ${toLp.status}; no recipients ${noOne.status}; to the connector ${toConnector.status}${toConnector.json?.error ? ` (${toConnector.json.error})` : ''}`);
-  // A confirmed address and where an LP's mail goes are a person's.
+  // The mail desk may confirm an address and set where an LP's mail goes on its own (Juan, 17 Oct 2026).
   const cAgent = await agent('contacts', { entityId: personE, email: 'agent@invented-person.example', source: 'gmail', confirmedBy: 'juan' });
   const sendTo = await agent('contacts', { entityId: personE, email: 'agent2@invented-person.example', source: 'gmail-signature', role: 'send-to' });
   const sig = await agent('contacts', { entityId: personE, email: 'agent3@invented-person.example', source: 'gmail-signature' });
-  check('Outreach writes: an autonomous /contacts cannot confirm an address or set where mail goes; an unconfirmed address from a signature it may add (17 Oct 2026)',
-    cAgent.status === 400 && sendTo.status === 400 && sig.status === 200, `confirmed ${cAgent.status}; send-to ${sendTo.status}; signature ${sig.status}${sig.json?.error ? ` (${sig.json.error})` : ''}`);
+  check('Outreach writes: an autonomous /contacts may confirm an address, set where mail goes, or add one from a signature (17 Oct 2026)',
+    cAgent.status === 200 && sendTo.status === 200 && sig.status === 200, `confirmed ${cAgent.status}; send-to ${sendTo.status}; signature ${sig.status}${sig.json?.error ? ` (${sig.json.error})` : ''}`);
 }

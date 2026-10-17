@@ -23,6 +23,7 @@ export default async function DesktopPairPage({ searchParams }: { searchParams: 
           <div className={s.head}>
             <h1>{done === 'refused' ? 'Refused' : 'Sign in the desktop app'}</h1>
             {done === 'refused' && <p>Nothing was signed in. You can close this tab.</p>}
+            {done === 'elsewhere' && <p className={s.error} role="alert">Not signed in: that app asked from another network than this browser. Start again from the app on this computer.</p>}
             {done === 'gone' && <p className={s.error} role="alert">That code has expired or was already used. Start again from the app.</p>}
             {!done && (!p || p.approvedBy) && <p className={s.error} role="alert">No app is waiting for code {code ?? raw ?? ''}. It may have expired; start again from the app.</p>}
             {!done && p && !p.approvedBy && <>

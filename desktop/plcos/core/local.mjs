@@ -32,6 +32,16 @@ const DIGEST_RUN = 5000;
  * shape: {"ok":true,…fields…,"n":N,…,"rows":[…]} with the rows last. A literal ,"rows":[ cannot occur inside a JSON
  * string (its quotes are escaped), so the first one is the field.
  */
+/** A build's folder name: a commit (7 to 40 lowercase hex digits), or null for anything else. */
+export function buildName(s) {
+  return typeof s === 'string' && /^[0-9a-f]{7,40}$/.test(s) ? s : null;
+}
+
+/** The environment for npm ci: never the app's keys or secrets, which the packages' install scripts could read (security review, 17 Oct 2026). */
+function installEnv() {
+  return { ...Object.fromEntries(Object.entries(env).filter(([k]) => !/^PLCOS_|KEY|SECRET|TOKEN|PASSWORD|PASS$|COOKIE/i.test(k))), NODE_ENV: 'production' };
+}
+
 export function splitRowsPage(text) {
   if (!text.startsWith('{"ok":true,') || !text.endsWith(']}')) return null;
   const cut = text.indexOf(',"rows":[');
@@ -96,7 +106,9 @@ class LocalCopy {
     this.next = null;                 // the next start child
     this.pg = null;                   // pg.Pool on the local database
     this.pgManaged = !env.PLCOS_DESKTOP_DATABASE_URL;
-    this.dbUrl = env.PLCOS_DESKTOP_DATABASE_URL || `postgres://plcos@127.0.0.1:${PG_PORT}/${DB_NAME}`;
+    // Its own socket in its own 0700 folder, and no TCP port (Juan, 17 Oct 2026): with trust sign-in, a port on
+    // 127.0.0.1 let any program or account on the Mac in as superuser.
+    this.dbUrl = env.PLCOS_DESKTOP_DATABASE_URL || `postgres://plcos@localhost:${PG_PORT}/${DB_NAME}?host=${encodeURIComponent(path.join(DATA_DIR, 'pg'))}`;
     this.secret = randomBytes(24).toString('hex');
     this.cookiePrefix = `capitalos_real_${NEXT_PORT}_`;
     this.origin = `http://127.0.0.1:${NEXT_PORT}`;
@@ -339,7 +351,7 @@ class LocalCopy {
     this.phase = this.phase === 'ready' ? 'ready' : 'preparing';
     const builds = path.join(this.dir, 'builds');
     mkdirSync(builds, { recursive: true });
-    let dir = commit ? path.join(builds, commit) : null;
+    let dir = buildName(commit) ? path.join(builds, commit) : null;
     if (!dir || !existsSync(path.join(dir, '.next', 'BUILD_ID'))) {
       this.detail = 'Downloading the server’s build';
       const tmp = path.join(builds, `.incoming-${Date.now()}`);
@@ -347,7 +359,10 @@ class LocalCopy {
       const archive = `${tmp}.tar.gz`;
       const res = await this.remoteFetch('/api/desktop/build');
       if (!res.ok) { const t = await res.text().catch(() => ''); rmSync(tmp, { recursive: true, force: true }); throw new Error(`the build download answered ${res.status}: ${t.slice(0, 200)}`); }
-      const got = res.headers.get('x-build-commit') || commit || 'unknown';
+      // Only a commit names a build's folder (security review, 17 Oct 2026: the header went unchecked into a path,
+      // and the folder there is deleted first, so `../..` removed folders outside builds/).
+      const got = buildName(res.headers.get('x-build-commit')) ?? buildName(commit);
+      if (!got) { rmSync(tmp, { recursive: true, force: true }); throw new Error('the build download named no commit'); }
       await pipeline(Readable.fromWeb(res.body), createWriteStream(archive));
       await sh('tar', ['-xzf', archive, '-C', tmp]);
       const packed = statSync(archive).size;
@@ -475,7 +490,7 @@ class LocalCopy {
       writeFileSync(path.join(deps, 'package.json'), readFileSync(path.join(dir, 'package.json')));
       writeFileSync(path.join(deps, 'package-lock.json'), lock);
       const npm = path.join(path.dirname(process.execPath), 'npm');
-      await sh(existsSync(npm) ? npm : 'npm', ['ci', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: deps, timeout: 20 * 60_000, env: { ...env, NODE_ENV: 'production' } });
+      await sh(existsSync(npm) ? npm : 'npm', ['ci', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: deps, timeout: 20 * 60_000, env: installEnv() });
       this.log('installed dependencies', hash);
     }
     const link = path.join(dir, 'node_modules');
@@ -511,22 +526,33 @@ class LocalCopy {
       const base = ['-D', data, '-U', 'plcos', '-A', 'trust', '-E', 'UTF8'];
       await sh(path.join(bin, 'initdb'), [...base, '--locale-provider=icu', '--icu-locale=en-US'], { env: pgEnv })
         .catch(() => { rmSync(data, { recursive: true, force: true }); return sh(path.join(bin, 'initdb'), base, { env: pgEnv }); });
-      // Loopback only, its socket in its own folder, and sized for one person on a laptop.
+      // No TCP at all: only its socket, in its own folder (0700, initdb's), and sized for one person on a laptop.
       writeFileSync(path.join(data, 'postgresql.auto.conf'), [
-        `port = ${PG_PORT}`, "listen_addresses = '127.0.0.1'", `unix_socket_directories = '${data.replace(/'/g, "''")}'`,
+        `port = ${PG_PORT}`, "listen_addresses = ''", `unix_socket_directories = '${data.replace(/'/g, "''")}'`,
         'shared_buffers = 256MB', 'work_mem = 32MB', 'max_connections = 40', 'fsync = off', 'synchronous_commit = off', 'full_page_writes = off',
       ].join('\n') + '\n');
     }
     try { writeFileSync(path.join(data, '.metadata_never_index'), ''); } catch { /* best effort: no Spotlight on the database files */ }
+    // A copy made before 17 Oct 2026 listened on 127.0.0.1: closed here, once, with a restart if it is running.
+    const auto = path.join(data, 'postgresql.auto.conf');
+    const conf = readFileSync(auto, 'utf8');
+    const closed = conf.replace(/^listen_addresses\s*=.*$/m, "listen_addresses = ''");
+    const reopen = closed !== conf;
+    if (reopen) writeFileSync(auto, closed);
     const running = await sh(path.join(bin, 'pg_ctl'), ['-D', data, 'status'], { env: pgEnv }).then(() => true, () => false);
-    if (!running) await sh(path.join(bin, 'pg_ctl'), ['-D', data, '-l', path.join(data, 'server.log'), '-w', '-t', '60', 'start'], { env: pgEnv });
+    if (running && reopen) {
+      this.log('closing the local database\'s TCP port: restarting it on its socket only');
+      await this.pg?.end().catch(() => undefined);
+      this.pg = null;
+      await sh(path.join(bin, 'pg_ctl'), ['-D', data, '-m', 'fast', '-w', '-t', '60', 'restart', '-l', path.join(data, 'server.log')], { env: pgEnv });
+    } else if (!running) await sh(path.join(bin, 'pg_ctl'), ['-D', data, '-l', path.join(data, 'server.log'), '-w', '-t', '60', 'start'], { env: pgEnv });
     const psql = path.join(bin, 'psql');
-    const has = await sh(psql, ['-h', '127.0.0.1', '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-Atc', `select 1 from pg_database where datname = '${DB_NAME}'`], { env: pgEnv });
-    if (!has.trim()) await sh(psql, ['-h', '127.0.0.1', '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-c', `create database ${DB_NAME}`], { env: pgEnv });
+    const has = await sh(psql, ['-h', data, '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-Atc', `select 1 from pg_database where datname = '${DB_NAME}'`], { env: pgEnv });
+    if (!has.trim()) await sh(psql, ['-h', data, '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-c', `create database ${DB_NAME}`], { env: pgEnv });
     // The server's clock, not the Mac's: dates the database works out (current_date, a day's boundary) must agree with
     // Railway's. In Chicago from 7 pm to midnight they did not, and every route cached by the server was keyed to
     // tomorrow, so the copy recomputed all 7,000 of them every evening while pages waited on live searches (16 Oct 2026).
-    await sh(psql, ['-h', '127.0.0.1', '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-c', `alter database ${DB_NAME} set timezone to 'UTC'`], { env: pgEnv });
+    await sh(psql, ['-h', data, '-p', String(PG_PORT), '-U', 'plcos', '-d', 'postgres', '-c', `alter database ${DB_NAME} set timezone to 'UTC'`], { env: pgEnv });
     this.pgStop = () => sh(path.join(bin, 'pg_ctl'), ['-D', data, '-m', 'fast', 'stop'], { env: pgEnv }).catch(() => undefined);
   }
 

@@ -25,7 +25,8 @@ import { deskActor, once, type DeskContext } from './writes';
  *     service (lib/updates.ts), in the same transaction; the address is confirmed by the token's owner.
  *   - An autonomous call (no person clicked): allowed, because a status is a plan, not a ladder rung (rule 2, 3). But
  *     the status is the system's ('rule'), so a person's later choice wins; the address is unconfirmed; an amount is
- *     refused (money stays a person's). The pursuit's reason and the LP's timeline say the desk added it on its own.
+ *     taken (Juan, 17 Oct 2026: "I want a lot of automated actions, specially from JuanMail"), its update's words
+ *     marked as the mail desk's. The pursuit's reason and the LP's timeline say the desk added it on its own.
  *   - The mail is the record (rule 9): Gmail ids, Message-IDs and a sentence of words, never a body, kept in a note
  *     with its source, date, confidence and who verified it. One audit entry, outreach.lp_added, with ids and counts.
  *   - Undo (undoAddLp): within 24 hours, by the same person's token, while nothing else has happened on it.
@@ -53,7 +54,7 @@ export const addLpInput = z.object({
   }).strict(),
   status: z.enum(ADD_STATUSES).optional().describe('Where our effort is (default connecting): a plan, never a ladder rung.'),
   indicated: z.object({ low: z.number().min(0), high: z.number().min(0).optional(), on: isoDay.optional() }).strict().optional()
-    .describe('An amount they indicated in the mail. A person\'s call only: an autonomous one is refused.'),
+    .describe('An amount they indicated in the mail. Taken from an autonomous call too (Juan, 17 Oct 2026), recorded as the mail desk\'s.'),
   evidence: z.object({
     gmailMessageIds: z.array(z.string().min(1).max(100).regex(/^[\w-]+$/)).min(1).max(20),
     messageIds: z.array(z.string().min(3).max(998).regex(/^<?[^<>\s]+@[^<>\s]+>?$/)).max(20).optional(),
@@ -132,9 +133,6 @@ export async function addLp(ctx: DeskContext, raw: Record<string, unknown>) {
   // Before the request key is reserved: a server that is not the live one writes nothing at all.
   requireMutationProfile();
   const autonomous = ctx.env.autonomous;
-  if (autonomous && a.indicated) {
-    throw new OutreachRefused(400, 'Not added: an amount is a person\'s to record. Called autonomously (no person clicked), leave out indicated; a person adds it with outreach_update.');
-  }
   return once(ctx, 'lps', a.idempotencyKey, async () => {
     const owner = ctx.env.owner;
     const v = await deskVehicle(ctx.env.principal, a.vehicle);
@@ -210,7 +208,7 @@ export async function addLp(ctx: DeskContext, raw: Record<string, unknown>) {
         let updateId: string | null = null, indicationId: string | null = null;
         if (a.indicated) {
           const r = await addUpdate(owner.id, {
-            pursuitId, body: a.evidence.words, idempotencyKey: `desk:${owner.id}:lps:${a.idempotencyKey}`,
+            pursuitId, body: autonomous ? `From mail, by the mail desk on its own: ${a.evidence.words}` : a.evidence.words, idempotencyKey: `desk:${owner.id}:lps:${a.idempotencyKey}`,
             indicated: { low: a.indicated.low, high: a.indicated.high ?? null, on: a.indicated.on ? at(a.indicated.on) : null },
           }, { q: tx });
           updateId = r.updateId; indicationId = r.applied.indicated?.indicationId ?? null;

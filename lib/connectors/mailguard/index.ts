@@ -61,14 +61,30 @@ export type KeySource = 'pasted' | 'keychain';
 /** What a check found. Never holds the key. */
 export type Inspection =
   | { ok: true; mailbox: string; tool: string; capabilities: string[]; canThread: boolean; extras: string[]; calendar: CalendarAccess; source: KeySource; at: number }
-  | { ok: false; code: RefusalCode | MailguardError['kind'] | 'violation' | 'format'; reason: string; mailbox: string | null; tool: string | null; capabilities: string[]; source: KeySource; at: number };
+  | { ok: false; code: RefusalCode | MailguardError['kind'] | 'violation' | 'format' | 'moved'; reason: string; mailbox: string | null; tool: string | null; capabilities: string[]; source: KeySource; at: number };
 
-/** The person's key: one they pasted, else the Keychain item's if it is theirs. */
-export async function keyFor(rt: MailguardRuntime, handle: string): Promise<{ key: string; source: KeySource } | null> {
-  const pasted = await rt.store.get(handle);
-  if (pasted) return { key: pasted, source: 'pasted' };
-  if (rt.envKey && rt.envKey.handle === handle) return { key: rt.envKey.key, source: 'keychain' };
+/** The person's key: one they pasted (with the origin it was checked against), else the Keychain item's if it is theirs. */
+export async function keyFor(rt: MailguardRuntime, handle: string): Promise<{ key: string; source: KeySource; origin: string | null } | null> {
+  const pasted = await rt.store.bound(handle);
+  if (pasted) return { ...pasted, source: 'pasted' };
+  if (rt.envKey && rt.envKey.handle === handle) return { key: rt.envKey.key, source: 'keychain', origin: null };
   return null;
+}
+
+/**
+ * A pasted key goes only to the mailguard it was checked against (Juan, 17 Oct 2026). When the address has changed
+ * since, the key is not sent: the person pastes it again, which checks it against the new address. The Keychain
+ * key and MAILGUARD_URL both come from the Mac's environment, so they stay as they are.
+ */
+const MOVED = 'The mailguard address changed since this token was checked, so it was not sent there. Paste your token again in Preferences → Email and calendar.';
+function moved(rt: MailguardRuntime, k: { source: KeySource; origin: string | null }): (Inspection & { ok: false }) | null {
+  if (k.source !== 'pasted' || k.origin === null || k.origin === rt.base.origin) return null;
+  return { ok: false, code: 'moved', reason: MOVED, mailbox: null, tool: null, capabilities: [], source: k.source, at: Date.now() };
+}
+
+/** A key kept before keys were tied to an origin is tied to this one once it checks out here. */
+async function bindOnce(rt: MailguardRuntime, handle: string, k: { key: string; source: KeySource; origin: string | null }, i: Inspection): Promise<void> {
+  if (i.ok && k.source === 'pasted' && k.origin === null) await rt.store.put(handle, k.key, rt.base.origin).catch(() => undefined);
 }
 
 /** Read a key's permissions from mailguard, without using them. One `GET /api/v1/me`. */
@@ -104,9 +120,12 @@ export async function connection(rt: MailguardRuntime, handle: string, maxAgeMs 
   const hit = checks.get(cacheKey(rt, handle));
   // A failure to reach mailguard is not a verdict on the key: ask again sooner.
   const transient = hit && !hit.ok && isTransient(hit.code);
+  const away = moved(rt, k);
+  if (away) { checks.set(cacheKey(rt, handle), away); return { inspection: away, source: k.source }; }
   if (hit && hit.source === k.source && Date.now() - hit.at < (transient ? Math.min(maxAgeMs, RETRY_TRANSIENT_MS) : maxAgeMs)) return { inspection: hit, source: k.source };
   const fresh = await inspect(rt, k.key, k.source);
   checks.set(cacheKey(rt, handle), fresh);
+  await bindOnce(rt, handle, k, fresh);
   return { inspection: fresh, source: k.source };
 }
 
@@ -126,7 +145,7 @@ export async function connectKey(rt: MailguardRuntime, handle: string, raw: stri
   const key = raw.trim();
   const i = await inspect(rt, key, 'pasted');
   if (!i.ok) throw new KeyRefused(i);
-  await rt.store.put(handle, key);
+  await rt.store.put(handle, key, rt.base.origin);
   checks.set(cacheKey(rt, handle), i);
   return i;
 }
@@ -146,9 +165,12 @@ export async function forgetKey(rt: MailguardRuntime, handle: string): Promise<{
 export async function checkedClient(rt: MailguardRuntime, handle: string, log?: (e: MailguardRequestLog) => void): Promise<{ client: MailguardClient; inspection: Inspection & { ok: true } }> {
   const k = await keyFor(rt, handle);
   if (!k) throw new NotConnected();
+  const away = moved(rt, k);
+  if (away) { checks.set(cacheKey(rt, handle), away); throw new KeyRefused(away); }
   const i = await inspect(rt, k.key, k.source, log);
   checks.set(cacheKey(rt, handle), i);
   if (!i.ok) throw new KeyRefused(i);
+  await bindOnce(rt, handle, k, i);
   return { client: mailguardClient({ transport: rt.transport, base: rt.base, key: k.key, log }), inspection: i };
 }
 

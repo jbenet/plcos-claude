@@ -41,6 +41,17 @@ export async function desktopProperties(check: Check) {
   const s4 = startPairing('Mac', e.challenge, 47100, 0);
   const g4 = grantOf(decidePairing(s4.userCode, user, true, 1000)!.redirect);
   check('desktop pairing expires after ten minutes', claimPairing(g4, e.verifier, 10 * 60_000 + 1) === null, 'expired');
+  // Security review, 17 Oct 2026: the grant goes only to the app's own port, and is allowed only from where it was asked.
+  let otherPort = '';
+  try { startPairing('Mac', pkce().challenge, 47199); } catch (err) { otherPort = String(err); }
+  const far = startPairing('Mac', pkce().challenge, 47100, Date.now(), '203.0.113.20');
+  const fromElsewhere = decidePairing(far.userCode, user, true, Date.now(), '198.51.100.30');
+  const near = startPairing('Mac', pkce().challenge, 47100, Date.now(), '203.0.113.21');
+  const fromHere = decidePairing(near.userCode, user, true, Date.now(), '203.0.113.21');
+  check('desktop pairing sends a grant only to the app\'s own port, and only to the browser at the address that started it',
+    otherPort.includes('47100') && fromElsewhere?.elsewhere === true && fromElsewhere.redirect === null && pendingPairing(far.userCode) === null
+      && Boolean(fromHere?.redirect?.startsWith('http://127.0.0.1:47100/')),
+    `other port: ${otherPort.slice(0, 60)}; elsewhere ${JSON.stringify({ e: fromElsewhere?.elsewhere, r: fromElsewhere?.redirect })}; here ${fromHere?.redirect ? 'granted' : 'NONE'}`);
   resetPairings();
 
   const ex = buildExcludes();
@@ -71,6 +82,10 @@ export async function desktopProperties(check: Check) {
   const split = splitRowsPage(page(['a,"rows":[', 'x'], tricky));
   check('desktop sync page keeps its rows as text, exactly',
     Boolean(split) && JSON.stringify(JSON.parse(split!.rows)) === JSON.stringify(tricky) && JSON.stringify(split!.next) === JSON.stringify(['a,"rows":[', 'x']) && split!.n === 2, JSON.stringify(split?.next));
+  const { buildName } = await import(core) as { buildName: (s: unknown) => string | null };
+  check('desktop build folder is named only by a commit: a header naming anything else is refused (no ../ out of builds/)',
+    buildName('5bcf0b12') === '5bcf0b12' && buildName('5bcf0b120b4b7515777986080f06a225cf446afb') !== null
+      && [null, '', 'unknown', '../..', '..', '5bcf0b12/../x', 'ABCDEF12', '5bcf'].every((x) => buildName(x) === null), 'names');
   check('desktop sync page in another shape is parsed whole, not split',
     splitRowsPage('{"ok":true,"horizon":"1","next":null,"rows":[]}') === null && splitRowsPage('{"ok":false,"error":"x"}') === null && splitRowsPage(page(null, []))?.n === 0, 'shapes');
 }

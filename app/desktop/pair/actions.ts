@@ -11,12 +11,14 @@ export async function decidePairingAction(form: FormData): Promise<void> {
   const { decidePairing, normalizeCode } = await import('@/lib/desktop/pair');
   const code = normalizeCode(String(form.get('code') ?? ''));
   const allow = form.get('decision') === 'allow';
-  const d = code ? decidePairing(code, user, allow) : null;
+  const { headers } = await import('next/headers');
+  const { clientIp } = await import('@/lib/settings/floodgate');
+  const d = code ? decidePairing(code, user, allow, Date.now(), clientIp(await headers())) : null;
   if (d) {
     const { appendAudit } = await import('@/modules/platform');
-    await appendAudit({ actorId: user.id, action: allow ? 'desktop.pair_allowed' : 'desktop.pair_refused', subjectType: 'app_user', subjectId: user.id, detail: { device: d.pending.device } });
+    await appendAudit({ actorId: user.id, action: d.redirect ? 'desktop.pair_allowed' : 'desktop.pair_refused', subjectType: 'app_user', subjectId: user.id, detail: { device: d.pending.device, ...(d.elsewhere ? { elsewhere: true } : {}) } });
   }
   // Allowed: on to the app's own loopback address on this machine, which finishes the sign-in (docs/31 §2).
   if (d?.redirect) redirect(d.redirect);
-  redirect(`/desktop/pair?code=${encodeURIComponent(code ?? '')}&done=${d ? 'refused' : 'gone'}`);
+  redirect(`/desktop/pair?code=${encodeURIComponent(code ?? '')}&done=${d?.elsewhere ? 'elsewhere' : d ? 'refused' : 'gone'}`);
 }

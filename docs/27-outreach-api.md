@@ -705,9 +705,9 @@ POST /api/outreach/lps
 - **An autonomous call** (JuanMail on its own): allowed — a status is a plan, not a ladder rung, and needs no ticket
   (domain rules 2–3; Juan, 8 Oct 2026: "system should be able to figure it out"). But the status is the system's
   (`status_source` `rule`, set by the inactive Mail desk actor), so a person's later choice wins and no import treats it
-  as a person's; the address is unconfirmed (`medium`, no `last_verified_by`); and `indicated` is refused, **400**: "Not
-  added: an amount is a person's to record. Called autonomously (no person clicked), leave out indicated; a person adds it
-  with outreach_update." The pursuit's reason starts "Added by the mail desk on its own, from mail:", and the LP page
+  as a person's; the address is unconfirmed (`medium`, no `last_verified_by`); and `indicated` is recorded like a person's,
+  its update's words starting "From mail, by the mail desk on its own:" (Juan, 17 Oct 2026: "I want a lot of automated
+  actions, specially from JuanMail"; until then it was refused). The pursuit's reason starts "Added by the mail desk on its own, from mail:", and the LP page
   says so where it says who set the status ("set by the mail desk on its own …, from mail — nobody has set one here yet").
 - **The mail is the record** (rule 9): a `context` note on the person — what the LP's timeline shows — whose body is the
   sentence and whose data keeps the Gmail ids, Message-IDs, `nameAsWritten`, `firm`, the token, `as_of`, `confidence`
@@ -715,7 +715,7 @@ POST /api/outreach/lps
   `outreach.lp_added`, with the ids, the counts and what undo needs (what it created, and how many rows referred to the
   pursuit and the person when it finished) — never the words.
 - **Once per `idempotencyKey`**: the same key again answers the first answer (`replayed: true`), and writes nothing.
-- **Refusals**: 400 (input; `indicated` when autonomous), 403 (no `outreach:write`; `NOT_LIVE_REFUSAL` on a server that
+- **Refusals**: 400 (input), 403 (no `outreach:write`; `NOT_LIVE_REFUSAL` on a server that
   is not the live one, before even the key is reserved), 404 (`No vehicle "…" among yours.` — not one of the token's
   active fund or SPV vehicles; or one it may not change), 409 (ambiguous person, above; two people with that address;
   "this person already has a pursuit on … (added a moment ago, or merged into another)"; or a retry while the first call
@@ -960,8 +960,8 @@ amount through the update box, the address confirmed and the mail kept as ids, a
 token is refused; the same key replays the first answer and writes nothing; a person whose address is on record is
 matched whatever the name, and one already on the vehicle changes nothing; the resolver matches a name by the address's
 domain; a name shared with two people here is refused (409) with both named, writing nothing, not even a possible match;
-an autonomous call adds with the system's status (not a person's), an unconfirmed address, and is refused an amount
-(400); undo removes the pursuit, its address and evidence and retires the person it created, a second undo is refused,
+an autonomous call adds with the system's status (not a person's), an unconfirmed address, and an amount marked as the
+mail desk's; undo removes the pursuit, its address and evidence and retires the person it created, a second undo is refused,
 and the same address can be added again as a new person; undo is refused (409) after an update, and 404 for a pursuit it
 did not create; a server that is not the live one refuses add and undo with `NOT_LIVE_REFUSAL` and reserves no key.
 
