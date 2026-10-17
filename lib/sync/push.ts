@@ -6,13 +6,14 @@ import { config } from '@/config/deployment';
 import { isLiveServer } from '@/config/ports';
 import { getDb, type Db } from '@/lib/db';
 import { factReviewProblems } from '@/lib/enrich/fact-review';
+import { importEntityKeys } from '@/lib/enrich/entity-keys';
 import { parseProspectFile, prospectFileProblems, pushedProspectsName } from '@/lib/enrich/prospect-rows';
 import { can } from '@/lib/authz';
 import { mutationProfileAllowed } from '@/lib/mutation-policy';
 import { beginRun, finishRun } from '@/lib/workflows/ledger';
 import { describeImportError } from '@/lib/import-jobs/store';
 import { auditSync, type SyncCaller } from './auth';
-import { bundleHash, checkBundle, DECISIONS, isRetire, keyOf, PROSPECTS, REVIEW, STRATEGY, writtenAt, type PushBundle, type Rejection } from './bundle';
+import { bundleHash, checkBundle, DECISIONS, isRetire, keyOf, PROSPECTS, RAW, REVIEW, STRATEGY, writtenAt, type PushBundle, type Rejection } from './bundle';
 
 /** Only a W5 strategy file is retired; a `retire` key anywhere else is not an instruction (red-team pass, 14 Oct 2026). */
 const retiring = (bundle: PushBundle, f: { path: string; content: unknown }) => bundle.workflow === 'W5' && STRATEGY.test(f.path) && isRetire(f.content);
@@ -134,6 +135,18 @@ async function serverProblems(bundle: PushBundle, enrich: string, db: Db, caller
         if (problems.length) out.push({ path: f.path, problems });
       }
       continue;
+    }
+    // A W1 finding replaces an LP's public claims and can corroborate a merge of two of its records, so a Team member
+    // pushes findings only on LPs pursued on vehicles they may change, as their decisions are (red team, 17 Oct 2026).
+    const rawKey = RAW.exec(f.path)?.[1];
+    if (rawKey && !admin) {
+      const id = (await importEntityKeys(db, [rawKey])).get(rawKey);
+      const on = id && UUID.test(id) ? await db.query<{ v: string }>(`select distinct vehicle_id::text v from strategy.active_pursuit
+          where identity.canonical_entity_id(entity_id) = $1::uuid`, [id]) : [];
+      if (on.some((x) => !can(caller.user, 'mutate', { vehicle: x.v }))) {
+        out.push({ path: f.path, problems: ['this LP is pursued on a vehicle you can\'t change; an Admin pushes its finding'] });
+        continue;
+      }
     }
     if (isRetire(f.content) && !retiring(bundle, f)) { out.push({ path: f.path, problems: ['only a W5 strategy file can be retired'] }); continue; }
     // A strategy for a vehicle is pushed only by someone who may change that vehicle, as prospects are (red-team pass, 14 Oct 2026).

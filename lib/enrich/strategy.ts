@@ -460,8 +460,19 @@ export function checkStrategy(s: unknown, expectKey?: string): string[] {
   if (x.firstMessage !== undefined && x.firstMessage !== null) p.push(...checkFirstMessage(x));
   // W5 1.13: short from the start. Only a strategy written to 1.13 or later is held to the caps.
   if (x.made && !versionBefore(x.made.version, TIGHT_FROM)) p.push(...wordyParts(x).map((k) => `too long: ${CAP_TEXT[k]}`));
+  // Whatever its version, no one text runs past what a page or an agent reads (red team, 17 Oct 2026: the word caps
+  // apply from 1.13 only, and a 50 KB "word" passed them).
+  const long: string[] = [];
+  const walk = (v: unknown, at: string) => {
+    if (typeof v === 'string') { if (v.length > STRATEGY_TEXT_MAX) long.push(at); }
+    else if (Array.isArray(v)) v.forEach((y, i) => walk(y, `${at}[${i}]`));
+    else if (v && typeof v === 'object') for (const [k, y] of Object.entries(v)) walk(y, at ? `${at}.${k}` : k);
+  };
+  walk(x, '');
+  if (long.length) p.push(`text over ${STRATEGY_TEXT_MAX} characters: ${long.slice(0, 5).join(', ')}`);
   return p;
 }
+const STRATEGY_TEXT_MAX = 20_000;
 
 /** The vehicle kind an ask names, for the one-vehicle check: an SPV, a fund, or not known. */
 export function askVehicleKind(ask: Partial<Strategy['ask']> | undefined): 'fund' | 'spv' | null {

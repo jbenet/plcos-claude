@@ -1,4 +1,5 @@
 import { config } from '@/config/deployment';
+import { redactHealth } from '@/lib/redact-health';
 
 /**
  * Every tool answer is marked as data (docs/26-mcp.md §Safety). Record text — a strategy, a note, an
@@ -34,7 +35,9 @@ export interface Answer { data: unknown; coverage?: Record<string, unknown>; asO
 export function render(tool: string, answer: Answer, limit: number = config.mcp.maxResponseBytes): { text: string; bytes: number; truncated: boolean } {
   let cut = false;
   const clip = (v: unknown): unknown => {
-    if (typeof v === 'string') { if (v.length > MAX_STRING) { cut = true; return `${v.slice(0, MAX_STRING)}… [cut at ${MAX_STRING} characters; open it in the app for the rest]`; } return v; }
+    // Every text an agent reads loses its health details, as the outreach API's do (docs/agent-rules/real-data.md):
+    // lp_summary's headline, next step and strategy risks are written from notes (red team, 17 Oct 2026).
+    if (typeof v === 'string') { const t = redactHealth(v).text; if (t.length > MAX_STRING) { cut = true; return `${t.slice(0, MAX_STRING)}… [cut at ${MAX_STRING} characters; open it in the app for the rest]`; } return t; }
     if (Array.isArray(v)) return v.map(clip);
     if (v && typeof v === 'object' && !(v instanceof Date)) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, clip(x)]));
     return v;

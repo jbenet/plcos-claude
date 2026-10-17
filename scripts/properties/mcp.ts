@@ -47,6 +47,11 @@ const FORBIDDEN_CALLS = ['decideWriteBatch', 'affinityWriter', 'affinity-writes-
 const RISKS = ['read', 'propose', 'write-guarded', 'send-adjacent'];
 
 export async function mcpProperties(check: Check, db: Db) {
+  {
+    const out = render('lp_summary', { data: { headline: 'Invented: back after his surgery last month. Wants a Q4 call.', risks: ['Invests in Parkinson\'s therapies.'] } }).text;
+    check('MCP: every answer loses its health details, as the outreach API\'s do; an investment thesis stays',
+      !out.includes('surgery') && out.includes('Wants a Q4 call') && out.includes('Parkinson'), out.slice(0, 300));
+  }
   // Issue 0141: a timeline row is one short line, without rule preambles or raw ids.
   const lines = [oneLine("Added by rule on Juan's instruction (26 Sep): Backs neurotech funds; capacity $1M–$5M (guess)"),
     oneLine('Merged pursuit 3f1af527-ac4c-43a6-bb32-01430e9b5a7e. Owner: Invented Owner. Status: new.'),

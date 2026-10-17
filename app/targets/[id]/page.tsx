@@ -355,8 +355,9 @@ async function TargetWorkspace({ params, searchParams }: {
             <dd>{next ? <><b className={hd.clip} title={next.what}>{next.what}</b> {next.meta && <span className="muted">{next.meta}</span>}{next.suggested && <span className="muted"> · suggested</span>}</> : <span className="muted">None set</span>}</dd>
             <dt>Way in</dt>
             <dd>{bestRoute ? <><span className={`tier t${bestRoute.weakestTier}`}>{bestRoute.weakestTier}</span> {[bestRoute.fromName ?? routes?.fromName, ...bestRoute.hops.map((h) => h.toName)].filter(Boolean).join(' → ')}</>
-              : st?.route ? <><span className={`tier t${st.route.tier}`}>{st.route.tier}</span> {st.route.via}</>
-                : <span className="muted">No supported route found</span>}</dd>
+              // The strategy's own route, shown only when no path is on file: say so (red team, 17 Oct 2026).
+              : st?.route ? <><span className={`tier t${st.route.tier}`}>{st.route.tier}</span> {st.route.via} <span className="muted">· the strategy&rsquo;s suggestion; no path on file</span></>
+                : <span className="muted">{routes ? 'No supported route found' : 'No route search could run'}</span>}</dd>
             {st?.ask && <><dt>Ask</dt><dd>{st.ask.shape}{st.ask.range ? ` · ${st.ask.range}` : ''} <span className="muted">· {st.list === 'this year' ? 'this year' : st.list === '2027' ? '2027' : 'not now'}</span></dd></>}
           </dl>
           {openSuggestion?.status === 'proposed' && !pursuit.nextStep && (
@@ -519,7 +520,9 @@ async function TargetWorkspace({ params, searchParams }: {
           </div>
           {!routes || routes.routes.length === 0 ? (
             <div className="cbody">
-              <p className="muted">No supported route found from the team or PL.</p>
+              <p className="muted">{routes
+                ? `No supported route found from the team or PL in the relationships on file${routes.candidateCounts ? ` (${routes.candidateCounts.total} paths looked at)` : ''}.`
+                : 'No route search could run: nothing on file to start one from. That is not the same as no route.'}</p>
             </div>
           ) : (
             routes.routes.filter((r) => r.foldedUnder == null).slice(0, 3).map((route, i) => (
