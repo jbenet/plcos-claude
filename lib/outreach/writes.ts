@@ -208,7 +208,7 @@ export async function requestTicket(ctx: DeskContext, raw: Record<string, unknow
     if (a.kind === 'SEND') await db.transaction(async (tx) => {
       {
         const recipients = [...new Set(a.scope.recipients!)];
-        let contentSendId: string | null = null, material: string | null = null;
+        let contentSendId: string | null = null, material: string | null = null, wrapped: string | null = null;
         if (a.assetId) {
           // The instrument and gates the Materials page uses (rules 8, 11, 12; red team, 17 Oct 2026: the desk wrapped a
           // grants-rail send, or an LP holding another instrument, as a commitment).
@@ -216,7 +216,7 @@ export async function requestTicket(ctx: DeskContext, raw: Record<string, unknow
           if (gate.refusals.length) throw new OutreachRefused(409, `Refused, no ticket opened: ${gate.refusals.join(' ')}`);
           const m = await proposeDeskSend(actor, { assetId: a.assetId, entityId: p.entity_id, vehicleId: p.vehicle_id, instrument: gate.instrument }, tx);
           if (!m.sendId) throw new OutreachRefused(409, `Refused by the wrap check, no ticket opened: ${m.check.refusals.join(' ')}`);
-          contentSendId = m.sendId; material = `${m.title} (v${m.version})`;
+          contentSendId = m.sendId; material = `${m.title} (v${m.version})`; wrapped = gate.instrument;
         }
         const sendId = randomUUID();
         const ticketId = await openTicket(actor, {
@@ -226,7 +226,7 @@ export async function requestTicket(ctx: DeskContext, raw: Record<string, unknow
             authorizes: `One email from ${owner.name}'s own mailbox, sent once by the mail desk through MailGuard with no person in the loop, to ${recipients.join(', ')}, `
               + `about ${p.vehicle} (${a.scope.purpose.replace('_', ' ')})${material ? `, with ${material} attached` : ''}, and to nobody else.`,
             excludes: ['Any other recipient, or a copy to anyone else', 'A second send on this approval', 'Any material not named here', 'Any statement about another vehicle', 'Forwarding rights'],
-            basis: [...basis, ...(material ? [{ label: 'Wrap check', value: `Passed — ${p.exemption} × ${p.kind === 'spv' ? 'spv' : 'lp_commitment'}` }] : []),
+            basis: [...basis, ...(material ? [{ label: 'Wrap check', value: `Passed — ${p.exemption} × ${wrapped}` }] : []),
               ...(a.scope.note ? [{ label: 'Note from the desk', value: a.scope.note }] : [])],
           },
           vehicleId: p.vehicle_id,

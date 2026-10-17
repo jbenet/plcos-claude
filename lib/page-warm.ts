@@ -44,6 +44,9 @@ export const WARM_POLL_MS = 1_000;
 export const WARM_MIN_GAP_MS = 10_000;
 // GUESS — a page that takes longer than this is abandoned; a person's click still builds it.
 const PAGE_TIMEOUT_MS = 120_000;
+// GUESS — how long the first warm-up waits for this server to start listening, and how often it tries.
+const START_WAIT_MS = 30_000;
+const START_RETRY_MS = 50;
 
 export interface WarmState { seen: string | null; warmed: string | null; lastWarmAt: number; running: boolean; skipped?: string | null }
 /** `foreground`: the part of the read revision only people's writes move (network 017), when known. */
@@ -61,14 +64,16 @@ export function warmKey(seen: WarmObservation): string | null {
 }
 
 /**
- * Warm when the data has settled: the same revision on two looks in a row, not yet warmed, no import
- * job active (or, while one is, a person's own change: warmKey), none in flight, and the last warm-up at least
- * WARM_MIN_GAP_MS ago.
+ * Warm when the data has settled: the same revision on two looks in a row (at start, the first look), not yet warmed,
+ * no import job active (or, while one is, a person's own change: warmKey), none in flight, and the last warm-up at
+ * least WARM_MIN_GAP_MS ago.
  */
 export function warmDecision(state: WarmState, seen: WarmObservation, now: number, minGapMs = WARM_MIN_GAP_MS): 'warm' | 'wait' {
   const key = warmKey(seen);
   if (state.running || key === null) return 'wait';
-  if (key !== state.seen) return 'wait';
+  // At start nothing is warm and nobody's change is in flight: the first look warms, rather than the second a second
+  // later (17 Oct 2026: the start warm-up began about 1.7 s after the server was ready; it now begins as it answers).
+  if (key !== state.seen && !(state.warmed === null && state.lastWarmAt === 0)) return 'wait';
   if (key === state.warmed) return 'wait';
   if (now - state.lastWarmAt < minGapMs) return 'wait';
   return 'warm';
@@ -94,7 +99,10 @@ async function observe(): Promise<WarmObservation> {
 
 async function targets(first: boolean): Promise<string[]> {
   const db = await getDb();
-  const slugs = (await db.query<{ slug: string }>(`select slug from platform.vehicle where phase = 'active' order by slug`)).map((r) => r.slug);
+  // The vehicle with the most LPs first: its pages are the slowest to build and the most opened (17 Oct 2026: by slug,
+  // the grants rail and the small SPVs were warmed before Neurotech's pipeline and routes, about 0.2 s of a 2.5 s pass).
+  const slugs = (await db.query<{ slug: string }>(`select v.slug from platform.vehicle v where v.phase = 'active'
+    order by (select count(*) from strategy.pursuit p where p.vehicle_id = v.id) desc, v.slug`)).map((r) => r.slug);
   // Once, at start: one LP page, so `next dev` compiles that route before the first click.
   let lp: string | null = null;
   if (first) {
@@ -134,18 +142,28 @@ export async function warmAccess(paths: string[]): Promise<WarmAccess> {
 }
 
 export async function warm(port: string, paths: string[], cookie: string | null = null): Promise<{ ok: number; failed: number; signin: number }> {
-  let ok = 0, failed = 0, signin = 0;
+  let ok = 0, failed = 0, signin = 0, answered = false;
   // One at a time: a warm-up must not crowd out a person's request.
   for (const path of paths) {
-    try {
-      // The pass (when there is one) goes to this server's own loopback address and nowhere else.
-      // The desktop app's copy answers only requests carrying its launch secret (proxy.ts, docs/31).
-      const desktop = process.env.PLCOS_DESKTOP_SECRET;
-      const headers: Record<string, string> = { ...(cookie ? { cookie } : {}), ...(desktop ? { 'x-plcos-desktop': desktop } : {}) };
-      const res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(PAGE_TIMEOUT_MS), redirect: 'manual', headers });
-      await res.arrayBuffer(); // the render finishes only when the stream is read
-      if (res.ok) ok++; else if (needsSignIn(res.status, res.headers.get('location'))) signin++; else failed++;
-    } catch { failed++; }
+    // At start the first look can come before the server listens: until it first answers, a refused connection is
+    // tried again shortly (up to START_WAIT_MS), not counted as a failure.
+    for (let waited = 0; ; waited += START_RETRY_MS) {
+      try {
+        // The pass (when there is one) goes to this server's own loopback address and nowhere else.
+        // The desktop app's copy answers only requests carrying its launch secret (proxy.ts, docs/31).
+        const desktop = process.env.PLCOS_DESKTOP_SECRET;
+        const headers: Record<string, string> = { ...(cookie ? { cookie } : {}), ...(desktop ? { 'x-plcos-desktop': desktop } : {}) };
+        const res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(PAGE_TIMEOUT_MS), redirect: 'manual', headers });
+        answered = true;
+        await res.arrayBuffer(); // the render finishes only when the stream is read
+        if (res.ok) ok++; else if (needsSignIn(res.status, res.headers.get('location'))) signin++; else failed++;
+      } catch (e) {
+        const refused = (e as { cause?: { code?: string } })?.cause?.code === 'ECONNREFUSED';
+        if (!answered && refused && waited < START_WAIT_MS) { await new Promise((r) => setTimeout(r, START_RETRY_MS)); continue; }
+        failed++;
+      }
+      break;
+    }
   }
   return { ok, failed, signin };
 }
@@ -197,4 +215,5 @@ export function startPageWarm(): void {
   const timer = setInterval(() => void tick(), WARM_POLL_MS);
   timer.unref();
   g.__capitalOsPageWarm = { timer, state };
+  void tick(); // the first look now, not a poll later
 }

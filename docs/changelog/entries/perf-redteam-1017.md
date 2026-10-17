@@ -77,6 +77,20 @@ data on Juan's Mac.
   to the server as before. The copy still matches the server row for row (checked by md5 after a whole copy and
   two incremental syncs).
 
+- **The mail desk's queue answers in a tenth of the time.** Its fund-first check (is this LP in an open fund
+  discussion?) asked Postgres to expand every LP's aliases once per pursuit row it looked at, about 0.6 s for
+  Neurotech's 910 LPs on every poll. The aliases are now expanded once per query (lib/outreach/reads.ts). Over HTTP on
+  the large invented data: `/api/outreach/queue?vehicle=neurotech` 490 → 50 ms, `vehicle=all` 500 → 55 ms; same answers.
+- **An LP's contacts are read without a square.** Leaving out Dakota-only contacts walked the whole alias list once
+  per LP; the LPs with a Dakota record are found once (modules/strategy/lp-contacts.ts). Contacts for Neurotech's LPs
+  45 → 25 ms in SQL; the desk's `/contacts` 66 → 38 ms and its queue 46 → 39 ms in process; same answers.
+- **Pages are warm about 1.5 s sooner after a start or deploy.** The start warm-up waited for a second look at the
+  data, a second after the first, and took the vehicles by name, so Neurotech's pages came after the grants rail's.
+  It now begins on its first look, as soon as the server answers, with the vehicle with the most LPs first. Warm-up
+  done 4.9–5.4 → 3.4–3.7 s after `next start`; a visitor 1 s after the server first answers paid 560–960 →
+  150–350 ms, 2 s after 400–570 → 60–170 ms, 3 s after 80–410 → 50–110 ms (Neurotech's pipeline, an LP, stats). One who arrives the instant the server answers shares it with the
+  warm-up and pays about 0.2 s more (600–760 → 750–1,000 ms). After a write nothing changes.
+
 ### Red team
 
 - **Score detail and the desktop app's sign-in check for people limited to some vehicles.** `/selection/detail` and
@@ -278,6 +292,13 @@ data on Juan's Mac.
   page could replace the Mac app's window, which now refuses `data:` too. Mail-desk sources ("gmail") no longer show as
   broken links.
 - **The site's Content-Security-Policy adds `object-src 'none'` and `base-uri 'self'`.**
+- **The routes page shows a connector's money per vehicle.** "LP · $7.0M hard" summed Neurotech and an SPV (invariant
+  1); each vehicle's figure is shown, the largest one scores, and grants are left out.
+- **The mail desk's queue checks materials against the instrument the LP holds,** as the Materials page and the ticket
+  check do, not the vehicle kind's; the ticket's wrap-check line names that instrument (invariant 11).
+- **A grants funder who declined is invited anew.** Any invitation on file opened the gate, whatever the funder's
+  status; now only an invited or applied funder's does, and a declined one's needs a new reference (invariant 12).
+- **A collision's follow-up for the losing vehicle is a real date, today or later** (invariant 5).
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -377,3 +398,7 @@ data on Juan's Mac.
   runner at a time is enforced instead.
 - Child work envelopes may outlast their parent (deadline, seconds, an unset token budget), and a finished run row can
   still be updated. Nothing outside the tests makes a child envelope yet.
+- The Board counts an LP with a soft amount and an empty ladder at "Indication given": the Affinity list's amount is
+  the team's record of what the LP indicated. Their own ladder rung, when there is one, still wins.
+- The visualization lenses call A/B ties and reviewed ties "confirmed" and C/D ties "a clue, not a route". Wording for
+  a later pass; routing itself ranks every tier.

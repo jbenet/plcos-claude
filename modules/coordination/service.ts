@@ -345,9 +345,10 @@ export async function adjudicateConflict(
     loserFollowupAt: string; note: string | null;
   },
 ): Promise<void> {
-  if (!args.loserFollowupAt) {
+  // A real date, today or later: a past one is overdue the moment it is written (rule 5; red team, 17 Oct 2026).
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.loserFollowupAt ?? '') || args.loserFollowupAt < new Date().toISOString().slice(0, 10)) {
     throw new Error(
-      'Adjudication requires a dated follow-up for the losing vehicle. Without it this is a ' +
+      'Adjudication requires a dated follow-up (today or later) for the losing vehicle. Without it this is a ' +
       'silent loss rather than a deferral.',
     );
   }
