@@ -95,11 +95,6 @@ export const updateInput = z.object({
 
 export async function update(ctx: DeskContext, raw: Record<string, unknown>) {
   const a = raw as z.infer<typeof updateInput>;
-  // The rule outreach_add_lp keeps (lib/outreach/lps.ts): an amount is a person's to record. This was the way
-  // around it for a call no person clicked (17 Oct 2026).
-  if (ctx.env.autonomous && a.applied?.indicated) {
-    throw new OutreachRefused(400, 'Not recorded: an amount is a person\'s to record. Called autonomously (no person clicked), leave out indicated; a person adds it from the LP page or a call they make.');
-  }
   const db = await getDb();
   const p = await deskPursuit(ctx, a.pursuitId, db);
   const t = a.applied;
@@ -107,7 +102,9 @@ export async function update(ctx: DeskContext, raw: Record<string, unknown>) {
   try {
     // The LP page's update box, exactly (lib/updates.ts): one transaction, once per key, each ticked box.
     const r = await addUpdate(ctx.env.owner.id, {
-      pursuitId: p.pursuit_id, body: a.words, idempotencyKey: `desk:${ctx.env.owner.id}:${a.idempotencyKey}`,
+      // A call no person clicked may tick every box (Juan, 17 Oct 2026: "I want a lot of automated actions, specially
+      // from JuanMail"); its words say it was the mail desk's.
+      pursuitId: p.pursuit_id, body: ctx.env.autonomous ? `By the mail desk on its own: ${a.words}` : a.words, idempotencyKey: `desk:${ctx.env.owner.id}:${a.idempotencyKey}`,
       // Red-team pass, 17 Oct 2026: an autonomous status read as a person's ('us'); it is the system's, as outreach_add_lp sets it.
       status: t.status ? { to: t.status.to, passedBy: t.status.passedBy ?? null, reason: t.status.reason ?? null, source: ctx.env.autonomous ? 'rule' : 'us' } : null,
       touch: t.touch ? { channel: t.touch.channel, direction: t.touch.direction ?? (t.touch.channel === 'meeting' || t.touch.channel === 'call' ? 'both' : 'ours'), on: at(t.touch.on, '12'), read: t.touch.read ?? null } : null,
@@ -298,11 +295,6 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
     requireMutationProfile();
     const owner = ctx.env.owner;
     const confirmed = a.source === 'gmail';
-    // A confirmation is a person's, as outreach_add_lp keeps addresses unconfirmed when no person clicked; and where
-    // an LP's mail goes is a person's choice (red-team pass, 17 Oct 2026).
-    if (ctx.env.autonomous && (confirmed || a.role === 'send-to')) {
-      throw new OutreachRefused(400, `Not recorded: ${confirmed ? 'a confirmed address (source gmail) is a person\'s to confirm' : 'where an LP\'s mail goes (role send-to) is a person\'s choice'}. Called autonomously (no person clicked), use source gmail-signature${a.role === 'send-to' ? ' and leave out role' : ''}.`);
-    }
     if (a.confirmedBy) {
       // Juan picks the address in the wave review; the confirmation is the token owner's own, never someone else's.
       // Any of the owner's addresses (login, default-to, alias) names them.

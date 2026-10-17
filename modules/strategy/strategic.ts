@@ -1,4 +1,5 @@
 import type { Queryable } from '@/lib/db';
+import { publicProfiles } from './profile-parts';
 import { STRATEGIC_FIELDS, type StrategicInputs, type StrategicText } from './strategic-rules';
 
 /**
@@ -39,15 +40,8 @@ export async function strategicRecords(q: Queryable, entityIds: string[], words:
          from identity.alias_pairs($1::uuid[]) o join research.claim c on c.entity_id = o.entity_id
         where c.superseded_by is null and c.field = any($2::text[])
         order by c.as_of desc nulls last`, [ids, STRATEGIC_FIELDS.map((f) => `public.${f}`)]) : Promise.resolve([]),
-    loose ? q.query<{ id: string; text: string; at: Date | string | null }>(
-      `select o.canonical_id::text id,
-              concat_ws('. ', n.data->'profile'->>'summary',
-                (select string_agg(x, ', ') from jsonb_array_elements_text(case when jsonb_typeof(n.data->'profile'->'interests') = 'array'
-                  then n.data->'profile'->'interests' else '[]'::jsonb end) x)) text,
-              coalesce((n.data->'researched'->>'at')::date, n.created_at::date) at
-         from identity.alias_pairs($1::uuid[]) o join research.note n on n.entity_id = o.entity_id
-        where n.kind = 'public_profile'
-        order by n.created_at desc`, [ids]) : Promise.resolve([]),
+    // Kept per note version (profile-parts.ts): only a profile researched since the last read is read whole.
+    loose ? publicProfiles(q, ids) : Promise.resolve([]),
     q.query<{ id: string; vehicle: string; strategic: boolean | null; reason: string | null; status: string | null }>(
       `select distinct on (o.canonical_id, n.data->>'vehicleId')
               o.canonical_id::text id, n.data->>'vehicleId' vehicle,
@@ -60,10 +54,10 @@ export async function strategicRecords(q: Queryable, entityIds: string[], words:
   const claims = near ? claimRows.filter((c) => c.value !== null && near.test(c.value)) : [];
   // Tested on the text kept, not the whole profile: the marks read only that text, so a profile whose words were
   // elsewhere was kept for nothing, and the whole profiles were 2.7 MB a rebuild of every vehicle's list (17 Oct 2026).
-  const profiles = near ? profileRows.filter((p) => near.test(p.text)) : [];
+  const profiles = near ? profileRows.filter((p) => near.test(p.parts.text)) : [];
   const add = (id: string, t: StrategicText) => texts.set(id, [...(texts.get(id) ?? []), t]);
   for (const c of claims) add(c.id, { field: c.field, value: c.value, asOf: day(c.as_of) });
-  for (const p of profiles) if (p.text.trim()) add(p.id, { field: 'profile', value: p.text, asOf: day(p.at) });
+  for (const p of profiles) if (p.parts.text.trim()) add(p.entityId, { field: 'profile', value: p.parts.text, asOf: day(p.parts.on) });
   for (const s of sourced) {
     if (s.strategic === null || !s.reason?.trim()) continue;
     prospects.set(`${s.id}:${s.vehicle}`, { strategic: s.strategic, reason: s.reason.trim(), researched: s.status === 'sourcing' || s.status === 'passed' });

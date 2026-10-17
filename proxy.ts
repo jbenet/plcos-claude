@@ -74,6 +74,14 @@ function rewrite(req: NextRequest, path: string, vehicle: string | null = null):
  * rebinding); its requests would carry that name, set their own user cookie and pass the same-origin check
  * (red-team pass, 17 Oct 2026). The demo is invented data and stays open to any name.
  */
+/** Equal strings, compared in time that does not depend on where they differ (the proxy has no node:crypto). */
+function sameSecret(given: string | null, want: string): boolean {
+  if (given === null || given.length !== want.length) return false;
+  let d = 0;
+  for (let i = 0; i < want.length; i++) d |= given.charCodeAt(i) ^ want.charCodeAt(i);
+  return d === 0;
+}
+
 function foreignName(req: NextRequest): boolean {
   if (deployment.auth.provider !== 'local' || deployment.data.profile === 'demo') return false;
   const host = (req.headers.get('host') ?? '').toLowerCase().replace(/:\d+$/, '');
@@ -90,7 +98,7 @@ export function proxy(req: NextRequest) {
   // The desktop app's copy (docs/31 §3) answers only its own core, which sends this launch's secret: not a page in
   // a browser, nor a name rebound onto the loopback port.
   const desktop = process.env['PLCOS_DESKTOP_SECRET'];
-  if (process.env['PLCOS_DESKTOP_COPY'] === '1' && pathname !== '/api/health' && (!desktop || req.headers.get('x-plcos-desktop') !== desktop) && !routed) {
+  if (process.env['PLCOS_DESKTOP_COPY'] === '1' && pathname !== '/api/health' && (!desktop || !sameSecret(req.headers.get('x-plcos-desktop'), desktop)) && !routed) {
     return new NextResponse('This copy answers only the PLC OS app.', { status: 403 });
   }
   if (routed && routed.path === pathname + req.nextUrl.search && routed.method === req.method) {

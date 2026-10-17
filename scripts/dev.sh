@@ -23,11 +23,11 @@ case "${1:-status}" in
     fi ;;
   stop)
     [ "$(basename "$HERE")" = plcos-claude-live ] || { echo "dev:stop runs only in the live folder (plcos-claude-live)." >&2; exit 1; }
-    pids=$(pgrep -f "npm run dev:real"; pgrep -f "next dev --hostname 0.0.0.0 --port 3000")
+    pids=$(pgrep -f "npm run dev:real"; pgrep -f "next dev --hostname [0-9.]* --port 3000")
     [ -n "$pids" ] && { kill $pids 2>/dev/null; echo "Stopped the live dev server."; sleep 2; }
     if pg_running; then "$PG_BIN/pg_ctl" -D "$CLUSTER" -m fast -w -t 30 stop >/dev/null && echo "Postgres stopped."; else echo "Postgres was not running."; fi ;;
   status)
-    pgrep -f "next dev --hostname 0.0.0.0 --port 3000" >/dev/null && echo "Live dev server: running" || echo "Live dev server: stopped"
+    pgrep -f "next dev --hostname [0-9.]* --port 3000" >/dev/null && echo "Live dev server: running" || echo "Live dev server: stopped"
     if [ -f "$URL_FILE" ]; then pg_running && echo "Postgres: running" || echo "Postgres: stopped"; else echo "Database: PGlite (no postgres.url)"; fi ;;
   *) echo "usage: dev.sh start|stop|status" >&2; exit 2 ;;
 esac

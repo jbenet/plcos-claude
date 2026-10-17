@@ -497,6 +497,24 @@ export async function emailProperties(check: Check, db: Db) {
         !!revoked && /does not accept this token/.test(revoked) && !/mg_/.test(revoked) && fake.sendAttempts.length === 0 && !fake.calls.send,
         JSON.stringify({ revoked: revoked?.slice(0, 80), sends: fake.sendAttempts.length }));
 
+      // Tied to its mailguard (Juan, 17 Oct 2026): a pasted key is never sent to a changed address; a key kept before is tied on its first check.
+      const tieStore = memoryStore();
+      await email.connectMailguard(actor, key, { ...base, store: tieStore });
+      const tied = await tieStore.bound(juan.handle);
+      let sentElsewhere = 0;
+      const elsewhere: MailguardRuntime = { ...base, store: tieStore, base: new URL('https://other-mailguard.invalid'), transport: async (url, init) => { sentElsewhere++; return base.transport(url, init); } };
+      const movedRefusal = await refusedWith(() => email.moveDraft(actor, second, elsewhere));
+      const movedStatus = await connection(elsewhere, juan.handle, 0);
+      const legacyStore = memoryStore();
+      await legacyStore.put(juan.handle, key);
+      const legacyBefore = await legacyStore.bound(juan.handle);
+      const legacyStatus = await connection({ ...base, store: legacyStore }, juan.handle, 0);
+      const legacyAfter = await legacyStore.bound(juan.handle);
+      check('Email: a pasted key is kept with the mailguard it was checked against and never sent to a changed address (paste it again); one kept before is tied on its first good check',
+        tied?.origin === FAKE_BASE.origin && tied.key === key && !!movedRefusal && /address changed/.test(movedRefusal) && !/mg_/.test(movedRefusal) && sentElsewhere === 0
+          && movedStatus.inspection?.ok === false && legacyBefore?.origin === null && legacyStatus.inspection?.ok === true && legacyAfter?.origin === FAKE_BASE.origin,
+        JSON.stringify({ tied: tied?.origin, moved: movedRefusal?.slice(0, 60), sentElsewhere, legacy: [legacyBefore?.origin, legacyAfter?.origin] }));
+
       await email.testMailguard(actor, base);
       const audits = await db.query<{ action: string; detail: Record<string, unknown> }>(
         "select action, detail from platform.audit_log where (subject_type = 'email_draft' and subject_id = any($1::text[])) or (subject_type = 'app_user' and subject_id = $2 and action like 'email.mailguard_%') order by at",

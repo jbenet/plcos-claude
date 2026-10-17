@@ -33,6 +33,6 @@ choose Open. `npm run icon` regenerates the icons from `icon-source.png`.
   Both plain Node, no dependencies; `npm run core` runs the core alone for testing (open
   `http://127.0.0.1:47100/__desktop/enter?k=$PLCOS_DESKTOP_KEY`).
 - `~/Library/Application Support/PLC OS/`: `core.log`, `local-server.log`, the downloaded builds, their dependencies
-  (`deps/`), the Postgres cluster (`pg/`, port 57435), the static cache and `settings.json` (`{"server": "https://…"}`
+  (`deps/`), the Postgres cluster (`pg/`; no TCP port, only its socket in that folder, as port 57435), the static cache and `settings.json` (`{"server": "https://…"}`
   to point at another server).
 - The session is the Keychain item "PLC OS desktop" for the server's host.

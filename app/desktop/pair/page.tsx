@@ -1,6 +1,8 @@
+import { headers } from 'next/headers';
 import { config } from '@/config/deployment';
 import { currentUser } from '@/lib/auth';
 import { normalizeCode, pendingPairing } from '@/lib/desktop/pair';
+import { clientIp } from '@/lib/settings/floodgate';
 import s from '../../setup/setup.module.css';
 import { decidePairingAction } from './actions';
 
@@ -16,6 +18,11 @@ export default async function DesktopPairPage({ searchParams }: { searchParams: 
   const user = await currentUser();
   const code = normalizeCode(raw);
   const p = pendingPairing(code);
+  // Whoever starts a pairing names its device, and may send someone else the link (red-team pass, 17 Oct 2026): said
+  // plainly here when it was started from another network than this browser's; Allow then refuses it
+  // (lib/desktop/pair.ts decidePairing, Juan's "Fix all four").
+  const here = clientIp(await headers());
+  const elsewhere = Boolean(p?.ip && here && p.ip !== here);
   return (
     <main className={s.page}>
       <div className={s.narrow} style={{ maxWidth: 480, paddingTop: '8vh' }}>
@@ -23,11 +30,13 @@ export default async function DesktopPairPage({ searchParams }: { searchParams: 
           <div className={s.head}>
             <h1>{done === 'refused' ? 'Refused' : 'Sign in the desktop app'}</h1>
             {done === 'refused' && <p>Nothing was signed in. You can close this tab.</p>}
+            {done === 'elsewhere' && <p className={s.error} role="alert">Not signed in: that app asked from another network than this browser. Start again from the app on this computer.</p>}
             {done === 'gone' && <p className={s.error} role="alert">That code has expired or was already used. Start again from the app.</p>}
             {!done && (!p || p.approvedBy) && <p className={s.error} role="alert">No app is waiting for code {code ?? raw ?? ''}. It may have expired; start again from the app.</p>}
             {!done && p && !p.approvedBy && <>
               <p>A PLC OS app that says it is on <b>{p.device}</b> asks to act as <b>{user.name}</b>. Its actions will be yours, as in this browser.</p>
               <p>Allow only if you just started signing in from the app <b>on this computer</b>: it finishes here, on this machine.</p>
+              {elsewhere && <p className={s.error} role="alert">This request was started from a different network than this browser, so it can't be allowed here: someone may have sent you this link. Start again from the app on this computer.</p>}
               <p>Check the app shows the same code:</p>
               <p style={{ fontFamily: 'var(--mono, monospace)', fontSize: 28, letterSpacing: 4, margin: '8px 0 0' }}>{p.userCode}</p>
             </>}

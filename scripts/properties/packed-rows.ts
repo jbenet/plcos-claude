@@ -70,5 +70,13 @@ export async function packedRowsProperties(check: Check) {
     unpackRows<{ id: string }>(JSON.parse(JSON.stringify(idsPacked))).every((row, i) => row.id === ids[i]!.id)
       && (idsPacked.c.id as { u?: string }).u?.length === 50 * 22,
     JSON.stringify(idsPacked).length + ' bytes for 50 ids');
+  // Repeated ids: mostly distinct (an LP once per vehicle) are sent as ids; a few repeated many times are shared.
+  const most = [...ids, ...ids.slice(0, 10)], few = Array.from({ length: 200 }, (_, i) => ids[i % 3]!);
+  const mostPacked = packRows(most), fewPacked = packRows(few);
+  check('PACKED ROWS send mostly distinct ids as ids even when some repeat, share a few ids repeated often, and read both back exactly',
+    'u' in mostPacked.c.id! && 'd' in fewPacked.c.id!
+      && JSON.stringify(unpackRows(JSON.parse(JSON.stringify(mostPacked)))) === JSON.stringify(most)
+      && JSON.stringify(unpackRows(JSON.parse(JSON.stringify(fewPacked)))) === JSON.stringify(few),
+    `${Object.keys(mostPacked.c.id!).join('')} ${JSON.stringify(mostPacked).length} bytes; ${Object.keys(fewPacked.c.id!).join('')} ${JSON.stringify(fewPacked).length} bytes`);
   check('PACKED ROWS of no rows read back as no rows', unpackRows(packRows([])).length === 0, '');
 }

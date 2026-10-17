@@ -106,7 +106,7 @@ if [ "$cmd" = serve ]; then
   exec env -u AFFINITY_API_KEY -u LINEAR_API_KEY -u ANTHROPIC_API_KEY -u DAKOTA_USERNAME -u DAKOTA_PASSWORD \
     -u GOOGLE_OAUTH_CLIENT_ID -u GOOGLE_OAUTH_CLIENT_SECRET -u LABOS_ME_URL -u SCHEDULE_DAILY_AT -u BACKUP_COMMAND \
     DATA_PROFILE=real DATABASE_URL="$TO_URL" PGPASSWORD="$copy_pw" PREVIEW_COPY_AT="$taken" \
-    NEXT_DIST_DIR=.next-cloud-copy PORT="$port" npx next dev --hostname 0.0.0.0 --port "$port"
+    NEXT_DIST_DIR=.next-cloud-copy PORT="$port" npx next dev --hostname 127.0.0.1 --port "$port"
 fi
 
 # pull

@@ -17,6 +17,8 @@ import type { AppUser } from '@/modules/platform';
  */
 
 const TTL_MS = 10 * 60_000;
+/** The app's own loopback port (desktop/plcos/core/core.mjs): the only one a grant is sent to (security review, 17 Oct 2026). */
+export const DESKTOP_PORT = 47100;
 const MAX_PENDING = 50;
 /** Unanswered pairings one address may hold at once; a person needs one. */
 export const PENDING_PER_ADDRESS = 3;
@@ -68,7 +70,7 @@ export function startPairing(device: unknown, challenge: unknown, port: unknown,
   sweep(now);
   if (typeof challenge !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(challenge)) throw new Error('A PKCE challenge (S256, base64url) is required.');
   const p = Number(port);
-  if (!Number.isInteger(p) || p < 1024 || p > 65535) throw new Error('A loopback port is required.');
+  if (p !== DESKTOP_PORT) throw new Error(`The app's loopback port is ${DESKTOP_PORT}.`);
   const open = [...pairs().values()].filter((x) => !x.approvedBy);
   if (ip && open.filter((x) => x.ip === ip).length >= PENDING_PER_ADDRESS) throw new Error('Too many pairings are waiting from this address. Finish one or try again in a few minutes.');
   if (pairs().size >= MAX_PENDING) {
@@ -90,11 +92,14 @@ export function pendingPairing(userCode: string | null, now = Date.now()): Pendi
 
 /**
  * Allow or refuse. Allowing returns where to send the browser: the app's loopback address, with a one-time grant.
- * Refusing forgets the pairing.
+ * Refusing forgets the pairing. A pairing is allowed only from the address that started it, when both are known
+ * (security review, 17 Oct 2026: someone else's app, started elsewhere, sent as a link): `elsewhere` then, and it is
+ * forgotten.
  */
-export function decidePairing(userCode: string, user: AppUser, allow: boolean, now = Date.now()): { pending: Pending; redirect: string | null } | null {
+export function decidePairing(userCode: string, user: AppUser, allow: boolean, now = Date.now(), ip: string | null = null): { pending: Pending; redirect: string | null; elsewhere?: true } | null {
   const p = pendingPairing(userCode, now);
   if (!p || p.approvedBy || p.denied) return null;
+  if (allow && p.ip && ip && p.ip !== ip) { p.denied = true; pairs().delete(userCode); return { pending: p, redirect: null, elsewhere: true }; }
   if (!allow) { p.denied = true; pairs().delete(userCode); return { pending: p, redirect: null }; }
   const grant = b64(randomBytes(32));
   p.approvedBy = user;
