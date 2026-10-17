@@ -83,9 +83,9 @@ export async function desktopProperties(check: Check) {
   check('desktop sync page keeps its rows as text, exactly',
     Boolean(split) && JSON.stringify(JSON.parse(split!.rows)) === JSON.stringify(tricky) && JSON.stringify(split!.next) === JSON.stringify(['a,"rows":[', 'x']) && split!.n === 2, JSON.stringify(split?.next));
   const { buildName } = await import(core) as { buildName: (s: unknown) => string | null };
-  check('desktop build folder is named only by a commit: a header naming anything else is refused (no ../ out of builds/)',
+  check('desktop build folder is named only by a plain name: a header naming anything else is refused (no ../ out of builds/)',
     buildName('5bcf0b12') === '5bcf0b12' && buildName('5bcf0b120b4b7515777986080f06a225cf446afb') !== null
-      && [null, '', 'unknown', '../..', '..', '5bcf0b12/../x', 'ABCDEF12', '5bcf'].every((x) => buildName(x) === null), 'names');
+      && [null, '', '../..', '..', '.hidden', '5bcf0b12/../x', 'a b', 'x'.repeat(65)].every((x) => buildName(x) === null), 'names');
   check('desktop sync page in another shape is parsed whole, not split',
     splitRowsPage('{"ok":true,"horizon":"1","next":null,"rows":[]}') === null && splitRowsPage('{"ok":false,"error":"x"}') === null && splitRowsPage(page(null, []))?.n === 0, 'shapes');
 }

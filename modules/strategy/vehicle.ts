@@ -7,6 +7,7 @@ import { touchpointSummaries, touchpointsByPair } from '@/modules/meetings';
 import { buildCache, liveRevisions, touchRevisions } from '@/lib/build-cache';
 import { strategyRouteSummaries, type RecordedRoute } from '@/modules/network';
 import { listPursuits } from './repo';
+import { publicProfiles, type ProfileParts } from './profile-parts';
 
 /** One vehicle's pursuits and their touchpoints, read once per revision for both the list and the
  * vehicle's plan, which each read them in full (performance pass, 8 Oct 2026). Immutable to callers. */
@@ -50,7 +51,7 @@ export function actionScore(input: { capacity: number | null; likelihood: number
   return { expected, priority: expected * input.conversion / input.days };
 }
 interface SuggestionRow { pursuit_id: string; suggestion_id: string; data: Partial<Strategy>; body: string; made_at: Date; made_by: string; status: string }
-interface ProfileRow { entity_id: string; note_id: string; at: Date; data: { researched?: { at?: string; by?: string; corrected?: Array<{ at: string }> }; profile?: { capacity?: { band: string; basis: string } } } }
+interface ProfileRow { entity_id: string; note_id: string; at: Date; data: ProfileParts['data'] }
 
 /** One projection over the same pursuits, exposures and suggestions used by LP pages.
  * No fit rows are required, and no global edge total is used as vehicle coverage. */
@@ -72,11 +73,12 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
       ) select s.pursuit_id, s.suggestion_id, s.data, s.body, s.made_at, s.made_by, s.status from pick join strategy.suggestion s using(suggestion_id)`, [vehicleId]),
     // Each LP's aliases first (identity.alias_pairs), so these are index probes rather than a
     // canonical_entity_id() call on every row of the table (performance pass, 8 Oct 2026).
-    // Only the two parts read below, not the whole profile (about 2 KB a note, thousands per vehicle, every rebuild).
-    db.query<ProfileRow>(`select distinct on (a.canonical_id) a.canonical_id entity_id, n.note_id, n.created_at as at,
-        jsonb_build_object('researched', n.data->'researched', 'profile', jsonb_build_object('capacity', n.data->'profile'->'capacity')) data
-      from identity.alias_pairs($1::uuid[]) a join research.note n on n.entity_id=a.entity_id where n.kind='public_profile'
-      order by a.canonical_id,n.created_at desc,n.note_id`, [ids]),
+    // Only the two parts read below, and each note's only when it changed (profile-parts.ts); the latest per LP.
+    publicProfiles(db, ids).then((all) => {
+      const latest = new Map<string, ProfileRow>();
+      for (const p of all) if (!latest.has(p.entityId)) latest.set(p.entityId, { entity_id: p.entityId, note_id: p.noteId, at: p.at, data: p.parts.data });
+      return [...latest.values()];
+    }),
     db.query<{ entity_id: string; n: string }>(`select a.canonical_id entity_id,count(*)::text n
       from identity.alias_pairs($1::uuid[]) a join research.claim c on c.entity_id=a.entity_id where c.superseded_by is null group by 1`, [ids]),
     db.query<{ entity_id: string; instruction: string; scope: string; at: Date }>(`select a.canonical_id entity_id,
