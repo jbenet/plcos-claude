@@ -278,11 +278,29 @@ export function startRouteWarmup(db: Db): void {
   timer.unref();
 }
 
+/**
+ * The generation each kind's cold read last started a warm-up at, per database. A warm-up searches every kind's targets,
+ * so one per kind and generation is enough. A kind it leaves without a scored row (the grants rail, with no open
+ * pursuits on the invented data) started another on every routes view before, and the page warm-up opens every active
+ * vehicle's routes after each write: a whole route warm-up, every target read again, after every person's write
+ * (performance pass, 17 Oct 2026: about 3 s of the server's CPU per write on the invented data).
+ */
+const coldGlobal = globalThis as typeof globalThis & { __routesColdWarmed?: WeakMap<Db, Map<string, string>> };
+const coldWarmed = coldGlobal.__routesColdWarmed ??= new WeakMap<Db, Map<string, string>>();
+
 /** Compact, versioned picker scores; never scan cached route JSON or plan every target on a page read. */
 export async function recordedRouteScores(kind: string): Promise<Map<string, number>> {
   const db=await getDb(), version=await revisionFor(db);
   const rows=await db.query<{id:string;score:string}>(`select target_id::text id,best_score::text score from network.route_cache
     where vehicle_kind=$1 and revision=$2 and best_score is not null`,[kind,version.generation]);
-  if (!rows.length) startRouteWarmup(db);
+  if (!rows.length) {
+    let started = coldWarmed.get(db);
+    if (!started) { started = new Map(); coldWarmed.set(db, started); }
+    // A warm-up already running may be for an older generation and stop early: this kind is not marked then.
+    if (started.get(kind) !== version.generation && !warming.has(db)) {
+      started.set(kind, version.generation);
+      startRouteWarmup(db);
+    }
+  }
   return new Map(rows.map(r=>[r.id,Number(r.score)]));
 }
