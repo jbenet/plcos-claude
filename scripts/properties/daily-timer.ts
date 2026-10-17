@@ -12,13 +12,13 @@ export async function dailyTimerProperties(check: Check) {
   try {
     await migrate(db);
     const seen: string[] = [];
-    let fail = false;
+    let fail = false, failEmails = true;
     const queue: typeof queueImportJob = async (db, kind, actor, input) => {
       seen.push(kind === 'affinity' ? `affinity:${input?.operation}` : kind);
-      if (kind === 'affinity' && (!['slice', 'translate'].includes(input?.operation as string) || !input?.options)) throw new Error('Wrong Affinity input');
+      if (kind === 'affinity' && (!['slice', 'recent-emails', 'translate'].includes(input?.operation as string) || !input?.options)) throw new Error('Wrong Affinity input');
       const job = await createImportJob(db, kind, actor, input);
       await executeImportJob(db, job.id, async () => {
-        if (fail) throw new Error('Invented failure');
+        if (fail || (failEmails && input?.operation === 'recent-emails')) throw new Error('Invented failure');
         return {};
       });
       return (await db.one<ImportJob>('select * from platform.import_job where id=$1', [job.id]))!;
@@ -31,8 +31,9 @@ export async function dailyTimerProperties(check: Check) {
     catch (error) { backupRan = (error as { code?: number }).code === 23; }
     await runDailyJobs(db, '03:00', today, queue);
     check('DAILY ordered imports precede backup; persisted date prevents replay',
-      backupRan && seen.join() === 'affinity:slice,affinity:translate,linear,spv-stance,calendar,docsend',
-      'Invented receipts use the existing queue store; a second invocation skips even after backup failure.');
+      backupRan && seen.join() === 'affinity:slice,affinity:recent-emails,affinity:translate,linear,spv-stance,calendar,docsend',
+      'Invented receipts use the existing queue store; a failed email read does not stop the chain; a second invocation skips even after backup failure.');
+    failEmails = false;
 
     await db.query("delete from platform.import_job where input->>'schedule'='daily'");
     seen.length = 0;

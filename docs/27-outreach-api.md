@@ -488,18 +488,22 @@ and answers, per address, read-only and without calling Affinity:
       "issues": ["no_pursuit", "email_not_in_affinity"],
       "suggest": [{ "action": "add_lp", "vehicle": "fund-i", "reason": "…" }, { "action": "affinity_add_note", "lastSent": "2026-10-13", "reason": "…" }] }],
     "counts": { "parties": 1, "internal": 0, "notOnFile": 0, "noPursuit": 1, "notInAffinity": 0, "emailNotInAffinity": 1 },
-    "affinityCopyAsOf": "2026-10-14T03:04:00.000Z", "note": "…" } }
+    "affinityCopyAsOf": "2026-10-14T03:04:00.000Z",
+    "affinityCopy": { "listsAsOf": "2026-10-14T03:04:00.000Z", "peopleAsOf": "2026-10-13T22:10:00.000Z", "emailsAsOf": "2026-10-14T03:05:00.000Z" },
+    "note": "…" } }
 ```
 
 - `internal`: the team, its domains, the fundraising domains and Protocol Labs'. Nothing more is said about them.
-- `onFile`: an email claim (never Dakota's), else a person in PLC OS's copy of Affinity with that address.
+- `onFile`: an email claim (never Dakota's), else a person in PLC OS's copy of Affinity with that address: on their
+  person record or on their entry on a list we read (17 Oct 2026), any of their addresses, in any case.
 - `pursuits` and `add_lp` cover only the vehicles the token reads; `via` is `self`, `firm` (their current firm) or
   `contact` (they are a contact on that LP's pursuit).
 - `raiseVehicles` comes from sends with `to` not false, by the same classifier the Affinity sync uses
   (lib/connectors/affinity/about.ts). Someone copied in is never pitched by the mail.
 - `add_lp` is only for active vehicles other than the grants rail, never for a portfolio company or a teammate; it goes to
   `POST /api/outreach/lps`. `research` is for an unknown address with no raise mail.
-- `affinity.*` is PLC OS's daily copy as of `affinityCopyAsOf`. `covered` is true when Affinity's last email with them is
+- `affinity.*` is PLC OS's daily copy as of `affinityCopyAsOf`, the older of the lists' and the emails' last read;
+  `affinityCopy` dates each part (people is the history read's sweep, which pauses at its request cap). `covered` is true when Affinity's last email with them is
   on or after the last send, by day. `affinity_add_person` and `affinity_add_note` are for the Affinity writes Juan
   approves by batch (14 Oct 2026): propose them with `POST /api/outreach/affinity` (§5b).
 

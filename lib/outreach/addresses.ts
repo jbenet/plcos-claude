@@ -49,11 +49,21 @@ export async function addressesFor(entityIds: string[]): Promise<Map<string, Add
   // The addresses Affinity holds for the person (its primary address first), after every claim: unconfirmed, source
   // "affinity". Before 7 Oct 2026 only claims counted, and Affinity's addresses never became claims, so nearly every LP
   // had none (JuanMail: contacts empty on all 4,895 queue rows). The latest copy of each Affinity person record.
+  // Its entries on the lists we read carry the same addresses, and for most LPs they are all we have: the history
+  // read's sweep of every person pauses at its request cap (17 Oct 2026: an LP with two pursuits showed no address).
   const people = await (await getDb()).query<{ entity_id: string; payload: { primaryEmailAddress?: unknown; emailAddresses?: unknown } }>(`
-    select distinct on (r.source_id) identity.canonical_entity_id(s.entity_id)::text entity_id, r.payload
-      from identity.source_record s join sources.raw_record r on r.source = 'affinity' and r.kind = 'person' and r.source_id = substr(s.source_id, 8)
-     where s.source = 'affinity' and s.source_id like 'person:%' and s.entity_id = any(identity.alias_ids($1::uuid[]))
-     order by r.source_id, r.fetched_at desc, r.id desc`, [ids]);
+    with mine as materialized (select s.entity_id, substr(s.source_id, 8) pid from identity.source_record s
+                   where s.source = 'affinity' and s.source_id like 'person:%' and s.entity_id = any(identity.alias_ids($1::uuid[])))
+    select entity_id, payload from (
+      (select distinct on (r.source_id) identity.canonical_entity_id(m.entity_id)::text entity_id, r.payload, 0 rank, r.source_id k
+        from mine m join sources.raw_record r on r.source = 'affinity' and r.kind = 'person' and r.source_id = m.pid
+       order by r.source_id, r.fetched_at desc, r.id desc)
+      union all
+      (select distinct on (r.source_id) identity.canonical_entity_id(m.entity_id)::text entity_id, r.payload->'entity' payload, 1 rank, r.source_id k
+        from mine m join sources.raw_record r on r.source = 'affinity' and r.kind = 'list_entry' and r.payload->>'type' = 'person'
+                                             and r.payload->'entity'->>'id' = m.pid
+       order by r.source_id, r.fetched_at desc, r.id desc)) u
+     order by rank, k`, [ids]);
   for (const p of people) {
     const list = out.get(p.entity_id) ?? [];
     const emails = [p.payload.primaryEmailAddress, ...(Array.isArray(p.payload.emailAddresses) ? p.payload.emailAddresses : [])];
@@ -125,11 +135,13 @@ export async function peopleWithAddress(email: string, q?: Queryable): Promise<A
          and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'
       union
       select identity.canonical_entity_id(s.entity_id) from sources.raw_record r
-        join identity.source_record s on s.source = 'affinity' and s.source_id = 'person:' || r.source_id
-       where r.source = 'affinity' and r.kind = 'person'
-         and (lower(btrim(r.payload->>'primaryEmailAddress')) = $1
-           or exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(r.payload->'emailAddresses') = 'array' then r.payload->'emailAddresses' else '[]'::jsonb end) x
-                       where lower(btrim(x)) = $1)))
+        cross join lateral (select case when r.kind = 'person' then r.source_id else r.payload->'entity'->>'id' end pid,
+                                   case when r.kind = 'person' then r.payload else r.payload->'entity' end p) x
+        join identity.source_record s on s.source = 'affinity' and s.source_id = 'person:' || x.pid
+       where r.source = 'affinity' and (r.kind = 'person' or (r.kind = 'list_entry' and r.payload->>'type' = 'person'))
+         and (lower(btrim(x.p->>'primaryEmailAddress')) = $1
+           or exists (select 1 from jsonb_array_elements_text(case when jsonb_typeof(x.p->'emailAddresses') = 'array' then x.p->'emailAddresses' else '[]'::jsonb end) e
+                       where lower(btrim(e)) = $1)))
     select distinct e.entity_id::text id, e.display_name name from found f join identity.entity e on e.entity_id = f.id
      where e.retired_at is null and e.merged_into is null and e.entity_type = 'person' order by name, id`, [address]);
 }

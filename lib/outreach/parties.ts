@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { can } from '@/lib/authz';
 import { getDb } from '@/lib/db';
 import { aboutRaise, type AboutVehicle } from '@/lib/connectors/affinity/about';
-import { AFFINITY_PERSON_EMAILS, firmsByDomain, NOT_A_PERSON, PL_DOMAINS, PUBLIC_MAIL } from '@/lib/calendar-sync';
+import { AFFINITY_PERSON_ADDRESSES, AFFINITY_PERSON_EMAILS, firmsByDomain, NOT_A_PERSON, PL_DOMAINS, PUBLIC_MAIL } from '@/lib/calendar-sync';
 import { notLpEntities } from '@/lib/calendar-candidates';
 import { teamAddresses } from '@/lib/comms/read';
 import type { AppUser } from '@/modules/platform';
@@ -61,7 +61,14 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
   const vehiclesRead = db.query<{ id: string; slug: string; name: string; aliases: string[]; phase: string; kind: string }>(
     `select id::text, slug, name, coalesce(aliases, '{}') aliases, phase, kind from platform.vehicle`);
   const notLpRead = notLpEntities(db);
-  const copyRead = db.one<{ at: Date }>(`select max(finished_at) at from sources.sync_run where source = 'affinity' and kind in ('slice', 'history') and status in ('ok', 'held')`);
+  // The copy has three parts, each as of its own last read (17 Oct 2026: one date over slice and history read as fresh
+  // while the emails were a day old): the lists' entries (the daily slice), every person (the history read, whose
+  // sweep pauses at its request cap), and the emails (recent-emails, daily since 17 Oct, or a finished history read).
+  const copyRead = db.one<{ lists: Date | null; people: Date | null; emails: Date | null }>(`select
+      (select max(finished_at) from sources.sync_run where source = 'affinity' and kind = 'slice' and status in ('ok', 'held')) lists,
+      (select max(finished_at) from sources.sync_run where source = 'affinity' and kind = 'history' and status in ('ok', 'held')) people,
+      (select max(finished_at) from sources.sync_run where source = 'affinity'
+          and ((kind = 'recent-emails' and status in ('ok', 'held')) or (kind = 'history' and status = 'ok'))) emails`);
   for (const r of [vehiclesRead, notLpRead, copyRead]) r.catch(() => undefined);
   const team = await teamAddresses(db);
   let fundraise: string[] = [], firmNames: string[] = [];
@@ -101,14 +108,9 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
        where c.superseded_by is null and c.field ~ '(^|\\.)email$' and lower(trim(c.value)) = any($1::text[])
          and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota' order by lower(trim(c.value)), c.as_of desc nulls last`, [addresses]),
       db.query<{ email: string; id: string }>(`select distinct on (email) email, id from (${AFFINITY_PERSON_EMAILS}) x where email = any($1::text[])`, [addresses]),
-      // Affinity holds the person when any person record in our copy has the address, linked to someone of ours or not.
-      db.query<{ email: string; name: string | null }>(`select distinct on (lower(trim(e.v))) lower(trim(e.v)) email,
-          nullif(trim(concat_ws(' ', r.payload->>'firstName', r.payload->>'lastName')), '') name
-        from sources.raw_record r
-        cross join lateral (select r.payload->>'primaryEmailAddress' v
-                            union select jsonb_array_elements_text(case when jsonb_typeof(r.payload->'emailAddresses') = 'array' then r.payload->'emailAddresses' else '[]'::jsonb end)) e
-       where r.source = 'affinity' and r.kind = 'person' and lower(trim(e.v)) = any($1::text[])
-       order by lower(trim(e.v)), r.fetched_at desc`, [addresses]),
+      // Affinity holds the person when any person record or list entry in our copy has the address, linked to someone of ours or not.
+      db.query<{ email: string; name: string | null }>(`select distinct on (email) email, name from (${AFFINITY_PERSON_ADDRESSES}) x
+       where email = any($1::text[]) order by email, name is null, fetched_at desc`, [addresses]),
     ]);
     for (const r of claims) byClaim.set(r.a, r.id);
     for (const r of affinity) byAffinity.set(r.email, r.id);
@@ -150,7 +152,12 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
   }
   const [notLp, orgsAt, copy] = await Promise.all([notLpRead, orgsAtRead, copyRead]);
   const onlyNotLp = (ids: string[]) => ids.length > 0 && ids.every((id) => notLp.has(id));
-  const copyAsOf = copy?.at ? new Date(copy.at).toISOString() : null;
+  const iso = (d: Date | null | undefined) => (d ? new Date(d).toISOString() : null);
+  const affinityCopy = { listsAsOf: iso(copy?.lists), peopleAsOf: iso(copy?.people), emailsAsOf: iso(copy?.emails) };
+  // The older of the two parts every answer leans on: who is on the lists, and the emails.
+  const copyAsOf = affinityCopy.listsAsOf && affinityCopy.emailsAsOf
+    ? (affinityCopy.listsAsOf < affinityCopy.emailsAsOf ? affinityCopy.listsAsOf : affinityCopy.emailsAsOf)
+    : affinityCopy.listsAsOf ?? affinityCopy.emailsAsOf;
 
   const parties = [...merged.values()].map((p) => {
     // By instant: a Date header carries the sender's own offset, so the text order is not the time order.
@@ -207,7 +214,7 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
     parties,
     counts: { parties: parties.length, internal: count('internal'), notOnFile: count('not_on_file'), noPursuit: count('no_pursuit'),
       notInAffinity: count('not_in_affinity'), emailNotInAffinity: count('email_not_in_affinity') },
-    affinityCopyAsOf: copyAsOf,
-    note: 'Read-only; no Affinity request is made. affinity.* is PLC OS\'s copy of Affinity as of affinityCopyAsOf (refreshed daily). covered compares Affinity\'s last email with them to the last mail sent, by day. pursuits and add_lp cover only the vehicles you can read; add an LP with outreach_add_lp.',
+    affinityCopyAsOf: copyAsOf, affinityCopy,
+    note: 'Read-only; no Affinity request is made. affinity.* is PLC OS\'s copy of Affinity as of affinityCopyAsOf, the older of its lists and its emails (both refreshed daily at 03:00 UTC; affinityCopy dates each part). covered compares Affinity\'s last email with them to the last mail sent, by day. pursuits and add_lp cover only the vehicles you can read; add an LP with outreach_add_lp.',
   } };
 }

@@ -90,6 +90,28 @@ export async function outreachPartiesProperties(check: Check, db: Db) {
     && hid.affinity.person === true && fundOnly.status === 200 && saw?.onFile?.entityId === known && /INVENTED_AFFINITY/.test(saw.affinity?.name ?? ''),
     `spv-only ${spvOnly.status} ${JSON.stringify(hid)?.slice(0, 160)}; fund-only ${saw?.onFile?.entityId === known} ${saw?.affinity?.name}`);
   await db.query(`delete from sources.raw_record where source = 'affinity' and source_id = 'props-parties-person'`);
+
+  // 17 Oct 2026 (JuanMail's Reconcile): a person we hold only by an entry on a list we read, whose person record the
+  // history read has not reached, is in Affinity by the entry's addresses (any of them, any case), with their address.
+  const listed = await entity('Invented Parties Listed Person', 'person');
+  await pursuit(listed, fund.id, 'selected');
+  await db.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by) values ('affinity', 'person:88005678', $1, 'human:fixture')`, [listed]);
+  await db.query(`insert into sources.raw_record (source, kind, source_id, payload_hash, payload) values ('affinity', 'list_entry', 'props-parties-list:1', 'props-parties-list', $1)`,
+    [JSON.stringify({ id: 1, type: 'person', listId: 9, entity: { id: 88005678, firstName: 'INVENTED_LISTED', lastName: 'Name',
+      primaryEmailAddress: 'work@invented-listed.example', emailAddresses: ['work@invented-listed.example', 'Home@Invented-Listed.example'] } })]);
+  const viaList = await call(await token(juan, [...READ_TOOLS, OUTREACH_READ]), 'parties', {}, { method: 'POST', body: { parties: [
+    { address: 'home@invented-listed.example', sends: [{ at, subject: 'Hello' }] }] } });
+  const lp = viaList.json?.data?.parties?.[0];
+  const { addressesFor, peopleWithAddress } = await import('../../lib/outreach/addresses');
+  const held = (await addressesFor([listed])).get(listed)?.map((x) => x.email) ?? [];
+  const found = await peopleWithAddress('HOME@invented-listed.example');
+  check('Check parties: a person held only by a list entry is in Affinity and on file by any of its addresses, and those addresses are theirs',
+    viaList.status === 200 && lp?.affinity?.person === true && lp.onFile?.entityId === listed && lp.onFile.matchedBy === 'affinity'
+    && !lp.issues.includes('not_in_affinity') && /INVENTED_LISTED/.test(lp.affinity.name ?? '')
+    && held[0] === 'work@invented-listed.example' && held.includes('Home@Invented-Listed.example') && found.some((x) => x.id === listed)
+    && typeof viaList.json?.data?.affinityCopy === 'object',
+    `${viaList.status} ${JSON.stringify({ affinity: lp?.affinity, onFile: lp?.onFile, issues: lp?.issues })}; held ${held}; found ${found.length}`);
+  await db.query(`delete from sources.raw_record where source = 'affinity' and source_id = 'props-parties-list:1'`);
 }
 
 /**

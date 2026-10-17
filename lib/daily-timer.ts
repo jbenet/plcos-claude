@@ -21,7 +21,11 @@ export async function runDailyJobs(db: Db, at: string, now = new Date(), queue =
   // The slice only lands Affinity's records; translate maps them onto LPs (last email, statuses), so a read that is
   // never translated changes nothing anyone sees (13 Oct 2026: LP pages showed no Affinity email after 8 Oct).
   // DocSend after both, so a visitor Affinity or the calendar just added is matched (docs/32); unconnected, it reads nothing.
-  const steps = [['affinity', 'slice'], ['affinity', 'translate'], ['linear'], ['spv-stance'], ['calendar'], ['docsend']] as const;
+  // Then the emails since our newest (about 30 requests; 17 Oct 2026: nothing read Affinity's emails on a schedule, so
+  // the mail desk's Reconcile saw every recent send as missing from Affinity). Its failure never stops the chain:
+  // translate still maps the lists, and the next day's read picks up from the same watermark.
+  const optional = new Set(['recent-emails']);
+  const steps = [['affinity', 'slice'], ['affinity', 'recent-emails'], ['affinity', 'translate'], ['linear'], ['spv-stance'], ['calendar'], ['docsend']] as const;
   // The whole chain counts as importing, so /api/health shows no gap between two steps (8 Oct 2026).
   const release = holdImports();
   try {
@@ -36,7 +40,7 @@ export async function runDailyJobs(db: Db, at: string, now = new Date(), queue =
         await importJobStatus(db);
         job = (await db.one<ImportJob>('select * from platform.import_job where id=$1', [job.id]))!;
       }
-      if (job.status !== 'completed') throw new Error('Daily import failed.');
+      if (job.status !== 'completed' && !(operation && optional.has(operation))) throw new Error('Daily import failed.');
     }
   } finally { release(); }
   if (lockLost()) throw new Error('Daily lock lost.');

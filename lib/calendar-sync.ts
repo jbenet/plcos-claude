@@ -103,19 +103,40 @@ async function lpUniverse(q: Queryable): Promise<{ lps: Set<string>; contactOf: 
 }
 
 /**
- * Addresses Affinity holds for its people (primary and others), from the latest copy of each person record, matched by
- * callers filtering on `email` (lowercased). Affinity's addresses never became claims (lib/outreach/addresses.ts), so
- * reading claims alone left nearly every meeting matched by name only.
+ * Addresses Affinity holds for its people (primary and others), with their names, keyed by Affinity's person id: from
+ * the latest copy of each person record (the history read's /v2/persons) and of each person's entry on a list we read
+ * (the daily slice, whose entity carries the same addresses). Callers filter on `email` (lowercased). Before 17 Oct
+ * 2026 only person records counted, and the history read's sweep of every person is paused at its request cap most
+ * days, so a person on a vehicle's list with pursuits here showed no address and "not in Affinity" (JuanMail's
+ * Reconcile, peter@… on 17 Oct 2026).
+ */
+export const AFFINITY_PERSON_ADDRESSES = `
+    select x.pid, lower(trim(e.v)) email, x.name, x.fetched_at
+      from (select r.source_id pid, r.payload p, r.fetched_at,
+                   nullif(trim(concat_ws(' ', r.payload->>'firstName', r.payload->>'lastName')), '') name
+              from sources.raw_record r
+             where r.source = 'affinity' and r.kind = 'person'
+               and not exists (select 1 from sources.raw_record n where n.source = 'affinity' and n.kind = 'person' and n.source_id = r.source_id
+                                  and (n.fetched_at, n.id) > (r.fetched_at, r.id))
+            union all
+            select r.payload->'entity'->>'id', r.payload->'entity', r.fetched_at,
+                   nullif(trim(concat_ws(' ', r.payload->'entity'->>'firstName', r.payload->'entity'->>'lastName')), '')
+              from sources.raw_record r
+             where r.source = 'affinity' and r.kind = 'list_entry' and r.payload->>'type' = 'person'
+               and not exists (select 1 from sources.raw_record n where n.source = 'affinity' and n.kind = 'list_entry' and n.source_id = r.source_id
+                                  and (n.fetched_at, n.id) > (r.fetched_at, r.id))) x
+      cross join lateral (select x.p->>'primaryEmailAddress' v
+                          union select jsonb_array_elements_text(case when jsonb_typeof(x.p->'emailAddresses') = 'array' then x.p->'emailAddresses' else '[]'::jsonb end)) e
+     where e.v ~ '^\\s*[^\\s@]+@[^\\s@]+\\.[^\\s@]+\\s*$'`;
+
+/**
+ * The same addresses, each with the person of ours its Affinity record maps to. Affinity's addresses never became
+ * claims (lib/outreach/addresses.ts), so reading claims alone left nearly every meeting matched by name only.
  */
 export const AFFINITY_PERSON_EMAILS = `
-    select lower(trim(e.v)) email, identity.canonical_entity_id(s.entity_id)::text id
-      from sources.raw_record r
-      cross join lateral (select r.payload->>'primaryEmailAddress' v
-                          union select jsonb_array_elements_text(case when jsonb_typeof(r.payload->'emailAddresses') = 'array' then r.payload->'emailAddresses' else '[]'::jsonb end)) e
-      join identity.source_record s on s.source = 'affinity' and s.source_id = 'person:' || r.source_id
-     where r.source = 'affinity' and r.kind = 'person' and e.v ~ '^\\s*[^\\s@]+@[^\\s@]+\\.[^\\s@]+\\s*$'
-       and not exists (select 1 from sources.raw_record n where n.source = 'affinity' and n.kind = 'person' and n.source_id = r.source_id
-                          and (n.fetched_at, n.id) > (r.fetched_at, r.id))`;
+    select distinct a.email, identity.canonical_entity_id(s.entity_id)::text id
+      from (${AFFINITY_PERSON_ADDRESSES}) a
+      join identity.source_record s on s.source = 'affinity' and s.source_id = 'person:' || a.pid`;
 
 /** The firms holding each of these email domains: a firm's own email-domain or email claims or Affinity domains, or its current people's emails (claims or Affinity's). Only LP firms when `lps` is given. */
 export async function firmsByDomain(domains: string[], lps: Set<string> | null, q: Queryable): Promise<Map<string, string[]>> {
