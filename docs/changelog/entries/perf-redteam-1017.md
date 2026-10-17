@@ -269,6 +269,15 @@ data on Juan's Mac.
 - **The example-case harness no longer records a pass it didn't check.** Any proposal was stored as "matched the
   expectation"; with no grader built, none is a pass. AGENTS.md now says the circuit breaker and the harness are not
   wired yet.
+- **Text people write can't make a reader's browser call the API.** A Markdown image or link in a commitment or issue
+  pointing at `/api/desktop/build` was fetched as whoever opened the page (an image at once, a link on hover). Images
+  now need the page's own resolver, and links to `/api/` or `/auth/` stay text.
+- **Signing out clears the browser's stored drafts and unsent feedback,** which carried no user and would have been
+  sent as the next person to sign in.
+- **Stored links open only as web addresses.** Source, SPV evidence and Linear links rendered any stored URL; a `data:`
+  page could replace the Mac app's window, which now refuses `data:` too. Mail-desk sources ("gmail") no longer show as
+  broken links.
+- **The site's Content-Security-Policy adds `object-src 'none'` and `base-uri 'self'`.**
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026

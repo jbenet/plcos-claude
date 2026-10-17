@@ -136,7 +136,7 @@ fn open_external(url: &str) {
 fn navigation_allowed(app: &AppHandle, url: &Url) -> bool {
     let host = url.host_str().unwrap_or("");
     if (host == "127.0.0.1" || host == "localhost") && url.port() == Some(PORT) { return true; }
-    if url.scheme() == "tauri" || (url.scheme() == "http" && host == "tauri.localhost") || url.scheme() == "about" || url.scheme() == "data" { return true; }
+    if url.scheme() == "tauri" || (url.scheme() == "http" && host == "tauri.localhost") || url.scheme() == "about" { return true; }
     if let Ok(server) = Url::parse(&server_url()) {
         if url.host_str() == server.host_str() && url.scheme() == server.scheme() {
             let local = format!("{}{}{}", local_origin(), url.path(), url.query().map(|q| format!("?{q}")).unwrap_or_default());

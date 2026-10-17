@@ -1,3 +1,4 @@
+import { webHref } from '@/lib/markdown';
 import { config } from '@/config/deployment';
 import { shortDate } from '@/lib/time';
 import { claimLabel, claimsFor, listSourceDocs, notesFor } from '@/lib/authz/read/research';
@@ -61,7 +62,7 @@ export async function VehicleInvestments({ entityId, vehicle }: { entityId: stri
                 {c.value}{' '}
                 <span className={own || !competitor || !portfolio ? 'muted' : 'needs'}>· {note}</span>{' '}
                 {doc ? (
-                  <a className="src" href={doc.origin} target="_blank" rel="noreferrer"
+                  <a className="src" href={webHref(doc.origin)} target="_blank" rel="noreferrer"
                     title={`${doc.title} · as of ${shortDate(c.provenance.asOf)} · ${c.provenance.confidence} confidence · unverified`}>
                     {host(doc.origin)} · {c.provenance.confidence}
                   </a>

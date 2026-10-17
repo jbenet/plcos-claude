@@ -47,7 +47,7 @@ const config: NextConfig = {
    */
   async headers() {
     return [{ source: '/:path*', headers: [
-      { key: 'Content-Security-Policy', value: "frame-ancestors 'self' https://os.pl.xyz" },
+      { key: 'Content-Security-Policy', value: "frame-ancestors 'self' https://os.pl.xyz; object-src 'none'; base-uri 'self'" },
       { key: 'X-Content-Type-Options', value: 'nosniff' },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
     ] }];

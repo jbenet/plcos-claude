@@ -1,3 +1,4 @@
+import { webHref } from '@/lib/markdown';
 import type { ReactNode } from 'react';
 import Link from '@/components/ui/AppLink';
 import { ago, shortDate } from '@/lib/time';
@@ -444,7 +445,7 @@ function ExtraRow({ x }: { x: TraceExtra }) {
           <Clip text={x.text} />
           <span className="tl-tail">
             {x.by && <span className="tl-src">{x.by}</span>}
-            {x.href ? <a href={x.href} rel="noreferrer" target="_blank">open</a> : null}
+            {webHref(x.href) ? <a href={webHref(x.href)} rel="noreferrer" target="_blank">open</a> : null}
           </span>
         </div>
       </div>

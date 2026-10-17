@@ -111,5 +111,9 @@ export async function signOut(request: Request): Promise<Response> {
     const { appendAudit } = await import('@/modules/platform');
     await appendAudit({ actorId: claims.uid, action: 'signout', subjectType: 'app_user', subjectId: claims.uid, detail: { provider: 'google' } }).catch(() => undefined);
   }
-  return redirect(`${base}/signin?signedOut=1`, [cookieAttributes(sessionCookie(secure), '', 0, secure)]);
+  // The browser's own copies go too: feedback drafts and the unsent outbox carry no user and would send as the next
+  // person to sign in here (red team, 17 Oct 2026).
+  const res = redirect(`${base}/signin?signedOut=1`, [cookieAttributes(sessionCookie(secure), '', 0, secure)]);
+  res.headers.set('Clear-Site-Data', '"storage"');
+  return res;
 }
