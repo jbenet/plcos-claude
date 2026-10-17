@@ -5,6 +5,7 @@ import type { MoveRow } from '@/modules/strategy/moves';
 import { MOVE_FAMILIES, moveFamily, type PresenceEstimate } from '@/modules/strategy/move-utility';
 import { MoveControls } from './MoveControls';
 import s from './strategy.module.css';
+import { usdShort } from '@/lib/money';
 
 export interface MoveTableRow extends MoveRow {
   rank: number | null; expected: number; priority: number;
@@ -12,7 +13,8 @@ export interface MoveTableRow extends MoveRow {
   utility: number; presence: PresenceEstimate & { source: 'move' | 'default' }; presenceValue: number;
 }
 
-const money = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(n);
+// One formatter for every cell, not one per cell (perf pass, 17 Oct 2026).
+const money = usdShort;
 const pct = (n: number) => `${(n * 100).toFixed(n < 0.1 ? 1 : 0)}%`;
 /** The kinds of work named in 0082. A family with nothing estimated still shows, at zero, so a gap
  * in the option space is visible. */
