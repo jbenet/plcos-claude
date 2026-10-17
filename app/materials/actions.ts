@@ -3,7 +3,7 @@ import { requireAction } from '@/lib/authz/server';
 
 import { revalidatePath } from 'next/cache';
 import { recordSend, requestSend, setAssetLink } from '@/modules/content';
-import { sendGate } from './gate';
+import { sendGate } from '@/lib/outreach/send-gate';
 
 export async function proposeSend(
   formData: FormData,

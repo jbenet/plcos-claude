@@ -147,10 +147,23 @@ export async function barredRecipients(addresses: string[], q?: Queryable): Prom
   const out: Array<{ address: string; name: string }> = [];
   for (const address of [...new Set(addresses.map((a) => a.trim().toLowerCase()).filter(Boolean))]) {
     const people = await peopleWithAddress(address, db);
-    if (!people.length) continue;
+    // An organisation's own address (a claim, or its send-to) and the firm a person deals with us through are barred
+    // by the firm's restriction too (red team, 17 Oct 2026: investments@ a restricted firm passed).
+    const holders = await db.query<{ id: string; name: string }>(`
+      with org as (
+        select identity.canonical_entity_id(c.entity_id) id from research.claim c left join research.source_doc d on d.doc_id = c.source
+         where c.superseded_by is null and c.field ~ '(^|\\.)email$' and lower(btrim(c.value)) = $1
+           and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'
+        union select identity.canonical_entity_id(s.entity_id) from identity.send_to s where s.email = $1
+        union select identity.canonical_entity_id(a.org_entity) from identity.affiliation a
+         where a.ended_on is null and a.is_primary and identity.canonical_entity_id(a.person_entity) = any($2::uuid[]))
+      select distinct e.entity_id::text id, e.display_name name from org o join identity.entity e on e.entity_id = o.id
+       where e.retired_at is null and e.merged_into is null`, [address, people.map((p) => p.id)]);
+    const all = [...people, ...holders.filter((h) => !people.some((p) => p.id === h.id))];
+    if (!all.length) continue;
     const barred = await db.query<{ id: string }>(`select distinct identity.canonical_entity_id(r.entity_id)::text id from coordination.restriction r
-       where identity.canonical_entity_id(r.entity_id) = any($1::uuid[]) and ${BARS_EMAIL}`, [people.map((p) => p.id)]);
-    for (const b of barred) out.push({ address, name: people.find((p) => p.id === b.id)?.name ?? 'someone on record' });
+       where identity.canonical_entity_id(r.entity_id) = any($1::uuid[]) and ${BARS_EMAIL}`, [all.map((p) => p.id)]);
+    for (const b of barred) out.push({ address, name: all.find((p) => p.id === b.id)?.name ?? 'someone on record' });
   }
   return out;
 }

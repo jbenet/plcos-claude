@@ -214,7 +214,7 @@ export async function outreachWriteProperties(check: Check, db: Db) {
     `agent ${toBarred.status}; person sees ${JSON.stringify(seen.filter((c) => c.rule === 'restriction').map((c) => c.blocking))}; later ticket ${t5 ? 'opened' : 'NONE'}, ended ${endedLater}`);
   {
     // The Materials page's send (red team, 17 Oct 2026): the instrument is the target's, a restriction and the grants gate refuse.
-    const { sendGate } = await import('../../app/materials/gate');
+    const { sendGate } = await import('../../lib/outreach/send-gate');
     const grants = await db.one<{ id: string }>(`select id::text from platform.vehicle where kind = 'grant_rail' limit 1`);
     const onFundGate = await sendGate(lpC, fund.id), onSpvGate = await sendGate(lpC, spv.id), barredGate = await sendGate(contactP, fund.id);
     const grantGateR = grants ? await sendGate(lpC, grants.id) : null;
@@ -250,4 +250,33 @@ export async function outreachWriteProperties(check: Check, db: Db) {
   const sig = await agent('contacts', { entityId: personE, email: 'agent3@invented-person.example', source: 'gmail-signature' });
   check('Outreach writes: an autonomous /contacts may confirm an address, set where mail goes, or add one from a signature (17 Oct 2026)',
     cAgent.status === 200 && sendTo.status === 200 && sig.status === 200, `confirmed ${cAgent.status}; send-to ${sendTo.status}; signature ${sig.status}${sig.json?.error ? ` (${sig.json.error})` : ''}`);
+
+  // Red team, 17 Oct 2026 (round 9): a restricted firm's own address, and a person who deals with us through it, are barred.
+  const firmR = await entity('Invented Barred Firm'), staffR = await entity('Invented Barred Firm Staff', 'person');
+  await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'investments@invented-barred-firm.example', 'affinity:props-outreach', current_date, 'medium'),
+    ($2, 'email', 'staff@invented-elsewhere.example', 'affinity:props-outreach', current_date, 'medium')`, [firmR, staffR]);
+  await db.query(`insert into identity.affiliation (person_entity, org_entity, kind, role, is_primary, as_of) values ($1, $2, 'staff', 'Analyst', true, current_date)`, [staffR, firmR]);
+  await db.query(`insert into coordination.restriction (entity_id, scope, instruction, recorded_by) values ($1, 'blanket', 'Invented: do not approach the firm', $2)`, [firmR, juan.id]);
+  const lpF = await pursuit(await entity('Invented Outreach Unrelated LP'), fund.id, 'selected');
+  const toFirm = await agent('tickets', sendBody(lpF, { scope: { recipients: ['investments@invented-barred-firm.example'], purpose: 'invite' } }));
+  const toStaff = await agent('tickets', sendBody(lpF, { scope: { recipients: ['staff@invented-elsewhere.example'], purpose: 'invite' } }));
+  check('Outreach writes: a restricted firm\'s own address, and a person whose firm it is, are refused to an agent (rule 8, 17 Oct 2026)',
+    toFirm.status === 409 && /Invented Barred Firm/.test(toFirm.json?.error ?? '') && toStaff.status === 409 && /restriction/i.test(toStaff.json?.error ?? ''),
+    `firm ${toFirm.status} ${toFirm.json?.error ?? ''}; staff ${toStaff.status}`);
+
+  // A request key replays only for its own token and the same request; an update key is the pursuit's.
+  const rw2 = await token(juan, [OUTREACH_READ, OUTREACH_WRITE]);
+  const keyed = { entityId: personE, email: 'keyed@invented-person.example', source: 'gmail-signature', idempotencyKey: 'props-desk-key-reuse' };
+  // A replay comes back from jsonb, which orders keys its own way.
+  const sorted = (v: unknown): unknown => Array.isArray(v) ? v.map(sorted) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, sorted(x)])) : v;
+  const sameAnswer = (a: unknown, b: unknown) => a !== undefined && JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
+  const k1 = await post('contacts', keyed), kSame = await post('contacts', keyed), kOther = await post('contacts', keyed, rw2);
+  const kArgs = await post('contacts', { ...keyed, email: 'keyed2@invented-person.example' });
+  const lpK = await pursuit(await entity('Invented Outreach Key Org'), fund.id, 'connecting');
+  const upd = (pursuitId: string) => post('update', { pursuitId, words: 'Invented note.', idempotencyKey: 'props-desk-update-shared-key', applied: {} });
+  const ua = await upd(lpS), ub = await upd(lpK);
+  check('Outreach writes: a request key replays only to the token that used it, for the same request; an update key is per LP (17 Oct 2026)',
+    k1.status === 200 && kSame.status === 200 && sameAnswer(kSame.json?.data, k1.json?.data) && kOther.status === 409 && kArgs.status === 409
+      && ua.status === 200 && ub.status === 200 && ub.json?.data?.created === true && ub.json?.data?.updateId !== ua.json?.data?.updateId,
+    `first ${k1.status}; same ${kSame.status} same answer ${sameAnswer(kSame.json?.data, k1.json?.data)}; other token ${kOther.status}; other args ${kArgs.status}; update ${ua.status}/${ub.status} created ${ub.json?.data?.created}`);
 }

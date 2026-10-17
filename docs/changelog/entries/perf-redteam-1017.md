@@ -140,6 +140,26 @@ data on Juan's Mac.
 - **Astra runs pin what they meant.** The ledger hashed the template and protocol but not `common.md` or the
   filled brief, so a `git pull` changed later runs without a new hash. It now hashes the filled brief plus the protocol, and
   records the runner's commit as the protocol version.
+- **A restricted firm's own address is barred too.** The desk's SEND ticket checked recipients only against people,
+  so `investments@` a firm under a do-not-contact, or a person who deals with us through that firm, passed. The check
+  now covers an organisation's email claims and send-to, and a person's primary current firm.
+- **The desk wraps a material as the Materials page does.** It sent every non-SPV material as a commitment, so a
+  grants-rail send skipped the funder-invitation check. It now takes the instrument and refusals from the same gate
+  (moved to `lib/outreach/send-gate.ts`).
+- **A request key answers only its own token and request.** Keys were shared across one owner's tokens and replayed
+  without comparing arguments, so a narrower token reusing a key read the wider token's answer. A replay to another
+  token, or for different arguments, is now refused (409). An `/update` key is per LP, so a reused key no longer
+  silently answers another LP's update.
+- **A calendar entry that only names an LP climbs nothing.** An entry with none of their guests on it, matched by a
+  name in its title or description, recorded Meeting held and LP opted in and moved the LP to Discussing, so a
+  vendor's accepted invite saying "we work with X" did it for X. It still shows on the LP's timeline with "Not this
+  LP", but Reconciliation no longer uses it for a rung or a status.
+- **An invite with no answer from us is not accepted.** An invite sent to a group address, or read from a calendar
+  shared with someone, has no guest line for them, and that counted as accepted. It now counts only when someone on the
+  team organized it.
+- **A rung taken back stays back under a new reference.** A retraction blocked only the exact record behind it, so
+  Affinity's copy of the same email, or an older message ingested later, recorded the rung again. A record dated
+  before the retraction is no longer used for that rung.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -197,6 +217,15 @@ data on Juan's Mac.
   8 Oct 2026: the system figures these out, marked and undoable). Refusing touchpoints from the desk would stop its
   logging.
 - Under an intro ask's ticket, recipients other than the connector are not checked against restrictions.
+- A calendar guest from the LP who never answered the invite still makes it a meeting held, and one accepted recurring
+  series counts each past occurrence. Requiring their answer would drop real meetings with people whose mail client
+  doesn't send one.
+- A Message-ID reported again keeps the first copy's date, sender and direction; a second mailbox's copy can add the LP
+  it is about. Mailboxes report the same message with different directions, so refusing a mismatch would refuse real
+  mail; credit still goes only to the LP who sent it.
+- A rung taken back still blocks a later genuine record of that rung while the retracted record remains the earliest.
+- A token for one vehicle may set where an LP's mail goes when that LP is also pursued on another vehicle. An address
+  is the person's, not a vehicle's, and Juan wants the desk to do more on its own; the audit row records who changed it.
 - A push identical to an earlier one answers that push's run and job ids, whoever pushed it; the job itself answers
   only its own pusher.
 - Approving an already approved ticket runs its action again: that is how a hardening refused for a lapsed

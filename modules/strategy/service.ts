@@ -228,6 +228,18 @@ export async function retractedRefs(q: Queryable, pursuitId?: string): Promise<S
   return new Set(rows.map((r) => r.k));
 }
 
+/**
+ * When a person last took back each rung of each LP (`pursuitId|rung`). A record from before that is not used for that rung
+ * again, under whatever reference it is filed now: Affinity's copy of an undone email, an older message ingested later
+ * (red team, 17 Oct 2026). A record dated after it is new, and counts.
+ */
+export async function retractedRungs(q: Queryable, pursuitId?: string): Promise<Map<string, number>> {
+  const rows = await q.query<{ k: string; at: Date | string }>(
+    `select subject_id::text || '|' || rung as k, max(at) at from platform.audit_log, jsonb_array_elements_text(detail->'rungs') rung
+      where action = 'ladder.retracted' and ($1::text is null or subject_id::text = $1::text) group by 1`, [pursuitId ?? null]);
+  return new Map(rows.map((r) => [r.k, new Date(r.at).getTime()]));
+}
+
 async function climb(
   tx: Queryable,
   actorId: string,

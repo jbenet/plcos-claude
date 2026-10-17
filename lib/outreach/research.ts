@@ -60,7 +60,7 @@ export async function addResearch(ctx: DeskContext, raw: Record<string, unknown>
     throw new OutreachRefused(403, 'Not added: this token\'s owner may not change records here.');
   }
   const autonomous = ctx.env.autonomous;
-  return once(ctx, 'research', a.idempotencyKey, async () => {
+  return once(ctx, 'research', a.idempotencyKey, raw, async () => {
     const owner = ctx.env.owner;
     const db = await getDb();
     const desk = autonomous ? await deskActor(db) : null;
