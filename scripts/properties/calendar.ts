@@ -297,14 +297,17 @@ export async function calendarProperties(check: Check) {
       attendees: [{ email: 'lena@invented-cal.example', organizer: true, responseStatus: 'accepted' }, { email: juan.email, self: true, responseStatus: mine }] });
     const declinedGuest = ev('dec1', '2026-09-23T15:00:00Z', [], { organizer: { email: juan.email, self: true },
       attendees: [{ email: juan.email, self: true, organizer: true, responseStatus: 'accepted' }, { email: 'lena@invented-cal.example', responseStatus: 'declined' }] });
-    await fakeCalendar(dir, juan.email, { id: 'primary' }, [lenaAt('inv1', '2026-09-20', 'needsAction'), lenaAt('inv2', '2026-09-21', 'declined'), lenaAt('inv3', '2026-09-22', 'accepted'), declinedGuest]);
+    // Sent to a group address: the holder is on no guest line, so no answer of theirs is on it.
+    const toGroup = ev('grp1', '2026-09-24T15:00:00Z', [], { organizer: { email: 'lena@invented-cal.example' },
+      attendees: [{ email: 'lena@invented-cal.example', organizer: true, responseStatus: 'accepted' }, { email: 'everyone@invented-group.example', responseStatus: 'needsAction' }] });
+    await fakeCalendar(dir, juan.email, { id: 'primary' }, [lenaAt('inv1', '2026-09-20', 'needsAction'), lenaAt('inv2', '2026-09-21', 'declined'), lenaAt('inv3', '2026-09-22', 'accepted'), declinedGuest, toGroup]);
     await sync();
-    const invites = async () => db.query<{ day: string }>(`select held_on::text "day" from meetings.meeting where source = 'calendar' and held_on between '2026-09-20' and '2026-09-23' and entity_id = any($1::uuid[]) order by 1`, [[lena, firm]]);
+    const invites = async () => db.query<{ day: string }>(`select held_on::text "day" from meetings.meeting where source = 'calendar' and held_on between '2026-09-20' and '2026-09-24' and entity_id = any($1::uuid[]) order by 1`, [[lena, firm]]);
     const inv = await invites();
     await fakeCalendar(dir, juan.email, { id: 'primary' }, [lenaAt('inv3', '2026-09-22', 'needsAction')]);
     const unaccepted = await sync();
     const invAfter = await invites();
-    check('Calendar: an outside invite counts only once someone here accepts it; an unanswered or declined one, or a guest who declined, adds no meeting, and one no longer accepted goes',
+    check('Calendar: an outside invite counts only once someone here accepts it; an unanswered or declined one, one sent to a group address, or a guest who declined, adds no meeting, and one no longer accepted goes',
       inv.length === 2 && inv.every((x) => x.day === '2026-09-22') && unaccepted.complete && !invAfter.length,
       JSON.stringify({ first: inv.map((x) => x.day), invAfter: invAfter.map((x) => x.day) }));
   } finally {

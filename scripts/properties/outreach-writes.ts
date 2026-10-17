@@ -267,13 +267,16 @@ export async function outreachWriteProperties(check: Check, db: Db) {
   // A request key replays only for its own token and the same request; an update key is the pursuit's.
   const rw2 = await token(juan, [OUTREACH_READ, OUTREACH_WRITE]);
   const keyed = { entityId: personE, email: 'keyed@invented-person.example', source: 'gmail-signature', idempotencyKey: 'props-desk-key-reuse' };
+  // A replay comes back from jsonb, which orders keys its own way.
+  const sorted = (v: unknown): unknown => Array.isArray(v) ? v.map(sorted) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, sorted(x)])) : v;
+  const sameAnswer = (a: unknown, b: unknown) => a !== undefined && JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
   const k1 = await post('contacts', keyed), kSame = await post('contacts', keyed), kOther = await post('contacts', keyed, rw2);
   const kArgs = await post('contacts', { ...keyed, email: 'keyed2@invented-person.example' });
   const lpK = await pursuit(await entity('Invented Outreach Key Org'), fund.id, 'connecting');
   const upd = (pursuitId: string) => post('update', { pursuitId, words: 'Invented note.', idempotencyKey: 'props-desk-update-shared-key', applied: {} });
   const ua = await upd(lpS), ub = await upd(lpK);
   check('Outreach writes: a request key replays only to the token that used it, for the same request; an update key is per LP (17 Oct 2026)',
-    k1.status === 200 && kSame.status === 200 && JSON.stringify(kSame.json?.data) === JSON.stringify(k1.json?.data) && kOther.status === 409 && kArgs.status === 409
+    k1.status === 200 && kSame.status === 200 && sameAnswer(kSame.json?.data, k1.json?.data) && kOther.status === 409 && kArgs.status === 409
       && ua.status === 200 && ub.status === 200 && ub.json?.data?.created === true && ub.json?.data?.updateId !== ua.json?.data?.updateId,
-    `first ${k1.status}; same ${kSame.status} same answer ${JSON.stringify(kSame.json?.data) === JSON.stringify(k1.json?.data)}; other token ${kOther.status}; other args ${kArgs.status}; update ${ua.status}/${ub.status} created ${ub.json?.data?.created}`);
+    `first ${k1.status}; same ${kSame.status} same answer ${sameAnswer(kSame.json?.data, k1.json?.data)}; other token ${kOther.status}; other args ${kArgs.status}; update ${ua.status}/${ub.status} created ${ub.json?.data?.created}`);
 }

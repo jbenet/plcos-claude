@@ -5,9 +5,10 @@ import { openTicket } from '@/modules/governance';
 import { finishRun, startRun } from '@/modules/sources';
 import { CHANNEL_LABEL, isAutoReply, isEvent, raiseWindows, type Touchpoint } from '@/modules/meetings';
 import { sentByThem, tracePairs } from '@/lib/comms/read';
+import { isNameMatch } from '@/lib/calendar-match';
 import { STEP_LABEL, closeStates, type CloseTrack, type CommitmentEvent } from '@/modules/pipeline';
 import {
-  LadderRefused, ON_RECORD_RUNGS, RUNGS, RUNG_LABEL, getPursuit, listPursuits, recordClimbOnRecord, retractedRefs, rungIndex,
+  LadderRefused, ON_RECORD_RUNGS, RUNGS, RUNG_LABEL, getPursuit, listPursuits, recordClimbOnRecord, retractedRefs, retractedRungs, rungIndex,
   type ClimbRung, type LadderRung, type Pursuit,
   setStatuses,
 } from '@/modules/strategy';
@@ -69,6 +70,12 @@ function said(t: Touchpoint): string {
 const money = (n: number | null) => (n ? ` of $${n >= 1e6 ? `${+(n / 1e6).toFixed(2)}M` : `${Math.round(n / 1e3)}K`}` : '');
 
 /**
+ * A calendar entry matched to the LP only by a name in its title or description, no guest of theirs on it: whoever wrote
+ * the invite chose that text, so it is shown (with "Not this LP") but climbs nothing on its own (red team, 17 Oct 2026).
+ */
+const nameOnly = (t: Pick<Touchpoint, 'source' | 'summary'>) => t.source === 'calendar' && isNameMatch(t.summary);
+
+/**
  * What the records here support, rung by rung. Evidence only: a meeting or call that happened,
  * from the calendar or logged here; a reply from them; and close-track events a person recorded
  * here. An Affinity field, an Affinity "signed" or "wired", and a note are claims, not records,
@@ -81,7 +88,7 @@ export function recordsOnFile(touches: Touchpoint[], tracks: CloseTrack[], now =
   let meeting: Touchpoint | undefined, gathering: Touchpoint | undefined, reply: Touchpoint | undefined;
   const earlier = (t: Touchpoint, than: Touchpoint | undefined) => !than || t.on!.getTime() < than.on!.getTime();
   for (const t of touches) {
-    if (t.viaOrganization || !t.on || t.on.getTime() > now.getTime()) continue;
+    if (t.viaOrganization || !t.on || t.on.getTime() > now.getTime() || nameOnly(t)) continue;
     // A meeting with them, not our event with twenty others (N81): coming to an event is opting in.
     if ((t.channel === 'meeting' || t.channel === 'call') && !isEvent(t)) { if (earlier(t, meeting)) meeting = t; }
     if (isEvent(t)) { if (earlier(t, gathering)) gathering = t; }
@@ -181,7 +188,7 @@ export function statusFromRecords(
   if (at < 0) return null;
   const from = Math.max(since?.getTime() ?? 0, heldSince ? heldSince.getTime() + 1 : 0);
   const fresh = touches
-    .filter((t) => !t.viaOrganization && t.on && t.on.getTime() >= from && t.on.getTime() <= now.getTime()
+    .filter((t) => !t.viaOrganization && !nameOnly(t) && t.on && t.on.getTime() >= from && t.on.getTime() <= now.getTime()
       && !isAutoReply({ direction: t.direction, aboutBasis: t.aboutBasis ?? t.summary }))
     .sort((a, b) => a.on!.getTime() - b.on!.getTime());
   const engaged = fresh.find((t) => ((t.channel === 'meeting' || t.channel === 'call') && !isEvent(t))
@@ -409,6 +416,7 @@ async function propose(only?: string): Promise<ReconcileCounts> {
       union select identity.canonical_entity_id(entity_id)::text from identity.source_record where source = 'app_user'`,
   )).map((r) => r.id));
   const retracted = await retractedRefs(db, only);
+  const retractedAt = await retractedRungs(db, only);
   const [windows, held] = await Promise.all([raiseWindows(), undoneAt(db, actor, only)]);
   const recorded = 'Recorded by Reconciliation from the records on file, without an approval (issue 0137, Juan, 8 Oct 2026).';
   for (const live0 of live) {
@@ -448,7 +456,8 @@ async function propose(only?: string): Promise<ReconcileCounts> {
     let blocked = false;
     for (const r of f.climb) {
       if (!ON_RECORD_RUNGS.includes(r.rung)) break;
-      if (retracted.has(`${p.pursuitId}|${r.ref}`)) { blocked = true; break; }
+      const undone = retractedAt.get(`${p.pursuitId}|${r.rung}`);
+      if (retracted.has(`${p.pursuitId}|${r.ref}`) || (undone !== undefined && r.on.getTime() <= undone)) { blocked = true; break; }
       own.push({ rung: r.rung, evidenceKind: r.kind, evidenceRef: r.ref, evidenceNote: r.note, occurredAt: r.on.toISOString() });
     }
     if (own.length) {

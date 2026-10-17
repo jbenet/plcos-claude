@@ -49,6 +49,12 @@ export async function reconciliationProperties(ctx: AffinityContext & { n: (sql:
   // Taken back: gone, and not recorded again from the same records.
   const tookBack = await sg.retractOnRecord(juanId, { pursuitId: nadia!.pursuit_id, rung: 'connector_willing' });
   const third = await rc.reconcile(null);
+  // An older record of the same LP filed later (a backfilled message, Affinity's copy) is no new reason either.
+  await adb.query(`insert into meetings.meeting (entity_id, owner_id, held_on, channel, direction, summary)
+    select p.entity_id, $2, (select min(m.held_on) - 1 from meetings.meeting m where m.entity_id = p.entity_id and m.held_on is not null), 'meeting', 'both', 'Invented earlier meeting'
+      from strategy.pursuit p where p.pursuit_id = $1`, [nadia!.pursuit_id, juanId]);
+  const fourth = await rc.reconcile(null);
+  await adb.query(`delete from meetings.meeting where summary = 'Invented earlier meeting'`);
   const afterBack = await sg.getPursuit(nadia!.pursuit_id);
   const reasked = await n(`select count(*)::text as n from governance.approval_ticket where subject_id = $1 and kind = 'STAGE' and decision is null`, [nadia!.pursuit_id]);
   if (portfolioCo) await adb.query(`delete from network.portfolio where portfolio_id = 'invented-0137'`);
@@ -59,11 +65,11 @@ export async function reconciliationProperties(ctx: AffinityContext & { n: (sql:
       climbed.events.some((e) => e.rung === 'connector_willing' && e.evidenceKind === 'not_applicable') &&
       asPerson instanceof sg.LadderRefused && above instanceof sg.LadderRefused && ticketless instanceof Error &&
       (!portfolioCo || (portfolioRungs === 0 && first.notLp >= 1)) &&
-      tookBack >= 3 && afterBack?.rung === null && third.recorded === 0 && reasked === 0,
+      tookBack >= 3 && afterBack?.rung === null && third.recorded === 0 && fourth.recorded === 0 && reasked === 0,
     `${first.recorded} recorded (${mineNew.length} rungs, ${unbacked} without a record behind them or unmarked), ladder ${ladder0} → ${ladder1}; ${proposedLow} conversation-rung proposals; ` +
       `again: ${second.recorded} recorded, ${second.proposed} proposed; the system actor can be switched to: ${canBecome ? 'YES' : 'no'}; Nadia → ${climbed?.rung} (${climbed?.events.map((e) => `${e.rung}:${e.evidenceKind}`).join(', ')}); ` +
       `as a person: ${asPerson instanceof sg.LadderRefused ? 'refused' : 'RECORDED'}; above Meeting held: ${above instanceof sg.LadderRefused ? 'refused' : 'RECORDED'}; a ticketless approval path: ${ticketless instanceof Error ? 'refused' : 'RECORDED'}; ` +
-      `portfolio company: ${portfolioCo ? `${portfolioRungs} rungs, ${first.notLp} not an LP` : 'no fixture'}; taken back: ${tookBack} rungs, then ${afterBack?.rung ?? 'nothing on file'}, recorded again ${third.recorded}, asked ${reasked}`,
+      `portfolio company: ${portfolioCo ? `${portfolioRungs} rungs, ${first.notLp} not an LP` : 'no fixture'}; taken back: ${tookBack} rungs, then ${afterBack?.rung ?? 'nothing on file'}, recorded again ${third.recorded}, after an older record ${fourth.recorded}, asked ${reasked}`,
   );
 
   // What a touchpoint is about (N59): the raise only when it says so, and only inside the
@@ -189,6 +195,22 @@ export async function reconciliationProperties(ctx: AffinityContext & { n: (sql:
       autoIgnored && !onlyEvent.meeting_held && /came to our event/.test(onlyEvent.target_opted_in?.note ?? '') &&
         both.meeting_held?.ref.includes(':2:') === true && /came to our event/.test(both.target_opted_in?.note ?? '') && sum.meetingDates.length === 1,
       `an automatic reply after our note: ${autoIgnored ? 'no word from them, our note still waits' : 'COUNTED AS A REPLY'}; event alone: held ${onlyEvent.meeting_held ? 'PROPOSED' : 'not proposed'}, opted in "${(onlyEvent.target_opted_in?.note ?? 'none').slice(0, 40)}"; with a later one-to-one: held from ${both.meeting_held?.ref.split(':')[2] ?? 'none'}; meetings counted: ${sum.meetingDates.length}`);
+  }
+
+  // A calendar entry that only names the LP climbs nothing, nor moves a status (red team, 17 Oct 2026): its writer chose the words.
+  {
+    const rcx = await import('../../lib/reconcile');
+    const { MATCHED_BY_NAME } = await import('../../lib/calendar-match');
+    const named = { touchpointId: 'n1', entityId: 'e', entityName: 'E', vehicleId: null, vehicleName: null, channel: 'meeting' as const, kind: null,
+      on: new Date('2026-05-01T00:00:00Z'), scheduledFor: null, direction: 'both' as const, ownerName: 'x', attendees: [], summary: MATCHED_BY_NAME,
+      read: null, readByName: null, source: 'calendar', sourceRef: 'event:k:e', viaOrganization: null,
+      about: 'raise' as const, aboutVehicles: ['neurotech'], aboutBasis: null, aboutBy: 'claude' as const, groupSize: 1 };
+    const now = new Date('2026-09-01T00:00:00Z');
+    const onFile = rcx.recordsOnFile([named], [], now), withGuest = rcx.recordsOnFile([{ ...named, summary: null }], [], now);
+    const moved = rcx.statusFromRecords({ status: 'connecting' } as never, [named], now);
+    check('A calendar entry matched only by name records no rung and moves no status; the same entry with their guest on it does',
+      !onFile.meeting_held && !onFile.target_opted_in && moved === null && Boolean(withGuest.meeting_held),
+      `by name: held ${onFile.meeting_held ? 'RECORDED' : 'no'}, opted in ${onFile.target_opted_in ? 'RECORDED' : 'no'}, status ${moved?.to ?? 'unchanged'}; with a guest: held ${withGuest.meeting_held ? 'yes' : 'NO'}`);
   }
 
   // Which vehicles each event is about (N81): the fundraising domain reads a message's

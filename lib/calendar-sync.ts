@@ -232,7 +232,9 @@ export async function syncCalendars(db: Db, actor: string, o: { runtime?: Runtim
           const s = seen.get(k) ?? { event: e, holders: new Set<string>(), accepted: false };
           // Held, not just received: the holder made it, or said yes or maybe. An invite nobody answered is a stranger's ask.
           const me = e.attendees.find((a) => a.self);
-          if (e.organizer?.self || !me || me.responseStatus === 'accepted' || me.responseStatus === 'tentative') s.accepted = true;
+          // No answer of theirs on it (a group address invited, a calendar shared with them) is no yes either: kept below only
+          // when someone on the team organized it (red team, 17 Oct 2026).
+          if (e.organizer?.self || me?.responseStatus === 'accepted' || me?.responseStatus === 'tentative') s.accepted = true;
           // A guest's copy can lack the description the organizer's has: keep the fuller one.
           if (!s.event.description && e.description) s.event = e;
           s.holders.add(u.id);
