@@ -68,8 +68,21 @@ function rewrite(req: NextRequest, path: string, vehicle: string | null = null):
   return NextResponse.rewrite(target, { request: { headers } });
 }
 
+/**
+ * A server with no sign-in (the local switcher) on the real data or a copy of it answers only addresses a person
+ * types: an IP, a name with no dot (localhost, the Mac's own), or a .local name. A page on another site can point its own name at this machine (DNS
+ * rebinding); its requests would carry that name, set their own user cookie and pass the same-origin check
+ * (red-team pass, 17 Oct 2026). The demo is invented data and stays open to any name.
+ */
+function foreignName(req: NextRequest): boolean {
+  if (deployment.auth.provider !== 'local' || deployment.data.profile === 'demo') return false;
+  const host = (req.headers.get('host') ?? '').toLowerCase().replace(/:\d+$/, '');
+  return !(!host.includes('.') || host.endsWith('.local') || /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || /^\[[0-9a-f:.]+\]$/.test(host));
+}
+
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  if (foreignName(req)) return new NextResponse('This server answers only its own addresses.', { status: 421 });
   if (pathname === '/health') return rewrite(req, '/api/health');
   // A rewrite can reenter the proxy. Only our signed, request-bound context can bypass
   // canonical redirects; arbitrary client markers and modified contexts are discarded.

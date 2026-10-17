@@ -47,6 +47,11 @@ data on Juan's Mac.
   any address, which told that host who opened the page and when. Only the issue's own attachments and this site's
   own pictures show; anything else shows as not attached.
 
+- **The Mac's real-data server answers only its own names.** With no sign-in (the local switcher), a page on another
+  site could point its own name at the Mac (DNS rebinding), set a user cookie and act as anyone, since its Origin
+  and Host matched. A server on the real data, or a copy of it, now answers only an IP, a name with no dot or a
+  `.local` name; anything else gets 421. The demo is unchanged; Railway signs people in and is unaffected.
+
 ### Left as is
 
 - `/api/health?affinity=1` stays public: threads read the Affinity budget with it and it holds counts only.
@@ -54,3 +59,7 @@ data on Juan's Mac.
   it automatically is Juan's call.
 - A message ingested through a token limited to some vehicles still lets Reconciliation look at that LP on every
   vehicle: the mail is a fact about the LP, and Reconciliation is the system, not the token.
+- A LabOS member not on the roster joins as a Viewer on first visit (`resolveLabosUser`), where the rev 2 design said
+  403. The property suite asserts the current behaviour, so it reads as a later decision; LabOS sign-in is off today.
+- Off Railway, the setup code's per-address limit trusts one proxy hop. The code is 48 bits, so guessing stays
+  impractical.
