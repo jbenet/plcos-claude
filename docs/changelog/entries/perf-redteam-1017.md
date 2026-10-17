@@ -39,6 +39,12 @@ data on Juan's Mac.
   country lookups and number formatters are kept, Dakota estimates stop at each LP's newest row, and packed ids keep
   their codes: on the large invented data stats 330 → 294 ms, pipeline 168 → 158 ms (medians of 20 cycles).
 
+- **Rebuilds after a write are cheaper.** LP stats read each firm's contacts once instead of once per affiliation
+  (firms' people 60 → 17 ms); a vehicle's readings find each LP's latest proposal by its index (47 → 13 ms); packed
+  rows decode by lookup table; Strategy formats money with one formatter. In-process rebuilds: stats 206 → 163 ms,
+  conversion 280 → 158 ms; Fit's first load after a write 75 → 55 ms. Warm pages were already under ~75 ms and are
+  bound by rendering, so they barely move.
+
 ### Red team
 
 - **Score detail and the desktop app's sign-in check for people limited to some vehicles.** `/selection/detail` and

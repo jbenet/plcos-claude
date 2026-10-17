@@ -43,7 +43,14 @@ export interface PackedRows {
 /** An index per row; with 36 distinct values or fewer, one base-36 character per row (a lane, a standing). */
 type Index = number[] | string;
 const SMALL = 36;
-const at = (i: Index, r: number) => (typeof i === 'string' ? parseInt(i[r]!, 36) : i[r]!);
+/**
+ * Base-36 digits by character code, both ways: `parseInt(c, 36)` and `x.toString(36)` once per row were a tenth of
+ * packing and unpacking the floor (perf pass, 17 Oct 2026). Same digits, lowercase as toString gives them.
+ */
+const DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz';
+const DIGIT_OF = new Int8Array(128).fill(-1);
+for (let d = 0; d < DIGITS.length; d++) { DIGIT_OF[DIGITS.charCodeAt(d)] = d; DIGIT_OF[DIGITS.toUpperCase().charCodeAt(d)] = d; }
+const at = (i: Index, r: number) => (typeof i === 'string' ? DIGIT_OF[i.charCodeAt(r)]! : i[r]!);
 
 function plain(value: unknown): boolean {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
@@ -81,7 +88,9 @@ function share(values: unknown[]) {
   }
   const small = d.length <= SMALL;
   dictLength += small ? i.length : indexLength;
-  return { d, i: small ? i.map((x) => x.toString(36)).join('') : i, rawLength, dictLength };
+  let digits = '';
+  if (small) for (const x of i) digits += DIGITS[x]!;
+  return { d, i: small ? digits : i, rawLength, dictLength };
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -109,17 +118,36 @@ function uuidOut(v: string) {
   }
   return code;
 }
+/**
+ * Each character's six bits by code, and each 12-bit value's three hex digits, made on first use: looking a character
+ * up in B64 and printing every three digits was a fifth of unpacking the floor (perf pass, 17 Oct 2026).
+ */
+let B64_OF: Int8Array | undefined;
+let HEX3: string[] | undefined;
 function uuidsIn(text: string, n: number) {
-  const out: string[] = [];
+  if (!B64_OF || !HEX3) {
+    B64_OF = new Int8Array(128).fill(-1);
+    for (let d = 0; d < 64; d++) B64_OF[B64.charCodeAt(d)] = d;
+    HEX3 = Array.from({ length: 4096 }, (_, x) => x.toString(16).padStart(3, '0'));
+  }
+  const of = B64_OF, hex3 = HEX3;
+  const out = new Array<string>(n);
   for (let r = 0; r < n; r++) {
     let hex = '';
-    for (let at = r * 22; at < r * 22 + 22; at += 2) hex += ((B64.indexOf(text[at]!) << 6) | B64.indexOf(text[at + 1]!)).toString(16).padStart(3, '0');
-    out.push(`${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`);
+    for (let at = r * 22; at < r * 22 + 22; at += 2) hex += hex3[(of[text.charCodeAt(at)]! << 6) | of[text.charCodeAt(at + 1)]!]!;
+    out[r] = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
   }
   return out;
 }
 
-const cut = (v: string) => Math.max(v.lastIndexOf('='), v.lastIndexOf(':'), v.lastIndexOf('/')) + 1;
+/** Just after the last `=`, `:` or `/`; 0 when there is none. One scan from the end, not three (perf pass, 17 Oct 2026). */
+function cut(v: string) {
+  for (let at = v.length - 1; at >= 0; at--) {
+    const ch = v.charCodeAt(at);
+    if (ch === 61 || ch === 58 || ch === 47) return at + 1; // = : /
+  }
+  return 0;
+}
 
 /**
  * Text split after its last `=`, `:` or `/`, when shared heads and plain tails are at least 5% shorter; else null. A tail equal
@@ -226,11 +254,13 @@ function ending(c: PackedRows['c'], plainColumns: Array<[string, unknown[]]>) {
   for (const [k, values] of texts) {
     const col = c[k]!;
     if (sources.has(k) || 'a' in col || ('h' in col && col.r)) continue;
-    const length = JSON.stringify(col).length;
+    // Measured only once some column could be its source: most never have one (perf pass, 17 Oct 2026).
+    let length: number | undefined;
     for (const [o, other] of texts) {
       if (o === k || references.has(o) || ('h' in c[o]! && (c[o] as { r?: string }).r) || !values.every((v, r) => v.length > other[r]!.length && v.startsWith(other[r]!))) continue;
       const { d, i } = share(values.map((v, r) => v.slice(other[r]!.length)));
       const x = { a: o, x: { d, i } };
+      length ??= JSON.stringify(col).length;
       if (JSON.stringify(x).length < length * 0.8) { c[k] = x; references.add(k); sources.add(o); break; }
     }
   }

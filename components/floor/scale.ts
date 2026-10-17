@@ -1,5 +1,6 @@
 import type { FloorItem } from '@/lib/floor-client';
 import { stateOf } from './shared';
+import { grouped } from '@/lib/money';
 
 /**
  * How the views stay readable at the volume the raise has now (issue 0066): a few named marks
@@ -47,8 +48,11 @@ export function tally<T>(rows: T[], keyOf: (row: T) => string): Array<{ key: str
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
-/** 1,998 rather than 1998: counts at this volume are read, not parsed. */
-export const n = (value: number) => value.toLocaleString('en-US');
+/**
+ * 1,998 rather than 1998: counts at this volume are read, not parsed. One formatter, not one per count
+ * (perf pass, 17 Oct 2026); the same text as `toLocaleString('en-US')`.
+ */
+export const n = (value: number) => grouped(value);
 
 /** Move the reader to the list under the view, where a filter just landed. */
 export function toList() {

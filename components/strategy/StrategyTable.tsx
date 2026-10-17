@@ -8,6 +8,7 @@ import { SpvMark } from './SpvMark';
 import { spvWords, type SpvRowMark } from '@/modules/strategy/client';
 import sp from './spv.module.css';
 import s from './strategy.module.css';
+import { usdShort } from '@/lib/money';
 
 /** Per-LP inputs behind a row's score. Values only; the explanation is written once, here. */
 export interface StrategyRowBasis {
@@ -42,7 +43,8 @@ const filtersFrom = (params: Record<string, string>): Filters => ({
 const sortFrom = (params: Record<string, string>): Sort => ({
   key: keys.find(k => k === params.sort) ?? 'priority', dir: params.dir === 'asc' ? 1 : -1,
 });
-const money = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(n);
+// One formatter for every cell, not one per cell (perf pass, 17 Oct 2026).
+const money = usdShort;
 const label = (v: string) => v.charAt(0).toUpperCase() + v.slice(1).replaceAll('-', ' ');
 const PAGE = 50;
 

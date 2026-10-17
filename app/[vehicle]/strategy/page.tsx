@@ -21,12 +21,14 @@ import { gapAdvice, pipelineAdvice, type GapId, type Sentence } from '@/modules/
 import { StatusMark } from '@/components/ui/StatusMark';
 import { boardFor, listUsers, LEVER_LABEL, LEVER_MEANS, type Play } from '@/modules/plays';
 import s from './strategy.module.css';
+import { grouped, usdShort } from '@/lib/money';
 
 // GUESS: enough to read a week's moves by eye; the rest are on each LP's log.
 const WEEKLY_SHOWN = 100;
 export const dynamic = 'force-dynamic';
-const money = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 1, notation: 'compact' }).format(n);
-const count = (n: number) => n.toLocaleString('en-US');
+// Formatters made once, not one per figure (perf pass, 17 Oct 2026).
+const money = usdShort;
+const count = grouped;
 const date = (d: Date | null | undefined) => d ? shortDate(d) : 'date unknown';
 const plural = (n: number, one: string, many = `${one}s`) => `${count(n)} ${n === 1 ? one : many}`;
 function Ref({ label, href, at, basis, strong = false }: { label: string; href: string; at: Date; basis: string; strong?: boolean }) {

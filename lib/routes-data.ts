@@ -6,6 +6,7 @@ import { routeComparison, type ComparisonOptions } from '@/components/routes/rou
 import { buildCache } from '@/lib/build-cache';
 import { auth } from '@/lib/auth';
 import { shortDate } from '@/lib/time';
+import { usdShort } from '@/lib/money';
 import { affiliationsFor, listEntities } from '@/modules/identity';
 import { listAsks } from '@/modules/coordination';
 import { listAssessments, listFirmProfiles, FIRM_CLASS_LABEL, BLOCKER_SHORT } from '@/modules/fit';
@@ -60,7 +61,8 @@ const pickerInputs = buildCache(async (vehicleId: string) => {
     const founder = roles.find((a) => /\b(co[ -]?)?founder\b/i.test(a.role) && a.source);
     const plRole = roles.find((a) => a.orgName === 'Protocol Labs' && a.source);
     const familiar = assessment?.perceptions.filter((p) => ['familiar', 'deep'].includes(p.familiarity)) ?? [];
-    const amount = (n: number) => new Intl.NumberFormat('en-US', { notation: 'compact', style: 'currency', currency: 'USD', maximumFractionDigits: 1 }).format(n);
+    // One formatter for every target, not two per target (perf pass, 17 Oct 2026).
+    const amount = usdShort;
     return {
       lpIcon: profile ? ({ individual: 'person', sfo: 'person', mfo: 'list', ria: 'chart', foundation: 'coin', endowment: 'folder', fof: 'coin', institution: 'folder', corporate: 'folder' } as const)[profile.firmClass] : t.entityType === 'person' ? 'person' : 'folder',
       lpType: profile ? FIRM_CLASS_LABEL[profile.firmClass] : t.entityType,

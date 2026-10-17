@@ -22,9 +22,18 @@ export function usdCompact(amount: number): string {
  */
 const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const GROUPED = new Intl.NumberFormat('en-US');
+const USD_SHORT = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 });
 
 export function usd(amount: number): string {
   return USD.format(amount);
+}
+
+/**
+ * Compact dollars, one decimal at most: $2.5M, $750K, $40. Strategy's tables made a formatter per cell, about a tenth
+ * of rendering the page (perf pass, 17 Oct 2026).
+ */
+export function usdShort(amount: number): string {
+  return USD_SHORT.format(amount);
 }
 
 /** A count or whole amount with thousands separators: 12,345 (what `n.toLocaleString('en-US')` gives). */
