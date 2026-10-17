@@ -296,8 +296,9 @@ export async function setAssetLink(actorId: string, assetId: string, raw: string
     const row = await tx.one<{ link: string | null }>('select link from content.asset where asset_id = $1 for update', [assetId]);
     if (!row) throw new Error('No such material.');
     if (row.link === link) return { link };
+    // Both links go on the record (red team, 17 Oct 2026): the mail desk offers this link with an approved material.
     await tx.query('update content.asset set link = $2 where asset_id = $1', [assetId, link]);
-    await appendAudit({ actorId, action: 'content.asset_link_set', subjectType: 'content_asset', subjectId: assetId, detail: { had: row.link !== null, has: link !== null } }, tx);
+    await appendAudit({ actorId, action: 'content.asset_link_set', subjectType: 'content_asset', subjectId: assetId, detail: { had: row.link, has: link } }, tx);
     return { link };
   });
 }

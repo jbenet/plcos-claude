@@ -157,7 +157,7 @@ export class CloseRefused extends Error {
 
 async function event(
   tx: Queryable, actorId: string, exposureId: string,
-  e: { step: string; on: Date | null; amount?: number | null; document?: string | null; reason?: string | null; reference?: string | null },
+  e: { step: string; on: Date | null; amount?: number | null; document?: string | null; reason?: string | null; reference?: string | null; before?: number | null },
 ): Promise<void> {
   await tx.query(
     `insert into pipeline.commitment_event (exposure_id, step, occurred_on, amount, document, reason, reference, recorded_by)
@@ -168,7 +168,7 @@ async function event(
   await tx.query(
     `insert into platform.audit_log (actor_id, action, subject_type, subject_id, detail)
      values ($1, $2, 'exposure', $3, $4)`,
-    [actorId, `commitment.${e.step}`, exposureId, JSON.stringify({ on: e.on?.toISOString().slice(0, 10) ?? null, amount: e.amount ?? null, document: e.document ?? null, reason: e.reason ?? null })],
+    [actorId, `commitment.${e.step}`, exposureId, JSON.stringify({ on: e.on?.toISOString().slice(0, 10) ?? null, amount: e.amount ?? null, ...(e.before !== undefined ? { before: e.before } : {}), document: e.document ?? null, reason: e.reason ?? null })],
   );
 }
 
@@ -255,9 +255,10 @@ export async function reviseSoft(actorId: string, exposureId: string, args: { on
   const db = await getDb();
   await db.transaction(async (tx) => {
     // Under the row's lock, as hardening takes it: a revision racing an approval changes nothing (red team, 17 Oct 2026).
-    const changed = await tx.query(`update pipeline.exposure set amount = $2 where exposure_id = $1 and track = 'soft' and closed_at is null returning 1`, [exposureId, args.amount]);
-    if (!changed.length) throw new CloseRefused('That commitment was countersigned or closed meanwhile; nothing was revised.');
-    await event(tx, actorId, exposureId, { step: 'soft', on: dated(args.on), amount: args.amount });
+    const before = await tx.one<{ amount: string | null }>(`select amount::text from pipeline.exposure where exposure_id = $1 and track = 'soft' and closed_at is null for update`, [exposureId]);
+    if (!before) throw new CloseRefused('That commitment was countersigned or closed meanwhile; nothing was revised.');
+    await tx.query(`update pipeline.exposure set amount = $2 where exposure_id = $1`, [exposureId, args.amount]);
+    await event(tx, actorId, exposureId, { step: 'soft', on: dated(args.on), amount: args.amount, before: before.amount === null ? null : Number(before.amount) });
   });
 }
 

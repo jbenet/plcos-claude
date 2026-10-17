@@ -190,6 +190,9 @@ class LocalCopy {
       if (!url.pathname.startsWith('/_next/') && !url.pathname.startsWith('/api/')) this.lastPageAt = Date.now();
     }
     if (this.phase !== 'ready') return false;
+    // Only while the signed-in person is an Admin: a demotion seen by any request stops the copy at once, not at the
+    // next sync after a back-off (red team, 17 Oct 2026).
+    if (this.state.user?.access !== 'admin') return false;
     // A new build on the server: this one keeps answering, with the data it was built for, while the new one downloads
     // (about 8 s), and stops only to be replaced (16 Oct 2026). Sending pages to the server meanwhile reached a build that
     // had just started and had built nothing yet, and mixed two builds in one window. Its own changes still go there.
@@ -341,6 +344,7 @@ class LocalCopy {
     if (!json) try { json = JSON.parse(text); } catch { /* not json */ }
     if (res.status === 403 || res.status === 401 || (res.status >= 300 && res.status < 400)) {
       await this.refreshInfo();
+      if (this.state.user?.access !== 'admin') { this.phase = 'off'; this.detail = 'The local copy is for Admins; this app uses the live server.'; }
       throw new Error(`the server refused ${pathname.split('?')[0]} (${res.status})`);
     }
     if (!res.ok || !json?.ok) throw new Error(`${pathname.split('?')[0]} answered ${res.status}: ${(json?.error ?? text).slice(0, 200)}`);

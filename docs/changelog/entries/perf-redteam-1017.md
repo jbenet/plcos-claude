@@ -217,6 +217,12 @@ data on Juan's Mac.
   proposed again, and a write checks that no other batch has already noted the same mail.
 - **DocSend sign-in asks only for read scopes** when DocSend lists them apart, so a stored token can't change a data
   room even outside PLC OS's own client.
+- **A material's link change keeps both links on the record.** The mail desk offers the link next to an approved
+  material, and the audit row said only that a link was there before and after.
+- **Revising a soft amount keeps the old amount on the record.** An amount from the Affinity read had no earlier event,
+  so its first revision erased it.
+- **The Mac's local copy stops serving the moment its person is no longer an Admin.** It kept answering pages for up to
+  a back-off (30 s or more) after the server first refused it.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -305,3 +311,5 @@ data on Juan's Mac.
   second process reads the database.
 - The capital pool check shows an LP over budget but does not stop a hardening: refusing would be a new blocking rule,
   and those wait for Juan to ask for them.
+- Changing an approved material's link doesn't ask for approval again: pasting the DocSend link after approval is the
+  normal order, and both links are now audited.
