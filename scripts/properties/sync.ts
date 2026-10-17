@@ -230,14 +230,17 @@ export async function syncProperties(check: Check, db: Db) {
       evidence: [{ source: 'local:invented', as_of: '2026-10-07', quote: 'Invented comparison.' }] });
     const importsBefore = queued.length;
     const badW13 = await accept(push.secret, { workflow: 'W13', files: [{ path: 'identity-decisions-b1.jsonl', content: [{ ...decision('a'), decided_by: '' }] }] });
-    const w13a = await accept(push.secret, { workflow: 'W13', files: [{ path: 'identity-decisions-b1.jsonl', content: [decision('a'), decision('b')] }] });
-    const w13b = await accept(push.secret, { workflow: 'W13', files: [{ path: 'identity-decisions-b2.jsonl', content: [decision('b'), decision('c')] }] });
+    // A Team member's decision is their own, naming its members (red team, 17 Oct 2026); an Admin's push carries others'.
+    const memberW13 = await accept(push.secret, { workflow: 'W13', files: [{ path: 'identity-decisions-b0.jsonl', content: [decision('d')] }] });
+    const w13a = await accept(adminPush.secret, { workflow: 'W13', files: [{ path: 'identity-decisions-b1.jsonl', content: [decision('a'), decision('b')] }] });
+    const w13b = await accept(adminPush.secret, { workflow: 'W13', files: [{ path: 'identity-decisions-b2.jsonl', content: [decision('b'), decision('c')] }] });
     const decisionsFile = (await readFile(join(root, 'enrich', 'identity-decisions.jsonl'), 'utf8').catch(() => '')).trim().split('\n');
     check('SYNC push: W13 identity proposals are checked by row, appended to identity-decisions.jsonl without repeating a row, and queue no import',
       badW13.status === 422 && String(badW13.body.rejected?.[0]?.problems).includes('row 1: decided_by')
       && w13a.status === 201 && w13b.status === 201 && w13b.body.import === null && String(w13b.body.note).includes('1 proposal added')
+      && memberW13.status === 422 && String(memberW13.body.rejected?.[0]?.problems).includes('decided_by is the pusher')
       && decisionsFile.length === 3 && decisionsFile.map((l) => JSON.parse(l).group[0]).join('') === 'abc' && queued.length === importsBefore,
-      `bad ${badW13.status}, pushes ${w13a.status}/${w13b.status}, ${decisionsFile.length} rows, imports ${queued.length - importsBefore}`);
+      `bad ${badW13.status}, member ${memberW13.status}, pushes ${w13a.status}/${w13b.status}, ${decisionsFile.length} rows, imports ${queued.length - importsBefore}`);
     const audits = await auditOf(push.token.tokenId);
     const calls = audits.filter((a) => a.action === 'mcp.call' && a.detail.tool === 'sync_push');
     const outcomes = calls.map((a) => a.detail.outcome);

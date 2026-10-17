@@ -71,7 +71,7 @@ async function entitiesOf(addresses: string[], q: Queryable): Promise<string[]> 
        and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'`, [addresses])).map((r) => r.id);
   if (!people.length) return [];
   const firms = (await q.query<{ id: string }>(`select distinct identity.canonical_entity_id(org_entity)::text id from identity.affiliation
-     where ended_on is null and identity.canonical_entity_id(person_entity) = any($1::uuid[])`, [people])).map((r) => r.id);
+     where ended_on is null and coalesce(source, '') !~* '^dakota' and identity.canonical_entity_id(person_entity) = any($1::uuid[])`, [people])).map((r) => r.id);
   return [...new Set([...people, ...firms])].sort();
 }
 

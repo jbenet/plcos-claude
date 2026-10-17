@@ -179,7 +179,8 @@ async function pursuitsOf(entityId: string, u: AppUser, q: Queryable) {
      where identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id($1::uuid)
     union select p.pursuit_id::text, p.vehicle_id::text from identity.affiliation a join strategy.active_pursuit p
       on identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id(a.org_entity)
-     where identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id($1::uuid) and a.ended_on is null`, [entityId]);
+     where identity.canonical_entity_id(a.person_entity) = identity.canonical_entity_id($1::uuid) and a.ended_on is null
+       and coalesce(a.source, '') !~* '^dakota'`, [entityId]);
   return rows.filter((r) => can(u, 'mutate', { vehicle: r.vehicle_id }));
 }
 

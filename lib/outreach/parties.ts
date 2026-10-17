@@ -107,8 +107,10 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
   const lastEmail = new Map<string, string>();
   const firmsOf = new Map<string, string[]>();
   if (entities.length) {
+    // Never through a licensed (Dakota) employment row: a token is never licensed, and "their firm is in our pipeline"
+    // would tell it where they work (red team, 17 Oct 2026).
     for (const r of await db.query<{ id: string; org: string }>(`select distinct identity.canonical_entity_id(a.person_entity)::text id, identity.canonical_entity_id(a.org_entity)::text org
-        from identity.affiliation a where a.ended_on is null and identity.canonical_entity_id(a.person_entity) = any($1::uuid[])`, [entities])) {
+        from identity.affiliation a where a.ended_on is null and coalesce(a.source, '') !~* '^dakota' and identity.canonical_entity_id(a.person_entity) = any($1::uuid[])`, [entities])) {
       firmsOf.set(r.id, [...(firmsOf.get(r.id) ?? []), r.org]);
     }
     for (const r of await db.query<{ id: string; name: string }>(`select entity_id::text id, display_name name from identity.entity where entity_id = any($1::uuid[])`, [entities])) names.set(r.id, r.name);
@@ -117,7 +119,7 @@ export async function checkParties(u: AppUser, raw: Record<string, unknown>) {
          where identity.canonical_entity_id(p.entity_id) = any($1::uuid[])
         union select identity.canonical_entity_id(a.person_entity)::text, p.vehicle_id::text, p.status::text, 'firm' from identity.affiliation a
           join strategy.active_pursuit p on identity.canonical_entity_id(p.entity_id) = identity.canonical_entity_id(a.org_entity)
-         where a.ended_on is null and identity.canonical_entity_id(a.person_entity) = any($1::uuid[])
+         where a.ended_on is null and coalesce(a.source, '') !~* '^dakota' and identity.canonical_entity_id(a.person_entity) = any($1::uuid[])
         union select identity.canonical_entity_id(c.person_entity)::text, p.vehicle_id::text, p.status::text, 'contact' from strategy.pursuit_contact c
           join strategy.active_pursuit p on p.pursuit_id = c.pursuit_id where identity.canonical_entity_id(c.person_entity) = any($1::uuid[])`, [entities])) {
       const slug = slugOf.get(r.vehicle_id);

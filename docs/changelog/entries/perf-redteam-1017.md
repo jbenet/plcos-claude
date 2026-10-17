@@ -191,6 +191,13 @@ data on Juan's Mac.
 - **Withdraw and revise act only on an open soft commitment, under its lock.** A withdrawal from a page read before an
   approval could close a commitment that had just been countersigned. Two adjudications of one overlap at once lock the
   case, so it can't name one winner while the asks name the other.
+- **Licensed Dakota employment rows stay out of what tokens read.** Finding an LP's firm, the firm's pursuits, the
+  people a message is about and the addresses barred from a send all went through affiliations, including those from
+  Dakota's licensed list, so a token could learn of a Dakota-only tie. Those readers now skip Dakota rows, like the
+  research read layer already did.
+- **A Team member's pushed decisions are their own and on their vehicles.** A Team token could push a merge decision
+  signed with someone else's name, or one joining LPs on vehicles it can't change. Such a push now answers which row and
+  why; an Admin pushes others' decisions.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -274,3 +281,6 @@ data on Juan's Mac.
 - A note Affinity attaches to a meeting still dates that meeting by the note: the meeting is Affinity's own record.
 - DocSend visits name the visitor by the email they typed, unchecked. Visits feed only the conversion charts, never
   the consent ladder, so a made-up address can't move an LP.
+- The two data planes are kept apart by which module reads which schema, checked by `npm run boundaries`, not by
+  Postgres grants: the app connects as one role. Separate roles need a second connection pool; worth it when a
+  second process reads the database.

@@ -115,6 +115,24 @@ async function serverProblems(bundle: PushBundle, enrich: string, db: Db, caller
       // vehicle: only an Admin's push carries one. A Team member's merge names the group the review exported.
       const named = (f.content as Array<{ group?: unknown; decision?: unknown }>).flatMap((r, i) => r?.group === undefined && r?.decision === 'merge' ? [i + 1] : []);
       if (named.length && !admin) out.push({ path: f.path, problems: named.map((n) => `row ${n}: a merge that names its records instead of a review group comes from an Admin's push`) });
+      // A Team member's decision is theirs, under their own name, and about LPs on vehicles they may change: decided_by was
+      // free text, so a member on one SPV could file "Juan's" separation of an LP that is on Neurotech too (red team,
+      // 17 Oct 2026). Its members are named, so the vehicles can be checked here.
+      if (!admin) {
+        const me = [caller.user.handle, caller.user.name, caller.user.email].filter(Boolean).map((x) => String(x).trim().toLowerCase());
+        const rows = f.content as Array<{ decided_by?: unknown; members?: unknown }>;
+        const problems: string[] = [];
+        for (const [i, r] of rows.entries()) {
+          if (typeof r?.decided_by !== 'string' || !me.includes(r.decided_by.trim().toLowerCase())) problems.push(`row ${i + 1}: decided_by is the pusher (${caller.user.handle}); an Admin pushes others' decisions`);
+          const members = Array.isArray(r?.members) ? r.members.filter((m): m is string => typeof m === 'string' && UUID.test(m)) : [];
+          if (!members.length) { problems.push(`row ${i + 1}: a Team member's decision names its members`); continue; }
+          const on = await db.query<{ v: string }>(`select distinct p.vehicle_id::text v from strategy.active_pursuit p
+             where identity.canonical_entity_id(p.entity_id) = any(select identity.canonical_entity_id(x) from unnest($1::uuid[]) x)`, [members]);
+          const other = on.filter((x) => !can(caller.user, 'mutate', { vehicle: x.v }));
+          if (other.length) problems.push(`row ${i + 1}: its records are LPs on a vehicle you can't change; an Admin pushes it`);
+        }
+        if (problems.length) out.push({ path: f.path, problems });
+      }
       continue;
     }
     if (isRetire(f.content) && !retiring(bundle, f)) { out.push({ path: f.path, problems: ['only a W5 strategy file can be retired'] }); continue; }
