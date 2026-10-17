@@ -223,7 +223,7 @@ export async function addEntity(ctx: DeskContext, raw: Record<string, unknown>) 
           await tx.query(`insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body)
             values ($1, $2, 'mailbox', 'gmail', current_date, 'moderate', $3, '') on conflict (doc_id) do nothing`,
           [doc, `${owner.name}'s Gmail, through the mail desk`, 'An email address seen in correspondence in this mailbox and confirmed by its owner. Not proof the address is current.']);
-          const same = await tx.one(`select 1 from research.claim where identity.canonical_entity_id(entity_id) = $1::uuid
+          const same = await tx.one(`select 1 from research.claim where entity_id = any(identity.alias_ids(array[$1::uuid]))
             and superseded_by is null and field = 'email' and lower(btrim(value)) = $2 limit 1`, [entityId, a.email]);
           claimId = same ? null : (await tx.one<{ id: string }>(`insert into research.claim (entity_id, field, value, source, as_of, confidence, last_verified_by, last_verified_at)
             values ($1, 'email', $2, $3, current_date, $4, $5, $6) returning claim_id::text id`,

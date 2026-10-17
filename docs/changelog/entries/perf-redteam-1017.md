@@ -149,6 +149,15 @@ data on Juan's Mac.
   of 3×25 after a write: Neurotech pipeline 104 → 82 ms (−21%), all vehicles 114 → 99 ms, the scored pipeline
   90 → 75 ms. Pipeline, LP stats, conversion and plan data hash the same as before, warm and after each of eight
   kinds of write, with the clock frozen. Authorization, the vehicle filters and Dakota redaction are untouched.
+- **Finding the person behind an address no longer reads every claim.** Claims had no index on their value, so each
+  "who has this address" or "which firm has this domain" read all of them: Reconciliation's "did they send it
+  themselves" once per LP, the parties check, the calendar's guest lookups, and the add-an-LP and send-gate checks.
+  Two indexes match those reads' own conditions (`modules/research/migrations/007_claim_value_lookup.sql`), and the
+  reads that resolved every affiliation or claim row to its canonical record now ask the index for the record's
+  aliases. On the invented perf data with 6,000 addresses: comms_ingest of 50 new messages 584 → 446 ms (medians of
+  5 fresh copies), outreach_check_parties 46 → 31 ms, the calendar's guest people 72 → 5 ms and firms by domain
+  50 → 16 ms, one address's people 18 → 5 ms, a SEND ticket's 20-recipient restriction check 600 → 150 ms.
+  comms_trace does not read claims and is unchanged. Answers and the resulting database hash the same, clock frozen.
 
 ### Red team
 
