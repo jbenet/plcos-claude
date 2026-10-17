@@ -1,4 +1,5 @@
 import { strategyRouteSummaries } from '@/modules/network';
+import { pursuitsOn } from '@/modules/strategy';
 import { lpContactsFor } from '@/modules/strategy/lp-contacts';
 import { getDb } from '@/lib/db';
 import { buildCache, liveRevisions } from '@/lib/build-cache';
@@ -38,19 +39,15 @@ export interface StatsData {
   onHistory: number;
 }
 
-export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsData> => {
-  const db = await getDb();
-  const [{ rows, onHistory, asOf }, vehicles, readings, assessments] = await Promise.all([
-    pipelineData(vehicleId), listVehicles(), vehicleReadings(vehicleId || null), listAssessments(vehicleId || null),
-  ]);
-  const ids = [...new Set(rows.map((r) => r.entityId))];
-  const pursuitIds = rows.map((r) => r.id);
-  const vehicleIds = [...new Set(rows.map((r) => r.vehicleId))];
-  const orgIds = [...new Set(rows.filter((r) => r.isOrg).map((r) => r.entityId))];
-  // The reads that need only the LPs start now, beside the firms' people below rather than after them: a rebuild
-  // waited for that read before asking any of these (performance pass, 17 Oct 2026).
-  const lpReads = Promise.all([
-    db.query<{ id: string; t: string }>(`select entity_id::text id, entity_type::text t from identity.entity where entity_id=any($1::uuid[])`, [ids]),
+type Db = Awaited<ReturnType<typeof getDb>>;
+type Vehicle = Awaited<ReturnType<typeof listVehicles>>[number];
+
+/** The reads that need only the LPs: their kind, research, pursuits, prospects, plans, money and paths. */
+function lpOnlyReads(db: Db, vehicles: Vehicle[], ids: string[], pursuitIds: string[], vehicleIds: string[]) {
+  return Promise.all([
+    // `live` says whether pipelineData counts the LP as an organisation (listEntities: merged and retired are not).
+    db.query<{ id: string; t: string; live: boolean }>(`select entity_id::text id, entity_type::text t, (merged_into is null and retired_at is null) live
+       from identity.entity where entity_id=any($1::uuid[])`, [ids]),
     db.query<{ id: string; n: string }>(
       `${WANTED} select w.target::text id, count(*)::text n from wanted w join research.claim c on c.entity_id=w.entity_id
        where c.superseded_by is null group by 1`, [ids]),
@@ -73,12 +70,16 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
     ((contacts) => Promise.all([...new Set(vehicles.map(v => v.kind))].map(async kind =>
       [...(await strategyRouteSummaries(ids, kind, contacts)).values()].map(r => ({ id: r.entityId, kind, tier: r.tier })))).then(groups => groups.flat()))(lpContactsFor(ids)),
   ]);
-  lpReads.catch(() => undefined); // awaited below; a failure there, not an unhandled rejection here
-  // A firm's people now: their research can say what the firm is, and where it is. `speaks` marks the
-  // ones whose word counts for the firm's type — its contacts on a pursuit, or people whose primary
-  // affiliation it is and who are not on it only as a board member, adviser or investor (a family-office
-  // principal on a company's board does not make the company a family office).
-  const orgPeople = await db.query<{ org: string; person: string; speaks: boolean }>(
+}
+
+/**
+ * A firm's people now: their research can say what the firm is, and where it is. `speaks` marks the
+ * ones whose word counts for the firm's type — its contacts on a pursuit, or people whose primary
+ * affiliation it is and who are not on it only as a board member, adviser or investor (a family-office
+ * principal on a company's board does not make the company a family office).
+ */
+function firmsPeople(db: Db, orgIds: string[]) {
+  return db.query<{ org: string; person: string; speaks: boolean }>(
     // The firms' aliases first (identity.alias_pairs; the row ids are canonical): index probes, not a
     // merged-identity lookup on every affiliation (performance pass, 8 Oct 2026; 0.43 s -> 0.03 s).
     // Contacts read once and joined, each person resolved once (perf pass, 17 Oct 2026): `exists` over an inlined
@@ -93,12 +94,14 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
        bool_or((h.is_primary and coalesce(h.role,'') !~* '(board|advis|investor|limited partner|member)') or k.org is not null) speaks
      from held h left join spoken k on k.org=h.org and k.person=h.person
      group by 1,2`, [orgIds]);
-  const people = [...new Set(orgPeople.map((p) => p.person))];
-  const firmIds = [...new Set(rows.filter((r) => !r.isOrg && r.orgId).map((r) => r.orgId!))];
-  /** Everyone whose place or type may be read: the LPs, individuals' firms, and firms' people. */
-  const allIds = [...new Set([...ids, ...firmIds, ...people])];
+}
 
-  const [[accounts, contactsOwn, profiles, claims], [types, claimCounts, pursuits, prospects, strategies, exposures, routes]] = await Promise.all([Promise.all([
+/**
+ * Where and what each entity is, by Dakota and research. Each id's rows come only from its own aliases, so reads of
+ * two sets of ids, put together, are the read of both.
+ */
+function placeReads(db: Db, allIds: string[]) {
+  return Promise.all([
     db.query<{ id: string; type: string | null; country: string | null; average_ticket_size__c: string | null; check_size_from__c: string | null;
       private_equity_average_ticket_size__c: string | null; lastmodifieddate: Date }>(
       `${WANTED} select w.target::text id, a.type, a.billingcountry country, a.average_ticket_size__c, a.check_size_from__c,
@@ -115,7 +118,61 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
       `${WANTED} select w.target::text id, c.field, c.value from wanted w join research.claim c on c.entity_id=w.entity_id
        where c.superseded_by is null and c.field in ('public.location','typical_check_usd')
        order by c.as_of desc, c.created_at desc`, [allIds]),
-  ]), lpReads]);
+  ]);
+}
+
+type Placed = Awaited<ReturnType<typeof placeReads>>;
+const joined = (a: Placed | null, b: Placed | null): Placed => [
+  [...(a?.[0] ?? []), ...(b?.[0] ?? [])], [...(a?.[1] ?? []), ...(b?.[1] ?? [])],
+  [...(a?.[2] ?? []), ...(b?.[2] ?? [])], [...(a?.[3] ?? []), ...(b?.[3] ?? [])],
+];
+const sameSet = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((x) => b.has(x));
+const orgsOf = (types: Array<{ id: string; t: string; live: boolean }>) => new Set(types.filter((t) => t.live && t.t !== 'person').map((t) => t.id));
+
+export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsData> => {
+  const db = await getDb();
+  const loaded = Promise.all([
+    pipelineData(vehicleId), listVehicles(), vehicleReadings(vehicleId || null), listAssessments(vehicleId || null),
+  ]);
+  loaded.catch(() => undefined); // awaited below
+  // The LPs before their rows (performance pass, 17 Oct 2026): pipelineData merges the same cached per-vehicle lists
+  // (pursuitsOn), so the reads about the LPs, their firms' people and where they are start beside it instead of after
+  // it, the slowest part of a rebuild. Its rows are checked against these below: any difference reads again from them.
+  const early = (async () => {
+    const vehicles = await listVehicles();
+    const shown = vehicleId ? [vehicleId] : vehicles.filter((v) => v.phase !== 'historical').map((v) => v.id);
+    const pursuits = (await Promise.all(shown.map((id) => pursuitsOn(id)))).flat();
+    const ids = [...new Set(pursuits.map((p) => p.entityId))];
+    const lp = lpOnlyReads(db, vehicles, ids, pursuits.map((p) => p.pursuitId), [...new Set(pursuits.map((p) => p.vehicleId))]);
+    lp.catch(() => undefined); // awaited by the caller
+    const orgs = orgsOf((await lp)[0]);
+    const people = firmsPeople(db, [...orgs]);
+    const placedIds = new Set([...ids, ...(await people).map((p) => p.person)]);
+    const placed = placeReads(db, [...placedIds]);
+    placed.catch(() => undefined); // awaited by the caller when its firms' people match
+    return { ids: new Set(ids), pursuitIds: new Set(pursuits.map((p) => p.pursuitId)), orgs, lp, people, placedIds, placed };
+  })();
+  early.catch(() => undefined); // awaited below
+  const [{ rows, onHistory, asOf }, vehicles, readings, assessments] = await loaded;
+  const ids = [...new Set(rows.map((r) => r.entityId))];
+  const pursuitIds = rows.map((r) => r.id);
+  const vehicleIds = [...new Set(rows.map((r) => r.vehicleId))];
+  const orgIds = [...new Set(rows.filter((r) => r.isOrg).map((r) => r.entityId))];
+  const firmIds = [...new Set(rows.filter((r) => !r.isOrg && r.orgId).map((r) => r.orgId!))];
+  const ahead = await early;
+  const lpReads = sameSet(ahead.ids, new Set(ids)) && sameSet(ahead.pursuitIds, new Set(pursuitIds))
+    ? ahead.lp : lpOnlyReads(db, vehicles, ids, pursuitIds, vehicleIds);
+  lpReads.catch(() => undefined); // awaited below; a failure there, not an unhandled rejection here
+  const sameOrgs = lpReads === ahead.lp && sameSet(ahead.orgs, new Set(orgIds));
+  const orgPeople = await (sameOrgs ? ahead.people : firmsPeople(db, orgIds));
+  const people = [...new Set(orgPeople.map((p) => p.person))];
+  /** Everyone whose place or type may be read: the LPs, individuals' firms, and firms' people. */
+  const allIds = [...new Set([...ids, ...firmIds, ...people])];
+  // Ahead, only the individuals' firms are left to place; otherwise everyone, as before.
+  const rest = sameOrgs ? allIds.filter((id) => !ahead.placedIds.has(id)) : allIds;
+  const placed = Promise.all([sameOrgs ? ahead.placed : null, rest.length || !sameOrgs ? placeReads(db, rest) : null]).then(([a, b]) => joined(a, b));
+
+  const [[accounts, contactsOwn, profiles, claims], [types, claimCounts, pursuits, prospects, strategies, exposures, routes]] = await Promise.all([placed, lpReads]);
 
   const first = <T extends { id: string }>(list: T[]) => { const m = new Map<string, T>(); for (const x of list) if (!m.has(x.id)) m.set(x.id, x); return m; };
   const typeOf = new Map(types.map((t) => [t.id, t.t]));

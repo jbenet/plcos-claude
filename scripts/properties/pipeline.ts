@@ -94,12 +94,19 @@ export async function hardeningVariations(check: Check) {
     let refused: string | null = null;
     try { await applyApprovedTicket(juan.id, (await getTicket(t.id))!); } catch (e) { refused = (e as Error).message; }
     const asked = await pl.requestHardening(juan.id, { exposureId: twin, evidenceRef: 'invented-ref', note: 'x' }).then(() => null, (e: Error) => e.message);
+    const was = (await d.one<{ a: string }>('select amount::text a from pipeline.exposure where exposure_id = $1', [twin]))!.a;
+    await pl.reviseSoft(juan.id, twin, { on: new Date('2026-09-19T12:00:00Z'), amount: 123 });
+    const revised = await d.one<{ detail: { before: number; amount: number } }>(
+      "select detail from platform.audit_log where subject_id = $1 and action = 'commitment.soft' order by at desc limit 1", [twin]);
+    check('Variation — revising a soft amount keeps the old amount on the record',
+      revised?.detail.before === Number(was) && revised.detail.amount === 123, `audit ${JSON.stringify(revised?.detail)}, was ${was}`);
+    const eventsBefore = (await d.one<{ n: number }>("select count(*)::int n from pipeline.commitment_event where exposure_id = $1", [twin]))!.n;
     await d.query("update pipeline.exposure set closed_at = now() where exposure_id = $1", [twin]);
     const tryWithdraw = await pl.withdraw(juan.id, twin, { on: new Date('2026-09-20T12:00:00Z'), reason: 'Invented' }).then(() => null, (e: Error) => e);
     const events = await d.one<{ n: number }>("select count(*)::int n from pipeline.commitment_event where exposure_id = $1", [twin]);
     check('Variation — an LP with two open commitments on one vehicle (merged records) is hardened by neither; a closed one is not withdrawn again',
       !!refused && /another open commitment/.test(refused) && !!asked && /another open commitment/.test(asked)
-        && tryWithdraw instanceof Error && events?.n === 0,
+        && tryWithdraw instanceof Error && events?.n === eventsBefore,
       `apply: ${refused ?? 'HARDENED'}; ask: ${asked ?? 'OPENED'}; withdraw of a closed one: ${tryWithdraw ? 'refused' : 'RECORDED'}, events ${events?.n}`);
   }
   // A MONEY ticket approves an amount: if the commitment changed after the ask (an Affinity read, a revision),

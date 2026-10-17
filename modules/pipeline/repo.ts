@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { getDb, type Queryable } from '@/lib/db';
 import { memoizable } from '@/lib/db/read-memo';
 import type {
@@ -19,9 +20,12 @@ const SELECT = `
          x.probability, u.name as owner_name, x.evidence_ref, x.hardened_at,
          x.cash_received_at, x.opened_at, x.source, x.source_as_of, x.claim
     from pipeline.exposure x
-    -- Only a merged record walks its chain (performance pass, 12 Oct 2026).
-    join identity.entity x_e on x_e.entity_id = x.entity_id
-    join identity.entity e on e.entity_id = case when x_e.merged_into is null then x.entity_id else identity.canonical_entity_id(x.entity_id) end
+    -- Only a merged record walks its chain (performance pass, 12 Oct 2026). Each exposure's record is looked up by its
+    -- key (the fenced lateral): joined plainly, the planner hashed every entity twice, 5.8 -> 2.7 ms for every open
+    -- exposure on the invented copy (performance pass, 17 Oct 2026).
+    cross join lateral (select case when x_e.merged_into is null then x_e.entity_id else identity.canonical_entity_id(x_e.entity_id) end as id
+      from identity.entity x_e where x_e.entity_id = x.entity_id offset 0) x_c
+    join identity.entity e on e.entity_id = x_c.id
     join platform.vehicle v on v.id = x.vehicle_id
     join platform.app_user u on u.id = x.owner_id
    where x.closed_at is null`;
@@ -41,12 +45,21 @@ const toExposure = (r: Row): Exposure => ({
 // Route overlays read every exposure per target; a long plan shares one read (lib/db/read-memo.ts).
 const ALL_EXPOSURES = memoizable(`${SELECT} order by v.sort_order, x.amount desc`);
 
-export async function listExposures(vehicleId?: string | null): Promise<Exposure[]> {
+/**
+ * Once per page view (React's request cache; outside a render each call reads): an LP's page asked for every
+ * exposure three times, from the route search, its overlay and the connectors' influence, about 5 ms each on the
+ * invented copy (performance pass, 17 Oct 2026). Callers only read the list.
+ */
+const exposuresIn = cache(async (vehicleId: string | null): Promise<Exposure[]> => {
   const db = await getDb();
   const rows = vehicleId
     ? await db.query<Row>(`${SELECT} and x.vehicle_id = $1 order by x.amount desc`, [vehicleId])
     : await db.query<Row>(ALL_EXPOSURES);
   return rows.map(toExposure);
+});
+
+export function listExposures(vehicleId?: string | null): Promise<Exposure[]> {
+  return exposuresIn(vehicleId || null);
 }
 
 export async function getExposure(id: string, q?: Queryable): Promise<Exposure | null> {
@@ -232,7 +245,9 @@ export function deriveTrack(x: Exposure, events: CommitmentEvent[], packReturned
 /** The close track for an LP on a vehicle: one per open exposure, usually one. */
 export async function closeTracksFor(entityId: string, vehicleId: string): Promise<CloseTrack[]> {
   const db = await getDb();
-  const rows = await db.query<Row>(`${SELECT} and e.entity_id = identity.canonical_entity_id($1::uuid) and x.vehicle_id = $2 order by x.amount desc`, [entityId, vehicleId]);
+  // The LP's own records by their keys first (identity.alias_ids: x is among them exactly when its canonical id is the LP's).
+  const rows = await db.query<Row>(`${SELECT} and x.entity_id = any(identity.alias_ids(array[identity.canonical_entity_id($1::uuid)]))
+    and e.entity_id = identity.canonical_entity_id($1::uuid) and x.vehicle_id = $2 order by x.amount desc`, [entityId, vehicleId]);
   const exposures = rows.map(toExposure);
   const [events, packs] = await Promise.all([
     eventsFor(exposures.map((x) => x.exposureId)),
@@ -250,7 +265,9 @@ export async function closeStates(pairs: Array<{ entityId: string; vehicleId: st
   const out = new Map<string, CloseTrack>();
   if (!pairs.length) return out;
   const db = await getDb();
-  const rows = await db.query<Row>(`${SELECT} and e.entity_id in (select identity.canonical_entity_id(id) from unnest($1::uuid[]) id) order by x.amount desc`, [[...new Set(pairs.map((p) => p.entityId))]]);
+  // Only a merged id walks its chain: a call per id was most of this read for a vehicle's LPs (14 -> 6 ms; 17 Oct 2026).
+  const rows = await db.query<Row>(`${SELECT} and e.entity_id in (select case when q.merged_into is null then q.entity_id else identity.canonical_entity_id(q.entity_id) end
+    from unnest($1::uuid[]) id join identity.entity q on q.entity_id = id) order by x.amount desc`, [[...new Set(pairs.map((p) => p.entityId))]]);
   const exposures = rows.map(toExposure);
   const events = await eventsFor(exposures.map((x) => x.exposureId));
   const want = new Set(pairs.map((p) => `${p.entityId}:${p.vehicleId}`));

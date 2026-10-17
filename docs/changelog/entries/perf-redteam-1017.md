@@ -50,6 +50,17 @@ data on Juan's Mac.
   send a repeated index column as a run, cutting Pipeline's HTML by 36 KB and Visualizations' by 40 KB. The feedback
   browser regression passes (14 of 14).
 
+- **An LP's page reads the money once, and quickly.** Each open exposure's record was joined in a way the planner
+  answered by hashing every entity twice, and the LP's page read every exposure three times (route search, overlay,
+  influence). Records are now looked up by key and the list is read once per view (React's request cache): every
+  open exposure 5.8 → 2.7 ms, a vehicle's 5.4 → 2.4 ms, one LP's close track 3.6 → 1.5 ms, the pipeline's close states
+  14 → 6 ms. LP page on the invented copy: Postgres CPU per view 53–63 → 35–43 ms, time 69–80 → 49–58 ms.
+- **Vehicle status counts its candidates once.** The count and the page were two statements, each resolving every
+  candidate; they are one, and only a page past the end reads the count again. Same HTML.
+- **LP stats starts its own reads beside the pipeline's rows**, from the same cached per-vehicle lists, and checks
+  them against the rows before use (any difference reads again). In-process rebuild medians: stats about 200 → 185 ms,
+  conversion 190 → 170 ms; the output hashes are unchanged. Now bound by the pipeline rows themselves.
+
 ### Red team
 
 - **Score detail and the desktop app's sign-in check for people limited to some vehicles.** `/selection/detail` and
@@ -217,6 +228,12 @@ data on Juan's Mac.
   proposed again, and a write checks that no other batch has already noted the same mail.
 - **DocSend sign-in asks only for read scopes** when DocSend lists them apart, so a stored token can't change a data
   room even outside PLC OS's own client.
+- **A material's link change keeps both links on the record.** The mail desk offers the link next to an approved
+  material, and the audit row said only that a link was there before and after.
+- **Revising a soft amount keeps the old amount on the record.** An amount from the Affinity read had no earlier event,
+  so its first revision erased it.
+- **The Mac's local copy stops serving the moment its person is no longer an Admin.** It kept answering pages for up to
+  a back-off (30 s or more) after the server first refused it.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -305,3 +322,5 @@ data on Juan's Mac.
   second process reads the database.
 - The capital pool check shows an LP over budget but does not stop a hardening: refusing would be a new blocking rule,
   and those wait for Juan to ask for them.
+- Changing an approved material's link doesn't ask for approval again: pasting the DocSend link after approval is the
+  normal order, and both links are now audited.
