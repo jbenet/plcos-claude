@@ -267,6 +267,25 @@ fn show_main(app: &AppHandle) {
     if let Some(w) = main_window(app) { let _ = w.show(); let _ = w.unminimize(); let _ = w.set_focus(); }
 }
 
+/// A download's name as a plain file name: the last part of any path, no control characters, no leading dots.
+fn download_name(raw: &str) -> String {
+    let base = raw.rsplit(['/', '\\']).next().unwrap_or("");
+    let clean: String = base.chars().filter(|c| !c.is_control() && *c != ':').collect();
+    let clean = clean.trim().trim_start_matches('.').trim();
+    if clean.is_empty() { "download".into() } else { clean.chars().take(200).collect() }
+}
+
+/// ~/Downloads/<name>, or "<name> (1)", "<name> (2)"… before the extension when that is taken: a download never
+/// replaces a file already there (red team, 17 Oct 2026).
+fn unique_download(dir: &std::path::Path, name: &str) -> PathBuf {
+    let free = |p: &PathBuf| std::fs::symlink_metadata(p).is_err();
+    let first = dir.join(name);
+    if free(&first) { return first; }
+    let (stem, ext) = match name.rfind('.') { Some(i) if i > 0 => (&name[..i], &name[i..]), _ => (name, "") };
+    (1..10_000).map(|n| dir.join(format!("{stem} ({n}){ext}"))).find(free)
+        .unwrap_or_else(|| dir.join(format!("{stem} ({}){ext}", random_key().get(..8).unwrap_or("x"))))
+}
+
 fn build_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     let nav_app = app.clone();
     WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
@@ -277,10 +296,10 @@ fn build_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .on_navigation(move |url| navigation_allowed(&nav_app, url))
         .on_download(|_webview, event| {
             if let DownloadEvent::Requested { url, destination } = event {
-                let name = destination.file_name().map(|n| n.to_owned())
-                    .or_else(|| url.path_segments().and_then(|mut s| s.next_back().map(|x| x.into())))
-                    .unwrap_or_else(|| "download".into());
-                *destination = home().join("Downloads").join(name);
+                let name = destination.file_name().map(|n| n.to_string_lossy().into_owned())
+                    .or_else(|| url.path_segments().and_then(|mut s| s.next_back().map(String::from)))
+                    .unwrap_or_default();
+                *destination = unique_download(&home().join("Downloads"), &download_name(&name));
             }
             true
         })

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the bundle's Info.plist by Tauri. Files the app writes (downloads) carry macOS's quarantine mark, so
+     Gatekeeper checks one before it opens (red team, 17 Oct 2026). -->
+<plist version="1.0">
+<dict>
+	<key>LSFileQuarantineEnabled</key>
+	<true/>
+</dict>
+</plist>

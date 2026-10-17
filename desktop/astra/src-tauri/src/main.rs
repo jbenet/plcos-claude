@@ -15,7 +15,7 @@ use std::time::Duration;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use base64::Engine;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
 const LAUNCHD_LABEL: &str = "com.plcos.astra-runner";
@@ -35,14 +35,36 @@ fn keychain(account: &str) -> Option<String> {
     if out.status.success() && !s.is_empty() { Some(s) } else { None }
 }
 
-/// The server's base URL: the Keychain item the runner uses, else ~/.plcos-helpers/cloud-url.
-fn app_url() -> String {
-    keychain("app-url")
+/// Only https, or http on this Mac: the Admin token goes to this address (red team, 17 Oct 2026; as the PLC OS
+/// app's core checks PLCOS_SERVER, desktop/plcos/core/core.mjs).
+fn server_allowed(url: &Url) -> bool {
+    let host = url.host_str().unwrap_or("");
+    (url.scheme() == "https" && !host.is_empty()) ||(url.scheme() == "http" && (host == "127.0.0.1" || host == "localhost"))
+}
+
+/// The server's base URL: the Keychain item the runner uses, else ~/.plcos-helpers/cloud-url. Anything that is not
+/// https (http only on this Mac) is refused, not used.
+fn app_url() -> Result<String, String> {
+    let url = keychain("app-url")
         .or_else(|| std::fs::read_to_string(home().join(".plcos-helpers/cloud-url")).ok().map(|s| s.trim().to_string()))
         .unwrap_or_else(|| "https://plcos-production.up.railway.app".into())
-        .trim_end_matches('/').to_string()
+        .trim_end_matches('/').to_string();
+    match Url::parse(&url) {
+        Ok(u) if server_allowed(&u) => Ok(url),
+        _ => Err(format!("The server address must be https:// (http only on this Mac): {url}")),
+    }
 }
-fn page_url() -> String { format!("{}/dev/astra", app_url()) }
+fn page_url() -> Result<String, String> { app_url().map(|u| format!("{u}/dev/astra")) }
+
+/// The main window stays on the server's own pages; any other link opens in the default browser.
+fn navigation_allowed(url: &Url) -> bool {
+    let same = app_url().ok().and_then(|a| Url::parse(&a).ok()).is_some_and(|a| {
+        a.scheme() == url.scheme() && a.host_str() == url.host_str() && a.port_or_known_default() == url.port_or_known_default()
+    });
+    if same { return true; }
+    if matches!(url.scheme(), "http" | "https" | "mailto") { let _ = Command::new("/usr/bin/open").arg(url.as_str()).spawn(); }
+    false
+}
 
 fn launchd_runner() -> bool {
     let uid = Command::new("/usr/bin/id").arg("-u").output().ok()
@@ -109,9 +131,14 @@ fn show_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show(); let _ = w.set_focus(); return;
     }
-    let url = page_url().parse().expect("valid app URL");
+    let url = match page_url().and_then(|u| Url::parse(&u).map_err(|e| e.to_string())) {
+        Ok(u) => u,
+        Err(e) => { notify(&e); return; }
+    };
     let _ = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
-        .title("Astra").inner_size(1100.0, 800.0).build();
+        .title("Astra").inner_size(1100.0, 800.0)
+        .on_navigation(navigation_allowed)
+        .build();
 }
 
 fn show_feedback(app: &AppHandle) {
@@ -123,9 +150,17 @@ fn show_feedback(app: &AppHandle) {
         .title("Astra Feedback").inner_size(520.0, 520.0).build();
 }
 
+/// The commands answer only the bundled feedback window. Tauri 2.12 refuses them to a remote page already, but with no
+/// app ACL manifest (build.rs is bare) it lets any local page call them in any window, the main one included (red
+/// team, 17 Oct 2026).
+fn feedback_only(window: &tauri::Window) -> Result<(), String> {
+    if window.label() == "feedback" { Ok(()) } else { Err("Only the feedback window may do this.".into()) }
+}
+
 /// Lets the person drag over a part of the screen (macOS screencapture), and returns it as a PNG data URL.
 #[tauri::command]
-async fn capture_region() -> Result<Option<String>, String> {
+async fn capture_region(window: tauri::Window) -> Result<Option<String>, String> {
+    feedback_only(&window)?;
     let path = std::env::temp_dir().join(format!("astra-feedback-{}.png", std::process::id()));
     let _ = std::fs::remove_file(&path);
     Command::new("/usr/sbin/screencapture").args(["-i", "-x"]).arg(&path).status().map_err(|e| e.to_string())?;
@@ -143,6 +178,7 @@ fn log_tail(lines: usize) -> String {
 /// POST <app-url>/api/sync/<path> with the Admin token from the Keychain. The token stays out of argv:
 /// curl reads its header from stdin. Returns the JSON answer, or the server's error.
 fn sync_post(path: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let base = app_url()?;
     let token = keychain("push-token").ok_or("No Admin token in the Keychain item plcos-railway / push-token.")?;
     let file = std::env::temp_dir().join(format!("astra-sync-{}-{}.json", std::process::id(),
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)));
@@ -150,7 +186,7 @@ fn sync_post(path: &str, body: &serde_json::Value) -> Result<serde_json::Value, 
     let mut child = Command::new("/usr/bin/curl")
         .args(["-sS", "-m", "60", "-K", "-", "-X", "POST", "-H", "Content-Type: application/json", "--data-binary"])
         .arg(format!("@{}", file.display()))
-        .arg(format!("{}/api/sync/{}", app_url(), path))
+        .arg(format!("{base}/api/sync/{path}"))
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
         .spawn().map_err(|e| e.to_string())?;
     {
@@ -196,8 +232,9 @@ fn notify(text: &str) {
 /// Files an issue on the server as the Admin token's holder: POST /api/sync/feedback?op=file.
 /// The token stays out of argv: curl reads its header from stdin.
 #[tauri::command]
-async fn file_feedback(state: tauri::State<'_, Shared>, body: String, kind: String, priority: String,
+async fn file_feedback(window: tauri::Window, state: tauri::State<'_, Shared>, body: String, kind: String, priority: String,
                        screenshot: Option<String>, include_log: bool) -> Result<Option<String>, String> {
+    feedback_only(&window)?;
     let runner = status_text(&state);
     let mut text = body;
     if include_log { text.push_str(&format!("\n\n**Runner log (last 40 lines)**\n\n```\n{}\n```", log_tail(40))); }
@@ -287,7 +324,10 @@ fn main() {
                             "feedback" => show_feedback(app),
                             "run-now" => { let r = refresh.clone(); std::thread::spawn(move || { notify(&queue("w1w5", 5, 1, true)); r(); }); }
                             "tonight" => { let r = refresh.clone(); std::thread::spawn(move || { notify(&queue("w1w5", 5, 4, false)); r(); }); }
-                            "browser" => { let _ = Command::new("/usr/bin/open").arg(page_url()).status(); }
+                            "browser" => match page_url() {
+                                Ok(u) => { let _ = Command::new("/usr/bin/open").arg(u).status(); }
+                                Err(e) => notify(&e),
+                            },
                             "logs" => { let _ = Command::new("/usr/bin/open").arg(log_dir()).status(); }
                             "toggle" => {
                                 let mut r = runner.lock().unwrap();

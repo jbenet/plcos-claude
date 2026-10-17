@@ -366,6 +366,18 @@ data on Juan's Mac.
   `licensedRoutesWithheld` (routes_to, lp_summary, routes_through, top_connectors, where a connector reached only that
   way is no longer ranked). The selection page's score detail skips a Dakota strategy and, for an LP sized or sourced from
   Dakota, shows no next step, ask or basis. Dakota checks match `^dakota` whatever the case, not the exact word.
+- **The Mac apps: commands, links, server address, downloads and the database socket.** Tauri 2.12.3 does refuse
+  Astra's commands to a remote page, but with no app ACL manifest (a bare `build.rs`) it checks no capability for a
+  local page, so the `windows: ["feedback"]` capability limited nothing: any bundled page in any window could file an
+  issue as the Admin token or take a screenshot. Both commands now answer only the `feedback` window, and Astra's main
+  window stays on the server's origin, opening other links in the browser. Astra's server address (Keychain or
+  `~/.plcos-helpers/cloud-url`), where it sends the Admin token, must be https (http only on this Mac), as the PLC OS
+  core's already must. Both apps' bundled pages have a CSP (`default-src 'self'`); PLC OS's pages from the core keep
+  their own, since Tauri's applies only to bundled files. A PLC OS download no longer replaces a file of the same name
+  in Downloads (it becomes "name (1)"), its name is cut to a plain file name, and the app marks what it writes with
+  macOS's quarantine (`LSFileQuarantineEnabled`). When the copy's database socket falls back to the temporary folder,
+  `plcos-pg` there is used only if it is this user's own private folder, not a link; otherwise a fresh private one.
+  The Rust changes were checked with `cargo check` on Linux, not built or run on a Mac.
 
 ### Juan's calls, 17 Oct 2026
 
@@ -429,9 +441,6 @@ data on Juan's Mac.
   it is about. Mailboxes report the same message with different directions, so refusing a mismatch would refuse real
   mail; credit still goes only to the LP who sent it.
 - A rung taken back still blocks a later genuine record of that rung while the retracted record remains the earliest.
-- Astra's main window loads the server page with the global Tauri object. Tauri 2 refuses commands from a remote
-  origin unless a capability lists it, and Astra's lists only its bundled feedback window, so no change; a
-  navigation guard would need a Rust build to verify, which the cloud can't do.
 - The launch key cookie goes to every port on 127.0.0.1; nothing in the app's pages points elsewhere on the loopback.
 - Two commitments left by a merge still both count in the soft total until a person withdraws or revises one. Folding
   them on merge would decide which amount stands; hardening is refused meanwhile, so hard money is never doubled.
