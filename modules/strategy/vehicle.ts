@@ -8,6 +8,7 @@ import { buildCache, liveRevisions, touchRevisions } from '@/lib/build-cache';
 import { strategyRouteSummaries, type RecordedRoute } from '@/modules/network';
 import { listPursuits } from './repo';
 import { publicProfiles, type ProfileParts } from './profile-parts';
+import { byVersion, VERSION } from './by-version';
 
 /** One vehicle's pursuits and their touchpoints, read once per revision for both the list and the
  * vehicle's plan, which each read them in full (performance pass, 8 Oct 2026). Immutable to callers. */
@@ -63,14 +64,25 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
   const ids = [...new Set(pursuits.map(p => p.entityId))];
   const [suggestions, profiles, claims, restrictions, owners, history, touches, routes, contexts, dakota] = await Promise.all([
     // The latest per pursuit is chosen on keys and the ask's vehicle (strategy 012), then only the winners' data and bodies are
-    // read: sorting every candidate with its jsonb and body cost 3× (15 Oct 2026, Neurotech: 93 → 38 ms in SQL).
-    db.query<SuggestionRow>(`with cand as materialized (
+    // read: sorting every candidate with its jsonb and body cost 3× (15 Oct 2026, Neurotech: 93 → 38 ms in SQL). And those
+    // only when new or changed (by-version.ts): Neurotech's 1,440 were 66 ms of every rebuild after a write (17 Oct 2026).
+    db.query<Omit<SuggestionRow, 'data' | 'body'> & { v: string }>(`with cand as materialized (
         select s.pursuit_id, s.suggestion_id, s.created_at, s.ask_vehicle askv
         from strategy.suggestion s join strategy.active_pursuit p using(pursuit_id) where p.vehicle_id=$1 and s.status in ('proposed','accepted')
       ), pick as (
         select distinct on (c.pursuit_id) c.suggestion_id from cand c join platform.vehicle v on v.id=$1
         where c.askv is null or c.askv in (lower(v.name),lower(v.slug)) order by c.pursuit_id, c.created_at desc, c.suggestion_id
-      ) select s.pursuit_id, s.suggestion_id, s.data, s.body, s.made_at, s.made_by, s.status from pick join strategy.suggestion s using(suggestion_id)`, [vehicleId]),
+      ) select s.pursuit_id, s.suggestion_id, ${VERSION('s')} v, s.made_at, s.made_by, s.status from pick join strategy.suggestion s using(suggestion_id)`, [vehicleId])
+      .then(async (picked) => {
+        const wide = await byVersion<Pick<SuggestionRow, 'data' | 'body'>>(db, 'suggestion', picked.map((s) => ({ id: s.suggestion_id, v: s.v })), async (want) =>
+          (await db.query<{ id: string; v: string; data: SuggestionRow['data']; body: string }>(
+            `select s.suggestion_id::text id, ${VERSION('s')} v, s.data, s.body from strategy.suggestion s where s.suggestion_id = any($1::uuid[])`, [want]))
+            .map((r) => ({ id: r.id, v: r.v, value: { data: r.data, body: r.body } })));
+        return picked.flatMap((s): SuggestionRow[] => {
+          const w = wide.get(s.suggestion_id);
+          return w ? [{ pursuit_id: s.pursuit_id, suggestion_id: s.suggestion_id, data: w.data, body: w.body, made_at: s.made_at, made_by: s.made_by, status: s.status }] : [];
+        });
+      }),
     // Each LP's aliases first (identity.alias_pairs), so these are index probes rather than a
     // canonical_entity_id() call on every row of the table (performance pass, 8 Oct 2026).
     // Only the two parts read below, and each note's only when it changed (profile-parts.ts); the latest per LP.
