@@ -45,6 +45,11 @@ data on Juan's Mac.
   conversion 280 → 158 ms; Fit's first load after a write 75 → 55 ms. Warm pages were already under ~75 ms and are
   bound by rendering, so they barely move.
 
+- **Every page loads less script.** The feedback drawer (form, drafts, captures) and the outbox list are fetched when
+  first opened, or when the button is pointed at, not with every page: about 29 KB less script per page. Packed rows
+  send a repeated index column as a run, cutting Pipeline's HTML by 36 KB and Visualizations' by 40 KB. The feedback
+  browser regression passes (14 of 14).
+
 ### Red team
 
 - **Score detail and the desktop app's sign-in check for people limited to some vehicles.** `/selection/detail` and

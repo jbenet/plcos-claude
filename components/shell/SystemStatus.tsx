@@ -6,9 +6,13 @@ import Link from '@/components/ui/AppLink';
 import { IMPORT_LABELS } from '@/lib/import-jobs/types';
 import { active, needsLook, onJobFinished, useJobs, type JobStatus } from '@/lib/import-jobs/client';
 import { useRouter } from 'next/navigation';
-import { OutboxList, outboxSummary, useOutbox } from './FeedbackOutbox';
+import dynamic from 'next/dynamic';
+import { outboxSummary, useOutbox } from './FeedbackOutbox';
 import { startOutbox } from '@/lib/feedback-outbox';
 import s from './SystemStatus.module.css';
+
+// Opened from the mark's panel, so fetched then rather than with every page (perf pass, 17 Oct 2026).
+const OutboxList = dynamic(() => import('./OutboxList').then((m) => m.OutboxList), { ssr: false });
 
 /**
  * The system's state, as one small mark beside the user (issue 0114). Juan: the imports panel over
