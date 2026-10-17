@@ -43,4 +43,25 @@ export async function securityRoutingProperties(check: Check) {
       && trustedVehicle(changedAsked) === null && wrongPath.status === 307
       && trustedVehicle(forwarded(wrongMethod)) === null,
     'Unsigned/tampered contexts rejected; signed route bound to target query and method');
+
+  // The desktop copy proves its launch secret to the core's health check; nothing proves it without the secret.
+  {
+    const { createHmac } = await import('node:crypto');
+    const saved = { copy: process.env.PLCOS_DESKTOP_COPY, secret: process.env.PLCOS_DESKTOP_SECRET };
+    process.env.PLCOS_DESKTOP_COPY = '1'; process.env.PLCOS_DESKTOP_SECRET = 'invented-launch-secret';
+    const nonce = '0123456789abcdef0123456789abcdef';
+    try {
+      const proved = proxy(new NextRequest('http://127.0.0.1:47101/api/health', { headers: { 'x-plcos-desktop-nonce': nonce } }));
+      const body = await proved.json() as { proof?: string };
+      const plain = proxy(new NextRequest('http://127.0.0.1:47101/api/health'));
+      const page = proxy(new NextRequest('http://127.0.0.1:47101/today', { headers: { 'x-plcos-desktop-nonce': nonce } }));
+      check('The desktop copy answers its core\'s health nonce with the launch secret\'s HMAC, and a nonce opens nothing else',
+        body.proof === createHmac('sha256', 'invented-launch-secret').update(nonce).digest('hex') && !plain.headers.has('content-type')
+          && page.status === 403,
+        `proof ${body.proof === createHmac('sha256', 'invented-launch-secret').update(nonce).digest('hex') ? 'matches' : 'WRONG'}; plain health passes through; page ${page.status}`);
+    } finally {
+      if (saved.copy === undefined) delete process.env.PLCOS_DESKTOP_COPY; else process.env.PLCOS_DESKTOP_COPY = saved.copy;
+      if (saved.secret === undefined) delete process.env.PLCOS_DESKTOP_SECRET; else process.env.PLCOS_DESKTOP_SECRET = saved.secret;
+    }
+  }
 }

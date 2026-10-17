@@ -75,6 +75,8 @@ loopback "$to_host" || die "--to must be on this machine (127.0.0.1)"
 TO_URL="postgres://$to_user@$to_host:$to_port/$to_db"
 MAINT_URL="postgres://$to_user@$to_host:$to_port/postgres"
 if [ -n "${COPY_PGPASSWORD+set}" ]; then copy_pw="$COPY_PGPASSWORD"; else copy_pw="$(keychain copy || true)"; fi
+# The copy cluster is made with scram: whatever else listens on its port gets no password in the clear (red team, 17 Oct 2026).
+export PGREQUIREAUTH=scram-sha-256
 lpsql() { PGOPTIONS="-c client_min_messages=warning" PGPASSWORD="$copy_pw" pg psql "$1" -w -XAtq -v ON_ERROR_STOP=1 "${@:2}"; }
 
 if [ "$cmd" = init ]; then
