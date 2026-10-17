@@ -77,6 +77,20 @@ data on Juan's Mac.
   to the server as before. The copy still matches the server row for row (checked by md5 after a whole copy and
   two incremental syncs).
 
+- **The mail desk's queue answers in a tenth of the time.** Its fund-first check (is this LP in an open fund
+  discussion?) asked Postgres to expand every LP's aliases once per pursuit row it looked at, about 0.6 s for
+  Neurotech's 910 LPs on every poll. The aliases are now expanded once per query (lib/outreach/reads.ts). Over HTTP on
+  the large invented data: `/api/outreach/queue?vehicle=neurotech` 490 → 50 ms, `vehicle=all` 500 → 55 ms; same answers.
+- **An LP's contacts are read without a square.** Leaving out Dakota-only contacts walked the whole alias list once
+  per LP; the LPs with a Dakota record are found once (modules/strategy/lp-contacts.ts). Contacts for Neurotech's LPs
+  45 → 25 ms in SQL; the desk's `/contacts` 66 → 38 ms and its queue 46 → 39 ms in process; same answers.
+- **Pages are warm about 1.5 s sooner after a start or deploy.** The start warm-up waited for a second look at the
+  data, a second after the first, and took the vehicles by name, so Neurotech's pages came after the grants rail's.
+  It now begins on its first look, as soon as the server answers, with the vehicle with the most LPs first. Warm-up
+  done 4.9–5.4 → 3.4–3.7 s after `next start`; a visitor 1 s after the server first answers paid 560–960 →
+  150–350 ms, 2 s after 400–570 → 60–170 ms, 3 s after 80–410 → 50–110 ms (Neurotech's pipeline, an LP, stats). One who arrives the instant the server answers shares it with the
+  warm-up and pays about 0.2 s more (600–760 → 750–1,000 ms). After a write nothing changes.
+
 ### Red team
 
 - **Score detail and the desktop app's sign-in check for people limited to some vehicles.** `/selection/detail` and

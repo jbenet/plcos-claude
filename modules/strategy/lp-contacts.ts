@@ -19,6 +19,10 @@ export async function lpContactsFor(
     ),
     -- Every alias of the wanted units first, so the joins below are index probes (7 Oct 2026).
     wa as (select * from identity.alias_pairs(array(select entity_id from wanted))),
+    -- The units with a Dakota record on any alias, once: asked per unit, each walked the whole alias list (17 Oct 2026;
+    -- 26 of the 45 ms for Neurotech's 906 LPs).
+    dakota as (select distinct x.canonical_id from wa x join identity.source_record s on s.entity_id=x.entity_id and s.source='dakota'
+                where $3::boolean),
     contacts as (
       -- People too: walk the merge chain only for a merged person (16 Oct 2026; ~4,400 calls on Neurotech).
       select w.entity_id org, case when pe.merged_into is null then pe.entity_id else identity.canonical_entity_id(pe.entity_id) end person,
@@ -34,8 +38,7 @@ export async function lpContactsFor(
        where a.ended_on is null and a.is_primary and a.kind in ('principal','decision_maker','staff','contact')
          and coalesce(a.role,'') !~* '\\m(board|adviser|advisor|advisory|investor|limited partner)\\M'
          and (not $3::boolean or (a.source is distinct from 'dakota' and not exists (
-           select 1 from identity.source_record s where s.source='dakota'
-             and s.entity_id in (select x.entity_id from wa x where x.canonical_id=w.entity_id))))
+           select 1 from dakota d where d.canonical_id=w.entity_id)))
     )
     select distinct on (c.org,c.person) c.org::text, c.person::text, e.display_name name, c.role
       from contacts c join identity.entity e on e.entity_id=c.person and e.entity_type='person'

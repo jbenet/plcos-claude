@@ -236,7 +236,7 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
     entityIds.length ? db.query<{ entity_id: string; vehicle_id: string; name: string; status: PursuitStatus }>(`select identity.canonical_entity_id(p.entity_id)::text entity_id,
       p.vehicle_id::text, v.name, p.status::text status from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id
       where v.kind = 'fund' and v.phase <> 'historical' and p.closed_at is null and p.status::text = any($2::text[])
-        and p.entity_id = any(identity.alias_ids($1::uuid[]))`, [entityIds, OPEN_FUND]) : Promise.resolve([]),
+        and p.entity_id = any((select identity.alias_ids($1::uuid[]))::uuid[])`, [entityIds, OPEN_FUND]) : Promise.resolve([]),
   ]);
   const seatOf = new Map(seats.map((s) => [`${s.entity_id}:${s.vehicle_id}`, s]));
   // Whether the wrap matrix covers the vehicle at all (rule 11); each material is checked on its own below.
@@ -304,15 +304,15 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
       order by s.pursuit_id, s.created_at desc, s.suggestion_id`, [ids]),
     db.query<{ entity_id: string; vehicle_id: string; name: string; status: PursuitStatus }>(`select identity.canonical_entity_id(p.entity_id)::text entity_id,
       p.vehicle_id::text, v.name, p.status::text status from strategy.active_pursuit p join platform.vehicle v on v.id = p.vehicle_id
-      where v.phase <> 'historical' and p.entity_id = any(identity.alias_ids($1::uuid[]))`, [pageEntities]),
+      where v.phase <> 'historical' and p.entity_id = any((select identity.alias_ids($1::uuid[]))::uuid[])`, [pageEntities]),
     db.query<{ entity_id: string; scope: string; channel: string | null; instruction: string }>(`select identity.canonical_entity_id(entity_id)::text entity_id,
       scope::text, channel, instruction from coordination.restriction
-      where entity_id = any(identity.alias_ids($1::uuid[])) and (expires_at is null or expires_at >= current_date)`, [pageEntities]),
+      where entity_id = any((select identity.alias_ids($1::uuid[]))::uuid[]) and (expires_at is null or expires_at >= current_date)`, [pageEntities]),
     db.query<{ entity_id: string; vehicle_id: string; status: string; method: string; expires_on: Date | string | null }>(`select
       identity.canonical_entity_id(entity_id)::text entity_id, vehicle_id::text, status::text, method::text, expires_on
-      from compliance.accreditation where entity_id = any(identity.alias_ids($1::uuid[]))`, [pageEntities]),
+      from compliance.accreditation where entity_id = any((select identity.alias_ids($1::uuid[]))::uuid[])`, [pageEntities]),
     db.query<{ entity_id: string; n: number }>(`select identity.canonical_entity_id(entity_id)::text entity_id, count(*)::int n
-      from coordination.ask where made_at is not null and made_at >= $2 and entity_id = any(identity.alias_ids($1::uuid[]))
+      from coordination.ask where made_at is not null and made_at >= $2 and entity_id = any((select identity.alias_ids($1::uuid[]))::uuid[])
       group by 1`, [pageEntities, quarterAgo]),
     listAssets(),
     Promise.all(vehicles.map(async (v) => [v.id, await lpContactsFor(page.filter((b) => b.r.vehicleId === v.id).map((b) => b.r.entityId), v.id, { excludeDakota: true })] as const)),

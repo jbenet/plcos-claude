@@ -61,7 +61,12 @@ export async function pageSpeedProperties(check: Check) {
   // The warm-up's decision.
   const s = (o: Partial<WarmState> = {}): WarmState => ({ seen: null, warmed: null, lastWarmAt: 0, running: false, ...o });
   const at = 1_000_000;
-  check('page-speed warm: a revision seen for the first time waits for it to settle', warmDecision(s(), { revision: 'a', importActive: false }, at) === 'wait', '');
+  check('page-speed warm: a revision seen for the first time waits for it to settle',
+    warmDecision(s({ warmed: 'z', lastWarmAt: at - 60_000 }), { revision: 'a', importActive: false }, at) === 'wait'
+      && warmDecision(s({ seen: 'z', warmed: 'z', lastWarmAt: at - 60_000 }), { revision: 'a', importActive: false }, at) === 'wait', '');
+  check('page-speed warm: at start the first look warms, unless an import is running',
+    warmDecision(s(), { revision: 'a', importActive: false }, at) === 'warm' && warmDecision(s(), { revision: 'a', importActive: true }, at) === 'wait'
+      && warmDecision(s({ lastWarmAt: at - 60_000 }), { revision: 'a', importActive: false }, at) === 'wait', '');
   check('page-speed warm: the same revision on two looks is warmed', warmDecision(s({ seen: 'a' }), { revision: 'a', importActive: false }, at) === 'warm', '');
   check('page-speed warm: a revision already warmed is not warmed again', warmDecision(s({ seen: 'a', warmed: 'a' }), { revision: 'a', importActive: false }, at) === 'wait', '');
   check('page-speed warm: an import\'s own changes are not warmed while it is queued or running', warmDecision(s({ seen: 'a' }), { revision: 'a', importActive: true }, at) === 'wait'
