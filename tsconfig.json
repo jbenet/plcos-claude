@@ -40,7 +40,9 @@
     ".next-real-prod/types/**/*.ts",
     ".next-real-prod/dev/types/**/*.ts",
     ".next-cloud-copy/types/**/*.ts",
-    ".next-cloud-copy/dev/types/**/*.ts"
+    ".next-cloud-copy/dev/types/**/*.ts",
+    ".next-hdr/types/**/*.ts",
+    ".next-hdr/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
