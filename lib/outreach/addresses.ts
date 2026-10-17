@@ -156,7 +156,7 @@ export async function barredRecipients(addresses: string[], q?: Queryable): Prom
            and c.source !~* '^dakota' and coalesce(d.origin, '') !~* 'dakota'
         union select identity.canonical_entity_id(s.entity_id) from identity.send_to s where s.email = $1
         union select identity.canonical_entity_id(a.org_entity) from identity.affiliation a
-         where a.ended_on is null and a.is_primary and identity.canonical_entity_id(a.person_entity) = any($2::uuid[]))
+         where a.ended_on is null and a.is_primary and coalesce(a.source, '') !~* '^dakota' and identity.canonical_entity_id(a.person_entity) = any($2::uuid[]))
       select distinct e.entity_id::text id, e.display_name name from org o join identity.entity e on e.entity_id = o.id
        where e.retired_at is null and e.merged_into is null`, [address, people.map((p) => p.id)]);
     const all = [...people, ...holders.filter((h) => !people.some((p) => p.id === h.id))];
