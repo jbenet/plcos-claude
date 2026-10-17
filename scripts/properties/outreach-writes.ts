@@ -194,6 +194,35 @@ export async function outreachWriteProperties(check: Check, db: Db) {
   const afterDnc = await agent('link', msg({ pursuitId: lpR, ticketId: t4, to: ['restricted@invented-writer.example'] }));
   check('Outreach writes: a do-not-contact recorded after an approval ends that LP\'s open SEND ticket, and the agent\'s send is refused',
     Boolean(t4) && ended === 1 && afterDnc.status === 409, `ticket ${t4 ? 'opened' : 'NONE'}; ended ${ended}; agent link after ${afterDnc.status}`);
+  // Rule 8 attaches to the person addressed, not only to the LP (red team, 17 Oct 2026): a restricted contact at an
+  // unrestricted firm is refused to an agent, shown blocking to a person, and a restriction recorded later ends the ticket.
+  const contactP = await entity('Invented Barred Contact', 'person'), laterP = await entity('Invented Later Contact', 'person');
+  await db.query(`insert into research.claim (entity_id, field, value, source, as_of, confidence) values ($1, 'email', 'barred@invented-writer.example', 'affinity:props-outreach', current_date, 'medium'),
+    ($2, 'email', 'later@invented-writer.example', 'affinity:props-outreach', current_date, 'medium')`, [contactP, laterP]);
+  await db.query(`insert into coordination.restriction (entity_id, scope, instruction, recorded_by) values ($1, 'channel', 'Invented: not by email', $2)`, [contactP, juan.id]);
+  const lpC = await pursuit(await entity('Invented Outreach Contact Firm'), fund.id, 'selected');
+  const toBarred = await agent('tickets', sendBody(lpC, { scope: { recipients: ['Barred@Invented-Writer.example'], purpose: 'invite' } }));
+  const personSees = await post('tickets', sendBody(lpC, { scope: { recipients: ['barred@invented-writer.example'], purpose: 'invite' } }));
+  const seen = (personSees.json?.data?.checks ?? []) as Array<{ rule: string; ok: boolean; blocking: boolean; detail: string }>;
+  const t5 = (await agent('tickets', sendBody(lpC, { scope: { recipients: ['later@invented-writer.example'], purpose: 'invite' } }))).json?.data?.ticketId as string | undefined;
+  if (t5) await decideTicket(juan.id, t5, 'approve', 'props');
+  await db.query(`insert into coordination.restriction (entity_id, scope, instruction, recorded_by) values ($1, 'blanket', 'Invented: do not approach', $2)`, [laterP, juan.id]);
+  const endedLater = await expireOutreachTicketsFor(db, laterP);
+  check('Outreach writes: a restricted contact at an unrestricted firm is refused to an agent and shown blocking to a person; a restriction recorded later ends a ticket addressed to them',
+    toBarred.status === 409 && /restriction/i.test(toBarred.json?.error ?? '') && personSees.status === 200
+      && seen.some((c) => c.rule === 'restriction' && !c.ok && c.blocking && /Invented Barred Contact/.test(c.detail)) && Boolean(t5) && endedLater === 1,
+    `agent ${toBarred.status}; person sees ${JSON.stringify(seen.filter((c) => c.rule === 'restriction').map((c) => c.blocking))}; later ticket ${t5 ? 'opened' : 'NONE'}, ended ${endedLater}`);
+  {
+    // The Materials page's send (red team, 17 Oct 2026): the instrument is the target's, a restriction and the grants gate refuse.
+    const { sendGate } = await import('../../app/materials/gate');
+    const grants = await db.one<{ id: string }>(`select id::text from platform.vehicle where kind = 'grant_rail' limit 1`);
+    const onFundGate = await sendGate(lpC, fund.id), onSpvGate = await sendGate(lpC, spv.id), barredGate = await sendGate(contactP, fund.id);
+    const grantGateR = grants ? await sendGate(lpC, grants.id) : null;
+    check('Materials: a send is checked against the LP\'s own instrument on the vehicle; a do-not-email restriction and a grants funder with no invitation refuse',
+      onFundGate.instrument === 'lp_commitment' && !onFundGate.refusals.length && onSpvGate.instrument === 'spv'
+        && barredGate.refusals.some((r) => /restriction/.test(r)) && (!grantGateR || (grantGateR.instrument === 'grant' && grantGateR.refusals.length > 0)),
+      JSON.stringify({ fund: onFundGate, spv: onSpvGate.instrument, barred: barredGate.refusals.length, grants: grantGateR }));
+  }
   check('Outreach writes: a person\'s link leaves an agent\'s approved ticket for the agent\'s own send; an agent\'s link of our own mail as received is refused',
     Boolean(t3) && personLink.status === 200 && personLink.json?.data?.ticketUsed !== true && keptOpen?.open === true && agentLink.status === 200
     && (disguised === null || disguised.status === 409),

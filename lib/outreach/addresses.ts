@@ -133,3 +133,40 @@ export async function peopleWithAddress(email: string, q?: Queryable): Promise<A
     select distinct e.entity_id::text id, e.display_name name from found f join identity.entity e on e.entity_id = f.id
      where e.retired_at is null and e.merged_into is null and e.entity_type = 'person' order by name, id`, [address]);
 }
+
+/** A restriction that bars email (rule 8): blanket, or a channel restriction naming email or no channel at all (fail closed). */
+const BARS_EMAIL = `(r.scope = 'blanket' or (r.scope = 'channel' and (r.channel is null or r.channel ~* 'mail')))
+  and (r.expires_at is null or r.expires_at >= current_date)`;
+
+/**
+ * The recipients whose person on record may not be emailed (rule 8; red team, 17 Oct 2026): a restriction attaches to the
+ * person addressed, not only to the LP the message is about, so a firm's restricted contact is not reached through the firm.
+ */
+export async function barredRecipients(addresses: string[], q?: Queryable): Promise<Array<{ address: string; name: string }>> {
+  const db = q ?? (await getDb());
+  const out: Array<{ address: string; name: string }> = [];
+  for (const address of [...new Set(addresses.map((a) => a.trim().toLowerCase()).filter(Boolean))]) {
+    const people = await peopleWithAddress(address, db);
+    if (!people.length) continue;
+    const barred = await db.query<{ id: string }>(`select distinct identity.canonical_entity_id(r.entity_id)::text id from coordination.restriction r
+       where identity.canonical_entity_id(r.entity_id) = any($1::uuid[]) and ${BARS_EMAIL}`, [people.map((p) => p.id)]);
+    for (const b of barred) out.push({ address, name: people.find((p) => p.id === b.id)?.name ?? 'someone on record' });
+  }
+  return out;
+}
+
+/** The instructions of the restrictions that bar emailing this entity (canonical), for a check that holds for everyone. */
+export async function emailBars(entityId: string, q?: Queryable): Promise<string[]> {
+  const db = q ?? (await getDb());
+  return (await db.query<{ instruction: string }>(`select r.instruction from coordination.restriction r
+     where identity.canonical_entity_id(r.entity_id) = identity.canonical_entity_id($1::uuid) and ${BARS_EMAIL}`, [entityId])).map((r) => r.instruction);
+}
+
+/** Of these entities, the ones a restriction bars from email (canonical ids as given): a contact listed with `doNotEmail`. */
+export async function emailBarredAmong(entityIds: string[], q?: Queryable): Promise<Set<string>> {
+  if (!entityIds.length) return new Set();
+  const db = q ?? (await getDb());
+  return new Set((await db.query<{ id: string }>(`select distinct x.id::text id from unnest($1::uuid[]) x(id)
+     join coordination.restriction r on identity.canonical_entity_id(r.entity_id) = identity.canonical_entity_id(x.id)
+     where ${BARS_EMAIL}`, [[...new Set(entityIds)]])).map((r) => r.id));
+}

@@ -94,6 +94,15 @@ data on Juan's Mac.
   a ticket from before this is asked again. The exposure is locked while it hardens.
 - **Two wires at once cannot pass the commitment.** Each wire was checked against the total outside its transaction;
   the commitment is now locked and its wires summed again inside it.
+- **A restriction covers the person mailed, not only the LP.** The desk's checks looked at the LP's own record, so a
+  firm's contact with a do-not-contact restriction was listed as a plain contact and a SEND ticket to their address
+  opened with "No restriction on file". A ticket naming a restricted person's address is now refused to an agent and
+  shown blocking to a person; such contacts carry `doNotEmail`; a restriction recorded later ends tickets addressed to
+  them.
+- **A Materials send is checked against what the LP would hold.** The page let the sender pick any instrument, so a
+  grants funder could be checked as a PRI and cleared for an investment memo. The instrument now comes from the LP's
+  commitment on that vehicle, else the vehicle's kind, and an email-barring restriction or a grants funder with no
+  invitation refuses (rules 8, 11, 12).
 - **The feedback form has an overall size limit.** The browser route read the whole body before checking each
   picture; it now stops reading past 42 MB (the pictures' 40 MB plus text) and answers 413, as the token route does.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
