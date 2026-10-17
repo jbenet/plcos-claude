@@ -86,7 +86,14 @@ const MAX_OCCURRENCES = 500;
 /** GUESS: steps walked before giving up, in or out of the window (a daily rule since 1900 is ~46k). */
 const MAX_STEPS = 200_000;
 
-function expand(rule: string, start: Date, allDay: boolean, from: Date, to: Date): Date[] | null {
+/**
+ * GUESS: steps walked for one whole file. Per event the limit above held, but a file of thousands of daily rules
+ * from year 1 walked billions of steps on every Calendar view, in the one server process (red-team pass, 17 Oct 2026).
+ * Once it is spent, the rest of the file's repeats keep their first occurrence, as a rule we cannot expand does.
+ */
+const MAX_FILE_STEPS = 250_000;
+
+function expand(rule: string, start: Date, allDay: boolean, from: Date, to: Date, budget: { steps: number }): Date[] | null {
   const r = Object.fromEntries(rule.split(';').map((p) => p.split('=') as [string, string]).map(([k, v]) => [k.toUpperCase(), v ?? '']));
   const freq = r.FREQ;
   if (!['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(freq ?? '')) return null;
@@ -94,8 +101,13 @@ function expand(rule: string, start: Date, allDay: boolean, from: Date, to: Date
   const interval = Math.max(1, Number(r.INTERVAL ?? 1) || 1);
   const count = r.COUNT ? Number(r.COUNT) : Infinity;
   const until = r.UNTIL ? icsTime(r.UNTIL)?.at ?? null : null;
+  if (budget.steps <= 0) return null;
   const out: Date[] = [];
-  for (let n = 0; n < count && out.length < MAX_OCCURRENCES && n < MAX_STEPS; n++) {
+  // A daily or weekly rule is a fixed number of days a step (UTC dates): start at the first step that can fall in
+  // the window, not at its first date. COUNT still counts from the first date.
+  const day = 86_400_000, stepDays = freq === 'DAILY' ? interval : freq === 'WEEKLY' ? 7 * interval : 0;
+  const first = stepDays ? Math.max(0, Math.floor((from.getTime() - 366 * day - start.getTime()) / (stepDays * day))) : 0;
+  for (let n = first; n < count && out.length < MAX_OCCURRENCES && n - first < MAX_STEPS && budget.steps > 0; n++, budget.steps--) {
     const d = new Date(start);
     if (freq === 'DAILY') d.setUTCDate(d.getUTCDate() + n * interval);
     if (freq === 'WEEKLY') d.setUTCDate(d.getUTCDate() + n * 7 * interval);
@@ -136,6 +148,7 @@ export function parseIcs(text: string, window: { from: Date; to: Date }): IcsEve
   }
 
   const out: IcsEvent[] = [];
+  const budget = { steps: MAX_FILE_STEPS };
   const moved = new Set<string>();
   for (const e of raw) if (e['RECURRENCE-ID'] && e.UID) {
     const at = icsTime(e['RECURRENCE-ID'].value, e['RECURRENCE-ID'].params);
@@ -154,7 +167,7 @@ export function parseIcs(text: string, window: { from: Date; to: Date }): IcsEve
       uid, title: e.SUMMARY ? unescape(e.SUMMARY.value) : '(no title)', location: e.LOCATION ? unescape(e.LOCATION.value) || null : null,
       allDay: s.allDay, cancelled: (e.STATUS?.value ?? '').toUpperCase() === 'CANCELLED',
     };
-    const starts = e.RRULE && !e['RECURRENCE-ID'] ? expand(e.RRULE.value, s.at, s.allDay, window.from, window.to) : [s.at];
+    const starts = e.RRULE && !e['RECURRENCE-ID'] ? expand(e.RRULE.value, s.at, s.allDay, window.from, window.to, budget) : [s.at];
     for (const at of starts ?? [s.at]) {
       if (e.RRULE && !e['RECURRENCE-ID'] && moved.has(`${uid}|${at.getTime()}`)) continue;
       const end = new Date(at.getTime() + Math.max(0, length));

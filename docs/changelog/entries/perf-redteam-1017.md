@@ -39,6 +39,14 @@ data on Juan's Mac.
   note twice. Its mail now counts as possibly written: the item is skipped, saying to check Affinity. A write
   Affinity refused is proposed again as before.
 
+- **A pasted calendar cannot stall the server.** Each repeating event's expansion was capped, but not the file: a
+  calendar of thousands of daily repeats from year 1 walked billions of steps on every Calendar view, in the one
+  server process. A daily or weekly repeat now starts at the window, and the whole file has one budget; past it a
+  repeat keeps its first date, as a rule we can't expand does. 3,000 such repeats: 306 ms.
+- **Pictures from other sites don't load in issues or commitments.** An image in feedback or a commitment loaded from
+  any address, which told that host who opened the page and when. Only the issue's own attachments and this site's
+  own pictures show; anything else shows as not attached.
+
 ### Left as is
 
 - `/api/health?affinity=1` stays public: threads read the Affinity budget with it and it holds counts only.
