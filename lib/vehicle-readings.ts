@@ -28,22 +28,19 @@ async function loadReadings(vehicleId: string | null, entityId: string | null) {
     from strategy.active_pursuit p where ($1::uuid is null or p.vehicle_id=$1)
   ), mine as materialized (
     select * from ps where ($2::uuid is null or ps.entity_id=$2)
-  ), cand as materialized (
-    -- The ask's vehicle is a stored column (strategy 012), read only for the pursuits asked about: testing the jsonb against
-    -- every vehicle row read the whole jsonb eight times over (one LP page, 15 Oct 2026: 440 ms → 20 ms).
-    select s.pursuit_id, s.suggestion_id, s.created_at, s.ask_vehicle askv, m.vehicle_id
-    from strategy.suggestion s join mine m using(pursuit_id)
-    where s.status in ('proposed','accepted')
-  ), latest as (
-    select distinct on (c.pursuit_id) c.pursuit_id, c.suggestion_id
-    from cand c join platform.vehicle v on v.id=c.vehicle_id
-    where c.askv is null or c.askv in (lower(v.name),lower(v.slug))
-    order by c.pursuit_id,c.created_at desc,c.suggestion_id
   ) select p.pursuit_id,e.entity_id,e.display_name entity_name,v.id vehicle_id,v.name vehicle_name,v.slug vehicle_slug,
       p.status,u.name owner_name,p.next_step,s.suggestion_id,s.made_at,s.made_by,${VERSION('s')} v
     from mine p join identity.entity e on e.entity_id=p.entity_id
     join platform.vehicle v on v.id=p.vehicle_id join platform.app_user u on u.id=p.owner_id
-    left join latest l using(pursuit_id) left join strategy.suggestion s on s.suggestion_id=l.suggestion_id
+    -- Each pursuit's latest applicable proposal, by its index (pursuit_id, created_at): joined to a distinct-on of all
+    -- of them, the planner guessed one row and rescanned it per pursuit, 40 of a vehicle's 47 ms (perf pass, 17 Oct
+    -- 2026; now 13 ms). The ask's vehicle is a stored column (strategy 012), not the jsonb (15 Oct 2026: 440 ms → 20 ms).
+    left join lateral (
+      select c.suggestion_id from strategy.suggestion c
+       where c.pursuit_id=p.pursuit_id and c.status in ('proposed','accepted')
+         and (c.ask_vehicle is null or c.ask_vehicle in (lower(v.name),lower(v.slug)))
+       order by c.created_at desc,c.suggestion_id limit 1
+    ) l on true left join strategy.suggestion s on s.suggestion_id=l.suggestion_id
     order by e.display_name,v.sort_order`, [vehicleId, entityId]);
   // Each proposal's data only when it is new or changed since (by-version.ts): every vehicle's readings read all of it
   // again after each write, 137 ms of the conversion page's rebuild (17 Oct 2026).
