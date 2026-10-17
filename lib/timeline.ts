@@ -71,15 +71,21 @@ async function raiseMeetings(vehicleName: string): Promise<Array<{ id: string; w
 }
 
 export async function timeline(vehicleName: string | null, now = new Date()): Promise<Mark[]> {
-  const [periods, cycles, rooms, asks, tickets, meetings, questions, accreditation, funders] =
+  // Every read starts at once (performance pass, 17 Oct 2026): the users, team labels, each cycle's conditions and the
+  // raise's meetings waited, one round trip after another, for the reads before them.
+  const cycleList = listCycles();
+  const conditions = cycleList.then((cs) => Promise.all(cs.map((c) => conditionsFor(c.cycleId))));
+  const counted = vehicleName ? raiseMeetings(vehicleName) : null;
+  conditions.catch(() => undefined); // awaited below
+  counted?.catch(() => undefined); // awaited below
+  const [periods, cycles, rooms, asks, tickets, meetings, questions, accreditation, funders, users, projectTeam] =
     await Promise.all([
-      listPeriods(), listCycles(), spvRooms(), listAsks(null), listOpenTickets(),
-      meetingsOn(''), listQuestions(), listAccreditation(), listFunders(),
+      listPeriods(), cycleList, spvRooms(), listAsks(null), listOpenTickets(),
+      meetingsOn(''), listQuestions(), listAccreditation(), listFunders(), listUsers(), getDb().then(teamLabels),
     ]);
-
-  const users = await listUsers();
-  const projectTeam = await teamLabels(await getDb());
-  const team = (owner: string, attendees: string[], source: string) => projectTeam([owner, ...attendees.filter(a => source === 'affinity' || users.some(u => u.name === a))]);
+  const conditionsOf = await conditions;
+  const userNames = new Set(users.map((u) => u.name));
+  const team = (owner: string, attendees: string[], source: string) => projectTeam([owner, ...attendees.filter(a => source === 'affinity' || userNames.has(a))]);
   const marks: Mark[] = [];
   const push = (m: Mark) => {
     if (vehicleName && m.vehicleName && m.vehicleName !== vehicleName) return;
@@ -96,7 +102,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
     });
   }
 
-  for (const c of cycles) {
+  for (const [i, c] of cycles.entries()) {
     push({
       id: `cycle:${c.cycleId}`, lane: 'close', kind: 'deadline',
       label: `${c.label} — close target`,
@@ -106,7 +112,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
       from: day(c.targetDate), to: day(c.targetDate), vehicleName: c.vehicleName,
       alert: (c.workingDaysLeft ?? 99) < 30, past: false, href: '/close',
     });
-    for (const cond of await conditionsFor(c.cycleId)) {
+    for (const cond of conditionsOf[i]!) {
       if (!cond.dueOn) continue;
       push({
         id: `cond:${cond.conditionId}`, lane: 'close', kind: 'deadline',
@@ -161,7 +167,7 @@ export async function timeline(vehicleName: string | null, now = new Date()): Pr
   // One vehicle: the meetings its LPs' pages count for its raise, beside the ones tied to it above.
   if (vehicleName) {
     const tied = new Set(marks.map((m) => m.id));
-    for (const m of await raiseMeetings(vehicleName)) {
+    for (const m of await counted!) {
       const when = m.heldOn ?? m.scheduledFor;
       if (!when || tied.has(`meet:${m.id}`)) continue;
       push({

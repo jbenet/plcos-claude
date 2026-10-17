@@ -122,6 +122,14 @@ data on Juan's Mac.
   154 → 135 ms (55 → 51 statements), Discussing 138 → 127 ms, all vehicles 144 → 140 ms (132 → 126). Overview
   is unchanged at about 25 ms after a write, with one statement fewer. Warm views were already at 5–11 ms and
   stay there. Every pipeline status filter and both overviews hash the same as before, with the clock frozen.
+- **The Calendar drops its serial reads; conversion stops waiting on LP stats for its mail.** The timeline read the
+  team, then the team's labels, then each close cycle's conditions one after another, then the raise's meetings,
+  each after the reads before it; all now start at once, and the all-vehicles calendar reads the team's calendars
+  beside the timeline instead of before it. Conversion's mail and status-log reads waited for LP stats to finish
+  rebuilding; they now start beside it. On perf4 for juan, interleaved, medians of three rounds of 21: Neurotech's
+  calendar warm 10 → 8 ms and after a write 9 → 7 ms, all vehicles 15 → 13 ms and 14 → 10 ms; conversion's own
+  work after LP stats 8–9 → 5–6 ms. Conversion is otherwise at its floor: 6 ms warm, and about 190 ms after a write,
+  all but a few ms of it the pipeline rows and LP stats it is built from. Same output by hash, clock frozen.
 
 ### Red team
 
