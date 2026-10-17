@@ -21,6 +21,9 @@ data on Juan's Mac.
   8 MB) for the plans and the strategic marks. A 12 ms read of note keys and row versions now says which changed, and
   only those are read (`modules/strategy/profile-parts.ts`). On the real data, the same 3,255 profiles with no
   differences; all/pipeline after a write 430 → 390 ms.
+- **Id columns stay compact when some ids repeat.** A packed column of ids is sent in the 22-character form unless
+  a shared dictionary would be shorter; the floor's LP ids (5,037 distinct in 6,039 rows) went from 236 to 133 KB.
+  On the real data: all/visualizations 1,058 → 956 KB, coverage 1.51 → 1.32 MB, all/pipeline 2.61 → 2.44 MB.
 
 ### Red team
 
