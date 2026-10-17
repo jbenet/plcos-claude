@@ -73,6 +73,23 @@ export async function pipelineProperties({ check, db }: SeedContext) {
 }
 
 export async function hardeningVariations(check: Check) {
+  // A MONEY ticket approves an amount: if the commitment changed after the ask (an Affinity read, a revision),
+  // approving it hardens nothing (red team, 17 Oct 2026).
+  {
+    const d = await freshDb();
+    const { getTicket, decideTicket } = await import('../../modules/governance');
+    const { applyApprovedTicket } = await import('../../app/approvals/apply');
+    const t = (await d.one<{ id: string; exposure: string }>(
+      "select id, scope->'apply'->'args'->>'exposureId' exposure from governance.approval_ticket where kind = 'MONEY' and decision is null"))!;
+    const juan = (await d.one<{ id: string }>("select id from platform.app_user where handle = 'juan'"))!;
+    await d.query('update pipeline.exposure set amount = amount * 2.5 where exposure_id = $1', [t.exposure]);
+    await decideTicket(juan.id, t.id, 'approve', 'Countersigned copy on file.');
+    let refused: string | null = null;
+    try { await applyApprovedTicket(juan.id, (await getTicket(t.id))!); } catch (e) { refused = (e as Error).message; }
+    const track = await d.one<{ track: string }>('select track::text from pipeline.exposure where exposure_id = $1', [t.exposure]);
+    check('Variation — a MONEY ticket approved for one amount hardens nothing once the commitment changed',
+      !!refused && /ticket approved/.test(refused) && track?.track === 'soft', refused ?? `HARDENED (${track?.track})`);
+  }
   // The gate-to-action chain, end to end: approving the Fernhollow Umberfield MONEY ticket is the only
   // thing in this system that can move the headline.
   {
@@ -128,6 +145,9 @@ export async function hardeningVariations(check: Check) {
         over instanceof pl.CloseRefused && Math.round((cash - after.cash) / 1e5) === 15,
       `countersigned events ${counter!.n}; state ${ct?.state}; wired ${ct?.wired} of ${ct?.exposure.amount}, outstanding ${ct?.outstanding}; over-wire ${over ? 'refused' : 'ALLOWED'}; cash +$${((cash - after.cash) / 1e6).toFixed(1)}M`,
     );
+    const raced = await Promise.all([1, 2].map((n) => attempt(() => pl.recordWire(juan!.id, fernhollowUmberfield.exposure_id, { on: new Date('2026-09-21T12:00:00Z'), amount: 2_000_000, reference: `wire-race-${n}` }))));
+    check('Two wires at once cannot both fit under the commitment: one lands, the other is refused',
+      raced.filter((e) => e instanceof pl.CloseRefused).length === 1 && raced.filter((e) => e === null).length === 1, raced.map((e) => (e ? 'refused' : 'recorded')).join(', '));
 
     const vetchlingWagtail = await expOf('Vetchling Wagtail Capital');
     const wireSoft = await attempt(() => pl.recordWire(juan!.id, vetchlingWagtail.exposure_id, { on: new Date('2026-09-20T12:00:00Z'), amount: 100, reference: 'x' }));

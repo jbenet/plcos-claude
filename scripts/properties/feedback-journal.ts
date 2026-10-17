@@ -283,6 +283,21 @@ export async function feedbackJournalProperties(check: Check) {
       bad.length === 0 && chains.every(([, files]) => files.includes('lib/feedback-inbox.ts')),
       bad.length ? bad.join('; ') : `${chains.map(([r, files]) => `${r}: ${files.length} files`).join('; ')}, none under lib/db, modules or auth`);
   }
+  {
+    // The browser route stops reading past its cap (red team, 17 Oct 2026), as the token route does.
+    const { cappedText } = await import('../../lib/body-cap');
+    const { MAX_REPORT_BODY } = await import('../../lib/feedback-inbox');
+    const { readFileSync } = await import('node:fs');
+    let pulled = 0;
+    const big = new Request('http://x/', { method: 'POST', duplex: 'half', body: new ReadableStream({
+      pull(c) { pulled++; if (pulled > 64) c.close(); else c.enqueue(new Uint8Array(1024 * 1024)); } }) } as RequestInit);
+    const over = await cappedText(big, 8 * 1024 * 1024);
+    const ok = await cappedText(new Request('http://x/', { method: 'POST', body: '{"a":1}' }), 8);
+    const route = readFileSync('app/api/feedback/route.ts', 'utf8');
+    check('Feedback journal (server): a report body past the cap is refused (413) without reading it whole; one under it reads as sent',
+      over === null && pulled < 64 && ok === '{"a":1}' && /cappedText\(req, MAX_REPORT_BODY\)/.test(route) && !/req\.json\(\)/.test(route) && MAX_REPORT_BODY > 40_000_000,
+      JSON.stringify({ over: over === null ? 'refused' : 'read', pulled }));
+  }
 }
 
 /** The journal selector is untrusted; only resolved app_user rows can name the reporter. */

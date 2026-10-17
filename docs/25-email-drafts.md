@@ -313,8 +313,9 @@ arrives in its v0.9 (DESIGN §5.8, §6.1).
   anyone's calendar, that is an LP meeting becomes one touchpoint (source `calendar`) per LP on it: the date, who on
   the team was there, and what it is about. No title, description or outside guest's name,
   as with Affinity's. A meeting Affinity already has for that LP that day stays Affinity's. Cancelled meetings
-  go; meetings gone from every calendar go only after a read of every connected calendar. Reconciliation then
-  reads them.
+  go; meetings gone from every calendar go only after a read of every connected calendar. An invite from outside
+  counts only once someone here accepted it (yes or maybe), and a guest who declined is not a guest (17 Oct 2026).
+  Reconciliation then reads them.
 - **Only LP meetings** (Juan, 10 Oct 2026). An LP is anyone or any firm with a pursuit, an exposure or a capital
   pool, and a pursuit's contacts for it; never a portfolio company of ours or our team. An occurrence with no
   guests besides its holder, with every guest on the team's domains, the fundraising domains or Protocol Labs'

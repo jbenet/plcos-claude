@@ -16,4 +16,11 @@ export async function markdownProperties(check: Check) {
       && legacy?.kind === 'table' && legacy.rows[0]?.length === 3,
       'doc tables retain literal pipes; fenced examples stay literal; existing renderers keep their default parsing');
   }
+  {
+    const { linkKind } = await import('../../lib/markdown');
+    const kinds = ['https://example.com', 'mailto:a@example.com', '/plcos/neurotech', '#top', 'docs/x.md',
+      'javascript:alert(1)', ' JavaScript:alert(1)', 'java\tscript:alert(1)', 'data:text/html,x', '//evil.example', '/\\evil.example', ''].map(linkKind);
+    check('Markdown links go only to the web, mail or this app; javascript:, data: and //host links render as text',
+      kinds.join() === ['web', 'web', 'app', 'app', 'app', null, null, null, null, null, null, null].join(), JSON.stringify(kinds));
+  }
 }
