@@ -28,6 +28,13 @@ data on Juan's Mac.
   keeps the wide values of each suggestion and reading until its row changes. On the real data: all/fit after a write
   230 → 132 ms, all/pipeline's SQL 976 → 682 ms, conversion 515 → 490 ms.
 
+- **Developer › Enrichment opens at once.** Each view started a worker that compiled the summary's code, about 240 ms
+  with an empty folder. The summary is kept while the files it reads are unchanged (names, sizes, times): 258 → 48 ms
+  on the large invented data.
+- **A write no longer re-reads every stored route.** A vehicle kind with no scored route (the grants rail) started a
+  full route warm-up on every routes view, and the page warm-up opens those after each write. Now one per kind and
+  route generation: the server's CPU after a write on the large invented data went from about 5.8 to 3.5 s.
+
 ### Red team
 
 - **Score detail and the desktop app's sign-in check for people limited to some vehicles.** `/selection/detail` and
