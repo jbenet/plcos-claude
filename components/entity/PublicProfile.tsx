@@ -61,8 +61,8 @@ export async function PublicProfile({ entityId }: { entityId: string }) {
         {d.identity && (
           <p className={`pp-id ${unresolved ? 'warnish' : ''}`}>
             <b>{MATCH_LABEL[d.identity.match] ?? d.identity.match}.</b> {d.identity.basis}
-            {(d.identity.links ?? []).length > 0 && (
-              <span className="pp-links"> {d.identity.links!.slice(0, 4).map((l) => <a key={l.url} href={l.url} target="_blank" rel="noreferrer">{l.kind}</a>)}</span>
+            {(d.identity.links ?? []).some((l) => /^https?:\/\//i.test(l.url)) && (
+              <span className="pp-links"> {d.identity.links!.filter((l) => /^https?:\/\//i.test(l.url)).slice(0, 4).map((l) => <a key={l.url} href={l.url} target="_blank" rel="noreferrer">{l.kind}</a>)}</span>
             )}
           </p>
         )}

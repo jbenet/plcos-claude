@@ -234,6 +234,15 @@ data on Juan's Mac.
   so its first revision erased it.
 - **The Mac's local copy stops serving the moment its person is no longer an Admin.** It kept answering pages for up to
   a back-off (30 s or more) after the server first refused it.
+- **The API's answers lose health details, like the outreach API's.** `lp_summary` returned an LP's headline, next
+  step and strategy risks as written; notes can carry a health detail, and the mail desk drafts with what it reads.
+- **A Team member pushes W1 findings only for LPs on their vehicles.** A finding replaces an LP's public claims and can
+  corroborate a merge of two records, which got around the vehicle check on decisions.
+- **A fact can't be published after it was researched,** so a claim's date is never in the future.
+- **Every strategy text is capped at 20,000 characters, whatever its version.** The word caps apply from W5 1.13 and
+  count words, so one long "word" passed.
+- **The LP page says when a route is only the strategy's suggestion, and when no route search could run.** Both
+  read as a found route or as "No supported route found" (invariant 7).
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -324,3 +333,8 @@ data on Juan's Mac.
   and those wait for Juan to ask for them.
 - Changing an approved material's link doesn't ask for approval again: pasting the DocSend link after approval is the
   normal order, and both links are now audited.
+- A strategy's evidence gates (route against the paths on file, capacity, "this year", counsel outside the US) are
+  checked by the agent's own run, not again on push. The page now labels a route that has no path on file; refusing
+  the push would stop Astra's night runs on a rule they already apply.
+- A later finding citing the same page still sets that source's title, date and strength, even behind a claim a
+  person verified: the import takes the first finding's reading of a page over a placeholder, by design.

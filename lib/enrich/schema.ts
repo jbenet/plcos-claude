@@ -240,6 +240,8 @@ export function check(f: unknown, expectKey?: string): string[] {
     if (!fact.source || !isStr(fact.source.url) || !/^https?:\/\//.test(fact.source.url)) p.push(`fact ${i}: no source URL`);
     if (fact.source && !['primary', 'filing', 'press', 'podcast', 'database', 'social', 'other'].includes(fact.source.kind)) p.push(`fact ${i}: unknown source kind`);
     if (fact.source?.published && !Number.isFinite(Date.parse(fact.source.published))) p.push(`fact ${i}: invalid source publication date`);
+    // A claim's as_of comes from it, so it can't be after the research (red team, 17 Oct 2026); a day's slack for time zones.
+    else if (fact.source?.published && Date.parse(fact.source.published) > Date.parse(String(x.researched?.at ?? '')) + 86_400_000) p.push(`fact ${i}: published after it was researched`);
     if (fact.source && isBroker(fact.source.url)) p.push(`fact ${i}: from a contact-data broker`);
     if (!['high', 'medium', 'low'].includes(fact.confidence)) p.push(`fact ${i}: no confidence`);
     if (fact.quote && fact.quote.split(/\s+/).length > 40) p.push(`fact ${i}: quote longer than 40 words`);
