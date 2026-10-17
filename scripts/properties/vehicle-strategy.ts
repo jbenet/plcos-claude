@@ -64,6 +64,12 @@ export async function vehicleStrategyProperties(check: Check, db: Db) {
       check('0065 unscored evidence work retains a transparent priority', revised.workPriority > 0 && revised.workFactors.some(f => f.label === 'Route search needs refreshing'), 'Evidence points do not turn unknown monetary inputs into zero or a funding forecast.');
       check('0065 proposed strategy actions stay proposed when an older plan exists', revised.action === strategy.next.what && revised.group === 'Proposed next actions',
         'The displayed action and its provenance have the same precedence.');
+      // A suggestion's data is read again only when it changed (modules/strategy/by-version.ts, 17 Oct 2026).
+      await db.query(`update strategy.suggestion set data = jsonb_set(data, '{next,what}', '"Invented revised step"') where suggestion_id=$1`, [suggestion]);
+      const rewritten = (await vehicleStrategy(intended.id, new Date('2026-09-27T12:00:00Z')))!.rows.find(r => r.pursuit.entityId === entity)!;
+      check('0065 a strategy rewritten in place is read again, not served as it was',
+        rewritten.action === 'Invented revised step' && rewritten.suggestion?.data.next?.what === 'Invented revised step', rewritten.action ?? 'no action');
+      await db.query(`update strategy.suggestion set data = $2::jsonb where suggestion_id=$1`, [suggestion, JSON.stringify(strategy)]);
       await db.query(`insert into research.note(entity_id,kind,body,data) values($1,'public_profile','Invented correction',$2::jsonb)`,
         [entity, JSON.stringify({ researched: { at: '2026-09-20', corrected: [{ at: '2026-09-27T06:00:00Z' }] } })]);
       const corrected = (await vehicleStrategy(intended.id, new Date('2026-09-27T12:00:00Z')))!.rows.find(r => r.pursuit.entityId === entity)!;
