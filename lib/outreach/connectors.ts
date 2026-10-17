@@ -72,7 +72,7 @@ async function planRevision(db: Db): Promise<string> {
  * is planned by then; the planning carries on, so the next call finds more, and once done, all of it at once. A job
  * whose revision is superseded stops at its next batch.
  */
-interface PlanJob { key: string; revision: string; asOf: string | undefined; open: PRow[]; planned: Planned[]; notCounted: number; done: Promise<void>; finished: boolean }
+interface PlanJob { key: string; revision: string; asOf: string | undefined; open: PRow[]; planned: Planned[]; notCounted: number; licensedWithheld: number | null; done: Promise<void>; finished: boolean }
 // Per database, as the route cache is: a test's fresh database, or a restore, never meets another's plan.
 const jobsByDb = new WeakMap<Db, Map<string, PlanJob>>();
 // GUESS — vehicles × people asking; a principal's job is replaced, never added to, as revisions move.
@@ -119,7 +119,7 @@ function weakestHop(route: Route, readWarmth: ReturnType<typeof warmthReader>): 
 }
 
 function startPlan(db: Db, jobs: Map<string, PlanJob>, user: AppUser, v: Vehicle, key: string, revision: string): PlanJob {
-  const job = { key, revision, asOf: undefined, open: [], planned: [], notCounted: 0, finished: false } as unknown as PlanJob;
+  const job = { key, revision, asOf: undefined, open: [], planned: [], notCounted: 0, licensedWithheld: null, finished: false } as unknown as PlanJob;
   // The job reads the cache revisions once (lib/db/read-memo.ts): it is replaced when the revision it started at moves.
   job.done = inTurn(() => withBackgroundDb(() => withReadMemo(async () => {
     // Superseded while it queued: a newer job for this key has taken its place.
@@ -138,6 +138,9 @@ function startPlan(db: Db, jobs: Map<string, PlanJob>, user: AppUser, v: Vehicle
       const batch = job.open.slice(i, i + PLAN_BATCH);
       const searches = await planRoutesMany(user.handle, batch.map((r) => r.entityId), 3, v.kind, 'team', undefined, { vehicleId: v.id });
       const usable = searches.map((search) => {
+        // The facade has already dropped, for a reader without licensed access, every route with a hop resting only on
+        // Dakota evidence, so no connector is ranked for a reach only such a hop gives; the count is reported.
+        if (search?.licensedRoutesWithheld !== undefined) job.licensedWithheld = (job.licensedWithheld ?? 0) + search.licensedRoutesWithheld;
         const routes = search?.routes ?? [];
         const kept = routes.filter((x) => x.verdict === 'recommend');
         job.notCounted += routes.length - kept.length;
@@ -175,7 +178,7 @@ async function planOpen(user: AppUser, v: Vehicle, maxWaitMs?: number) {
   // A copy: the job keeps planning after this answer is built.
   const planned = job.planned.slice();
   const complete = job.finished && planned.length === job.open.length;
-  return { asOf: job.asOf, open: job.open, planned, notCounted: job.notCounted, complete, revision };
+  return { asOf: job.asOf, open: job.open, planned, notCounted: job.notCounted, licensedWithheld: job.licensedWithheld, complete, revision };
 }
 
 /**
@@ -366,6 +369,7 @@ export async function topConnectors(user: AppUser, a: ConnectorArgs, fit: Connec
       vehicle: v.slug, firstHopOnly: firstOnly,
       connectors: shown.map((x) => ({ ...c.at(x), ...(asks.get(x.entityId) ?? { asksThisQuarter: 0, busy: false, lastAsk: null }), ...intros.get(x.entityId)! })),
       total: ranked.length, lpsOpen: p.open.length, lpsInspected: p.planned.length, lpsReached: reached, complete: p.complete,
+      ...(p.licensedWithheld === null ? {} : { licensedRoutesWithheld: p.licensedWithheld }),
       addresses: c.shown ? 'shown' : ADDRESSES_WITHHELD,
     }),
     coverage: { ...coverageOf(v, p), ...(firstOnly ? { ranking: 'firstHopOnly: only routes on which the connector is the first hop past the team member count; anyone the team reaches only through another person is left out.' } : {}) },
@@ -424,6 +428,7 @@ async function connectorTargets(user: AppUser, a: ConnectorArgs & { entityId: st
       rows: fitted, total: rows.length, offset, limit, nextCursor,
       ...(fitted.length < page.length ? { heldBack: `${page.length - fitted.length} row${page.length - fitted.length === 1 ? '' : 's'} held back to fit the answer's size limit; nextCursor continues from here.` } : {}),
       lpsOpen: p.open.length, lpsInspected: p.planned.length, complete: p.complete,
+      ...(p.licensedWithheld === null ? {} : { licensedRoutesWithheld: p.licensedWithheld }),
       addresses: c.shown ? 'shown' : ADDRESSES_WITHHELD,
       ...(rows.length ? {} : { empty: 'No recommended route through this person to an open LP on this vehicle in the material inspected. That is not proof that none exists (rule 7).' }),
     }),

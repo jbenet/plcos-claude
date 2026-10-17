@@ -37,10 +37,14 @@ async function Calendar({ params }: { params: Promise<{ vehicle: string }> }) {
 
   const now = new Date();
   // Travel and Events (issue 0021): the team's calendars, on the all-vehicles calendar only — a trip is nobody's raise.
-  const feeds = vehicle ? null : await (await import('@/lib/calendar-feeds')).laneMarks(now, {
-    from: new Date(now.getTime() - FEED_DAYS.back * 86_400_000), to: new Date(now.getTime() + FEED_DAYS.forward * 86_400_000),
-  });
-  const marks = [...await timeline(vehicle?.name ?? null, now), ...(feeds?.marks ?? [])].sort((a, b) => a.from.getTime() - b.from.getTime());
+  // Read beside the timeline, not before it (performance pass, 17 Oct 2026): the feeds wait on each person's calendar.
+  const [feeds, dated] = await Promise.all([
+    vehicle ? null : import('@/lib/calendar-feeds').then(({ laneMarks }) => laneMarks(now, {
+      from: new Date(now.getTime() - FEED_DAYS.back * 86_400_000), to: new Date(now.getTime() + FEED_DAYS.forward * 86_400_000),
+    })),
+    timeline(vehicle?.name ?? null, now),
+  ]);
+  const marks = [...dated, ...(feeds?.marks ?? [])].sort((a, b) => a.from.getTime() - b.from.getTime());
   // The list and the numbers read the same rows (issue 0020). A detail that only repeats the
   // standing ("Held.", "Scheduled…") isn't printed: the standing column says it.
   const REPEATS_STANDING = /^(Held\.$|Held; counted for this raise|Scheduled\. An intention, not a fact\.$)/;

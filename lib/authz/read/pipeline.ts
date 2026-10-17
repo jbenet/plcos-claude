@@ -5,10 +5,10 @@ import { spvMarks } from './strategy';
 import { licensedAccess } from './r3';
 export type { ScoreDetail, ScorePart } from '@/lib/pipeline-data';
 import { can } from '@/lib/authz';
-export async function scoreDetail(...args: Parameters<typeof rawScoreDetail>) {
+export async function scoreDetail(vehicleId: string, pursuitId: string) {
   const user = await currentUser();
-  if (!can(user, 'read', { vehicle: args[0], fieldClass: 'R2' })) return null;
-  return rawScoreDetail(...args);
+  if (!can(user, 'read', { vehicle: vehicleId, fieldClass: 'R2' })) return null;
+  return rawScoreDetail(vehicleId, pursuitId, licensedAccess(user));
 }
 /** Redact after the shared cache; never mutate its rows or its nested arrays. */
 export async function pipelineData(...args: Parameters<typeof raw>) {

@@ -146,9 +146,12 @@ export async function addLp(ctx: DeskContext, raw: Record<string, unknown>) {
     try {
       return await db.transaction(async (tx) => {
         // ── Who: the address on record first, then the resolver, never a second record for one person ──
+        // A caller without every vehicle is not told whom the people already here are (red team, 17 Oct 2026).
+        const partial = ctx.env.principal.access !== 'admin' && ctx.env.principal.vehicles !== null;
+        const listed = (names: string[]) => (partial ? '' : ` (${names.join('; ')})`);
         const byAddress = await peopleWithAddress(a.person.email, tx);
         if (byAddress.length > 1) {
-          throw new OutreachRefused(409, `Not added: ${byAddress.length} people here have that address on record (${byAddress.map((p) => p.name).join('; ')}), so it does not say which one. Nothing was written. Resolve the duplicate in Capital OS, then call again.`);
+          throw new OutreachRefused(409, `Not added: ${byAddress.length} people here have that address on record${listed(byAddress.map((p) => p.name))}, so it does not say which one. Nothing was written. Resolve the duplicate in Capital OS, then call again.`);
         }
         let entityId: string, createdEntity = false, rule = 'address', sourceRecord: string | null = null;
         if (byAddress.length === 1) entityId = byAddress[0]!.id;
@@ -159,7 +162,7 @@ export async function addLp(ctx: DeskContext, raw: Record<string, unknown>) {
             domains: [a.person.email], organizations: a.person.firm ? [a.person.firm] : [] });
           if (r.created && r.possible.length) {
             const names = await tx.query<{ name: string }>('select display_name name from identity.entity where entity_id = any($1::uuid[]) order by display_name', [r.possible]);
-            throw new OutreachRefused(409, `Not added: "${a.person.name}" could be ${r.possible.length === 1 ? 'someone' : `one of ${r.possible.length} people`} already here (${names.map((n) => n.name).join('; ')}), and the mail (the address's domain${a.person.firm ? ', the firm' : ''}) does not say which. Nothing was written. Record the address on the right person (outreach_propose_contact) or add them in Capital OS, then call again.`);
+            throw new OutreachRefused(409, `Not added: "${a.person.name}" could be ${r.possible.length === 1 ? 'someone' : `one of ${r.possible.length} people`} already here${listed(names.map((n) => n.name))}, and the mail (the address's domain${a.person.firm ? ', the firm' : ''}) does not say which. Nothing was written. Record the address on the right person (outreach_propose_contact) or add them in Capital OS, then call again.`);
           }
           entityId = r.id; createdEntity = r.created; rule = r.rule;
           if (!had) sourceRecord = sourceId;

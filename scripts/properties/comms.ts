@@ -76,7 +76,7 @@ export async function commsProperties(check: Check, db: Db) {
   const { proposeAsk, makeAsk } = await import('../../modules/coordination');
   const { requestSend, recordSend } = await import('../../modules/content');
   const { AUTONOMOUS, PERSON, TicketRequired, ticketNeeded } = await import('../../modules/governance');
-  const { juan, fund, user, token, entity, pursuit } = await fixtures(db);
+  const { juan, fund, spv, user, token, entity, pursuit } = await fixtures(db);
   const target = await entity('Invented Comms Target', 'person');
   const connector = await entity('Invented Comms Connector', 'person');
   const asked = await proposeAsk(juan.id, { entityId: target, entityName: 'Invented Comms Target', connectorId: connector, connectorName: 'Invented Comms Connector',
@@ -170,6 +170,31 @@ export async function commsProperties(check: Check, db: Db) {
     && emails.some((x: { source: string; at: string }) => x.source === 'gmail' && x.at.startsWith('2026-10-02')) && trace.data.state.owes?.by === 'them'
     && trace.data.state.thread?.holder === juan.name && /Gmail message/.test(JSON.stringify(trace.text)),
     `${emails.length} emails: ${emails.map((x: { at: string; source: string; sameAs: unknown[] }) => `${x.at.slice(0, 10)} ${x.source}${x.sameAs.length ? '+' : ''}`).join(', ')}; owes ${trace.data?.state?.owes?.by}; holder ${trace.data?.state?.thread?.holder}${trace.error ? `; ${trace.error}` : ''}`);
+
+  // ── comms_trace for a reader limited to some vehicles (red team, 17 Oct 2026) ────────────
+  // The same LP on the SPV too: a message linked to the SPV pursuit, a context note on each vehicle and an Affinity note.
+  const pSpv = await pursuit(lp, spv.id, 'connecting');
+  await call(writer, 'comms_ingest', { messages: [{ messageId: '<props-spv-1@invented-comms.example>', gmailMessageId: 'g-props-spv-1', date: '2026-10-03T09:00:00Z',
+    direction: 'sent', from: juanEmail, to: ['lena@invented-comms.example'], subject: 'INVENTED_SPV_SUBJECT: the SPV terms', pursuitId: pSpv }] });
+  await db.query(`insert into research.note (entity_id, author_id, kind, body, data) values
+    ($1, $2, 'context', 'INVENTED_SPV_CONTEXT note', jsonb_build_object('vehicleId', $3::text)),
+    ($1, $2, 'context', 'INVENTED_FUND_CONTEXT note', jsonb_build_object('vehicleId', $4::text))`, [lp, juan.id, spv.id, fund.id]);
+  await db.query(`insert into identity.source_record (source, source_id, entity_id, resolved_by) values ('affinity', 'person:77001234', $1, 'rule:fixture') on conflict do nothing`, [lp]);
+  await db.query(`insert into sources.raw_record (source, kind, source_id, payload_hash, payload) values ('affinity', 'note', 'props-comms-note', 'props-comms-note', $1)`,
+    [JSON.stringify({ id: 77009876, personsPreview: { data: [{ id: 77001234 }] }, createdAt: '2026-10-04T00:00:00Z', creator: { firstName: 'Invented', lastName: 'Teammate', type: 'internal' },
+      content: { html: '<p>INVENTED_AFFINITY_TEXT about the terms.</p>' } })]);
+  const fundOnly = await connect(await token(juan, [OUTREACH_READ], [fund.id]));
+  const wide = await call(reader, 'comms_trace', { pursuitId: p });
+  const narrow = await call(fundOnly, 'comms_trace', { pursuitId: p });
+  const wideText = JSON.stringify(wide.data?.items ?? []), narrowText = JSON.stringify(narrow.data?.items ?? []);
+  const spvRow = (narrow.data?.items ?? []).find((x: { at: string; kind: string }) => x.kind === 'email' && x.at.startsWith('2026-10-03'));
+  check('comms_trace, vehicle-limited reader: a message on another vehicle keeps its date with no subject; a context note on another vehicle and an Affinity note lend no words; the all-vehicle reader still reads them',
+    !narrow.error && !narrowText.includes('INVENTED_SPV_SUBJECT') && !narrowText.includes('INVENTED_SPV_CONTEXT') && !narrowText.includes('INVENTED_AFFINITY_TEXT')
+    && narrowText.includes('INVENTED_FUND_CONTEXT') && spvRow && spvRow.subject === null && narrow.data.total === wide.data?.total
+    && wideText.includes('INVENTED_SPV_SUBJECT') && wideText.includes('INVENTED_SPV_CONTEXT') && wideText.includes('INVENTED_AFFINITY_TEXT'),
+    `narrow ${narrow.error ?? `${narrow.data?.total} items, spv row ${JSON.stringify(spvRow)?.slice(0, 100)}`}; wide ${wide.data?.total}: spv ${wideText.includes('INVENTED_SPV_SUBJECT')}, ctx ${wideText.includes('INVENTED_SPV_CONTEXT')}, affinity ${wideText.includes('INVENTED_AFFINITY_TEXT')}`);
+  await db.query(`delete from sources.raw_record where source = 'affinity' and source_id = 'props-comms-note'`);
+  await db.query(`delete from identity.source_record where source = 'affinity' and source_id = 'person:77001234'`);
 
   // ── An autonomous MCP call is refused a send link without an approved ticket; a person's is not ──
   const link = { pursuitId: p, gmailMessageId: 'g-props-4', messageId: '<props-4@invented-comms.example>', date: new Date().toISOString(), direction: 'sent',

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { can } from '@/lib/authz';
+import { needsScopedProjection } from '@/lib/authz/read/projection';
 import { updatesFor } from '@/lib/authz/read/strategy';
 import { notesFor } from '@/lib/authz/read/research';
 import { linearFor, teamAddresses, traceFor } from '@/lib/comms/read';
@@ -14,7 +15,7 @@ import { markSendSent } from '@/modules/content';
 import { recordAskEmailed } from '@/modules/coordination';
 import { AUTONOMOUS, PERSON, requireApprovedTicket, TicketRequired } from '@/modules/governance';
 import { CHANNEL_LABEL, DIRECTION_LABEL, aboutThisRaise, eventAbout, raiseWindows, type Touchpoint } from '@/modules/meetings';
-import { appendAudit } from '@/modules/platform';
+import { appendAudit, listVehicles } from '@/modules/platform';
 import type { Envelope } from '@/lib/mcp/envelope';
 import { peopleWithAddress } from './addresses';
 import { OutreachRefused } from './reads';
@@ -384,15 +385,25 @@ export async function commsTrace(ctx: Ctx, raw: Record<string, unknown>) {
     redacted += r.redacted;
     return r.text;
   };
+  // A reader limited to some vehicles (red team, 17 Oct 2026): the trace reads this LP's mail on every vehicle, so the
+  // words of a touch or note tagged only with vehicles they can't read are withheld, and Affinity note text is not lent
+  // at all (as lib/authz/read/scoped-data.ts does). Dates, counts and sources stay.
+  const scoped = needsScopedProjection(user);
+  const idOf = scoped ? new Map((await listVehicles()).map((v) => [v.slug, v.id])) : new Map<string, string>();
+  const readable = (id: string | null | undefined) => Boolean(id) && can(user, 'read', { vehicle: id! });
+  /** Tagged, and with none of its vehicles readable: its words are withheld from a scoped reader. */
+  const otherVehicles = (ids: Array<string | null | undefined>) => scoped && ids.length > 0 && !ids.some(readable);
   const items: Item[] = [];
   for (const t of trace.touches) {
     const on = t.on ?? t.scheduledFor;
     if (!on) continue;
     const ab = eventAbout(t, all);
     const msg = trace.messageOf.get(t.touchpointId);
+    const tagged = [...(t.vehicleId ? [t.vehicleId] : []), ...(ab.kind === 'vehicles' ? ab.vehicles.map((v) => idOf.get(v.slug) ?? null) : [])];
+    const hidden = otherVehicles(tagged);
     items.push({
       at: on.toISOString(), source: sourceOf(t), sourceLabel: SOURCE_LABEL[sourceOf(t)], kind: CHANNEL_LABEL[t.channel].toLowerCase(),
-      direction: t.direction ? DIRECTION_LABEL[t.direction] : null, subject: clean(msg?.subject ?? (t.source === 'gmail' ? t.summary : null)),
+      direction: t.direction ? DIRECTION_LABEL[t.direction] : null, subject: hidden ? null : clean(msg?.subject ?? (t.source === 'gmail' ? t.summary : null)),
       team: msg?.team ?? t.attendees,
       about: ab.kind === 'vehicles' ? ab.vehicles.map((v) => v.slug) : ab.kind === 'unclear' ? 'unclear' : 'general',
       counts: countsHere(t),
@@ -404,12 +415,14 @@ export async function commsTrace(ctx: Ctx, raw: Record<string, unknown>) {
       team: [u.createdByName], about: [p.slug], counts: true, sameAs: [], ref: `update:${u.updateId}` });
   }
   for (const n of notes.filter((x) => x.kind === 'context')) {
+    // A scoped reader reads a context note's words only on a vehicle they can read (scoped-data.ts's bodies rule).
+    const shown = !scoped || readable(typeof n.data?.vehicleId === 'string' ? n.data.vehicleId : null);
     items.push({ at: new Date(n.createdAt).toISOString(), source: 'plcos', sourceLabel: 'PLC OS note', kind: 'note', direction: null,
-      subject: oneLine(clean(n.body)), team: n.author ? [n.author] : [], about: 'general', counts: false, sameAs: [], ref: `note:${n.noteId}` });
+      subject: shown ? oneLine(clean(n.body)) : null, team: n.author ? [n.author] : [], about: 'general', counts: false, sameAs: [], ref: `note:${n.noteId}` });
   }
   for (const n of affinityNotes) {
     // A note that mentions health lends only a summary read with it redacted (N56), never its text.
-    const text = n.reading?.summary ?? (n.health ? null : n.text.split(/(?<=[.!?])\s/)[0]?.slice(0, 300) ?? null);
+    const text = scoped ? null : n.reading?.summary ?? (n.health ? null : n.text.split(/(?<=[.!?])\s/)[0]?.slice(0, 300) ?? null);
     items.push({ at: n.createdAt.toISOString(), source: 'affinity', sourceLabel: 'Affinity note', kind: 'note', direction: null, subject: clean(text),
       team: n.authorOnTeam ? [n.author] : [], about: n.tag?.vehicles?.length ? n.tag.vehicles : n.tag?.about === 'raise' ? 'unclear' : 'general',
       counts: false, sameAs: [], ref: `affinity-note:${n.noteId}` });
@@ -431,7 +444,8 @@ export async function commsTrace(ctx: Ctx, raw: Record<string, unknown>) {
     state: {
       lastTouch: state.summary.lastTouch ? { on: day(state.summary.lastTouch), channel: state.summary.lastTouchChannel } : null,
       owes: state.owes ? { by: state.owes.by, since: day(state.owes.since), says: state.owes.by === 'us' ? 'They spoke last: we owe a reply.' : 'We wrote last: waiting on them.' } : null,
-      thread: anyState.thread ? { subject: clean(anyState.thread.subject), team: anyState.thread.team, holder: anyState.thread.holder, messages: anyState.thread.messages, last: day(anyState.thread.last) } : null,
+      // The thread is read from mail on any vehicle: a scoped reader sees its subject only when it is this raise's thread too.
+      thread: anyState.thread ? { subject: scoped && state.thread?.subject !== anyState.thread.subject ? null : clean(anyState.thread.subject), team: anyState.thread.team, holder: anyState.thread.holder, messages: anyState.thread.messages, last: day(anyState.thread.last) } : null,
     },
     items: items.slice(offset, offset + limit), total: items.length, offset,
     mismatches: trace.flags.map((f) => ({ kind: f.kind, at: day(f.at), text: f.text })),

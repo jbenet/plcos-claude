@@ -54,9 +54,9 @@ export async function scopedReadData(user: Principal, query?: Db) {
     where p.vehicle_id=any($1::uuid[])`, [allowedVehicles]) : [];
   const bodies = allowedVehicles.length ? await db.query<{ id: string; body: string }>(`select n.note_id::text id,n.body from research.note n
     where identity.canonical_entity_id(n.entity_id)=any($1::uuid[]) and n.data->>'vehicleId'=any($2::text[])
-      and n.kind='context' and n.data->>'source' is distinct from 'dakota'`, [ids, allowedVehicles]) : [];
+      and n.kind='context' and coalesce(n.data->>'source','') !~* '^dakota'`, [ids, allowedVehicles]) : [];
   const statuses = allowedVehicles.length ? await db.query<{ id: string; status: PursuitStatus; passedBy: PassedBy | null; reason: string | null; nextStep: string | null; nextStepOn: string | null }>(`select pursuit_id::text id,status::text status,passed_by::text "passedBy",
-    case when source='dakota' then null else status_reason end reason,
+    case when coalesce(source,'') ~* '^dakota' then null else status_reason end reason,
     next_step "nextStep",next_step_on::text "nextStepOn" from strategy.active_pursuit where vehicle_id=any($1::uuid[])`, [allowedVehicles]) : [];
   return { ...projectPipeline(user, rows, [...notes, ...affinityNotes]), details, bodies, statuses, asOf: new Date().toISOString() };
 }

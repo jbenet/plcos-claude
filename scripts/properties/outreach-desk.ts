@@ -63,6 +63,11 @@ export async function outreachDeskProperties(check: Check, db: Db) {
   await edge(juanE, connector);
   for (const lp of [lp1, lp2, lp3, lpRestricted]) await edge(connector, lp);
   await edge(connector, shy, 'C'); await edge(shy, lp1, 'C');
+  // A connector the team reaches only by a licensed (Dakota-only) tie: withheld from every reader without R3 (red team, 17 Oct 2026).
+  const licensedConnector = await entity('Invented Desk Licensed Connector', 'person');
+  await db.query(`insert into network.edge (from_entity, to_entity, kind, tier, evidence, valid_from)
+    values ($1, $2, 'colleague', 'B', '[{"note":"INVENTED_R3_DESK_TIE","source":"Dakota","as_of":"2026-09-01"}]'::jsonb, '2026-01-01')`, [juanE, licensedConnector]);
+  await edge(licensedConnector, lp1);
   await db.query(`insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body) values
     ('props-desk-research', 'Invented research note', 'fixture', 'public', current_date, 'weak', 'Invented', ''),
     ('props-desk-licensed', 'Invented licensed record', 'fixture', 'dakota', current_date, 'weak', 'Invented', '') on conflict do nothing`);
@@ -134,6 +139,19 @@ export async function outreachDeskProperties(check: Check, db: Db) {
       && two.status === 404 && oneM.status === null && JSON.stringify(oneM.data) === JSON.stringify(one.json.data),
       `${one.status}: the connector reaches ${c1?.lps} LP(s) (${c1?.examplePursuitIds?.join() === p1 ? 'the open one on V1' : c1?.examplePursuitIds?.join()}), best ${c1?.bestScore}; `
       + `another vehicle's ${two.status}; the passed and restricted LPs ${[p2, p3, pR].some((id) => one.text.includes(id)) ? 'COUNTED' : 'not counted'}; MCP equal: ${JSON.stringify(oneM.data) === JSON.stringify(one.json?.data)}`);
+
+    // ── Licensed-only hops: withheld and counted, never ranked (red team, 17 Oct 2026) ─────────
+    const summary = await mcp(juanMcp, 'lp_summary', { pursuitId: p1 });
+    const throughLicensed = await mcp(juanMcp, 'routes_through', { nodeId: licensedConnector });
+    const leaks = [to.text, one.text, summary.text, throughLicensed.text].filter((t) => t.includes('INVENTED_R3_DESK_TIE') || t.includes(licensedConnector) && t !== throughLicensed.text);
+    check('Outreach desk: without licensed access, a route through a Dakota-only tie is withheld and counted (routes_to, lp_summary, routes_through, top_connectors), and its connector is never ranked',
+      to.json.data.licensedRoutesWithheld >= 1 && !routes.some((r) => r.hops.some((h) => h.entityId === licensedConnector))
+      && summary.data?.routes?.licensedRoutesWithheld >= 1 && one.json.data.licensedRoutesWithheld >= 1
+      && !(one.json.data.connectors as Conn[]).some((c) => c.entityId === licensedConnector)
+      // The node may still be reached another way (through the LP it knows); never by the licensed tie from Juan.
+      && !(throughLicensed.data?.bestRouteToNode?.fromEntityId === juanE && throughLicensed.data.bestRouteToNode.hops.length === 1)
+      && throughLicensed.data?.licensedRoutesWithheld >= 1 && leaks.length === 0,
+      `routes_to withheld ${to.json.data.licensedRoutesWithheld}; lp_summary ${summary.data?.routes?.licensedRoutesWithheld ?? summary.error?.slice(0, 80)}; top_connectors ${one.json.data.licensedRoutesWithheld}, ranked ${(one.json.data.connectors as Conn[]).some((c) => c.entityId === licensedConnector)}; through ${throughLicensed.data?.licensedRoutesWithheld ?? throughLicensed.error?.slice(0, 80)}, best ${JSON.stringify(throughLicensed.data?.bestRouteToNode)?.slice(0, 60)}; leaks ${leaks.length}`);
 
     // ── REST and MCP route answers are equal ───────────────────────────────────────────
     const toM = await mcp(juanMcp, 'routes_to', { targetId: lp1, vehicle: V1.slug });

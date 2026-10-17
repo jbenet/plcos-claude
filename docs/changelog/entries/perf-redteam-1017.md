@@ -122,6 +122,14 @@ data on Juan's Mac.
   154 → 135 ms (55 → 51 statements), Discussing 138 → 127 ms, all vehicles 144 → 140 ms (132 → 126). Overview
   is unchanged at about 25 ms after a write, with one statement fewer. Warm views were already at 5–11 ms and
   stay there. Every pipeline status filter and both overviews hash the same as before, with the clock frozen.
+- **The Calendar drops its serial reads; conversion stops waiting on LP stats for its mail.** The timeline read the
+  team, then the team's labels, then each close cycle's conditions one after another, then the raise's meetings,
+  each after the reads before it; all now start at once, and the all-vehicles calendar reads the team's calendars
+  beside the timeline instead of before it. Conversion's mail and status-log reads waited for LP stats to finish
+  rebuilding; they now start beside it. On perf4 for juan, interleaved, medians of three rounds of 21: Neurotech's
+  calendar warm 10 → 8 ms and after a write 9 → 7 ms, all vehicles 15 → 13 ms and 14 → 10 ms; conversion's own
+  work after LP stats 8–9 → 5–6 ms. Conversion is otherwise at its floor: 6 ms warm, and about 190 ms after a write,
+  all but a few ms of it the pipeline rows and LP stats it is built from. Same output by hash, clock frozen.
 
 ### Red team
 
@@ -349,6 +357,15 @@ data on Juan's Mac.
   write, but the address (and the contact's LinkedIn and other details) is recorded unconfirmed, medium with no verifier, and the answer says so;
   send-to is unchanged. Undoing `outreach_add_entity` or `outreach_add_research` matched to an existing record now also
   removes the mail-desk alias it attached, as undoing `outreach_add_lp` does.
+- **Reads to people limited to some vehicles, or without the licensed data, leaked words, names and Dakota routes.**
+  `comms_trace` showed a message's subject or a note's words on any vehicle and Affinity note text; it now keeps their
+  dates and counts and leaves out words tagged only with vehicles the reader can't see, and Affinity note text. `outreach_check_parties`
+  named whom an address belongs to for an LP on none of the reader's vehicles; it now says only that the address is
+  known, and `outreach_add_lp`'s 409s leave candidates' names out for such callers. A route with a hop whose only
+  evidence is Dakota's is now dropped, not just redacted, for readers without licensed access, and counted as
+  `licensedRoutesWithheld` (routes_to, lp_summary, routes_through, top_connectors, where a connector reached only that
+  way is no longer ranked). The selection page's score detail skips a Dakota strategy and, for an LP sized or sourced from
+  Dakota, shows no next step, ask or basis. Dakota checks match `^dakota` whatever the case, not the exact word.
 
 ### Juan's calls, 17 Oct 2026
 

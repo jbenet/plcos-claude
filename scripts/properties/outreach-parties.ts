@@ -74,6 +74,22 @@ export async function outreachPartiesProperties(check: Check, db: Db) {
     late.status === 200 && f?.onFile?.entityId === founder && !f.suggest.some((x: any) => x.action === 'add_lp') && !f.issues.includes('no_pursuit')
     && cf && !cf.suggest.some((x: any) => x.action === 'add_lp') && z?.firstSent === '2026-10-14' && z.lastSent === '2026-10-15',
     `founder: ${f?.suggest?.map((x: any) => x.action)}; cofounder: ${cf?.suggest?.map((x: any) => x.action)}; zones ${z?.firstSent}→${z?.lastSent}`);
+
+  // Red team, 17 Oct 2026: a reader limited to the SPV learns that the known address (an LP on the fund only) is on
+  // file, not whom it names or Affinity's record of them; a reader of the fund still does.
+  const { spv } = await fixtures(db);
+  await db.query(`insert into sources.raw_record (source, kind, source_id, payload_hash, payload) values ('affinity', 'person', 'props-parties-person', 'props-parties-person', $1)`,
+    [JSON.stringify({ id: 88001234, firstName: 'INVENTED_AFFINITY', lastName: 'Known Name', primaryEmailAddress: 'known@invented-parties.example', emailAddresses: ['known@invented-parties.example'] })]);
+  const one = { parties: [{ address: 'known@invented-parties.example', sends: [{ at, subject: 'Hello' }] }] };
+  const spvOnly = await call(await token(juan, [...READ_TOOLS, OUTREACH_READ], [spv.id]), 'parties', {}, { method: 'POST', body: one });
+  const fundOnly = await call(await token(juan, [...READ_TOOLS, OUTREACH_READ], [fund.id]), 'parties', {}, { method: 'POST', body: one });
+  const hid = spvOnly.json?.data?.parties?.[0], saw = fundOnly.json?.data?.parties?.[0];
+  check('Check parties: a reader without the LP\'s vehicle is told only that the address is known — no entity, name, Affinity name or last email',
+    spvOnly.status === 200 && hid?.onFile?.known === true && !('entityId' in hid.onFile) && !JSON.stringify(hid).includes(known)
+    && !JSON.stringify(hid).includes('Invented Parties Known Person') && !JSON.stringify(hid).includes('INVENTED_AFFINITY') && hid.affinity.name === null && hid.affinity.lastEmail === null
+    && hid.affinity.person === true && fundOnly.status === 200 && saw?.onFile?.entityId === known && /INVENTED_AFFINITY/.test(saw.affinity?.name ?? ''),
+    `spv-only ${spvOnly.status} ${JSON.stringify(hid)?.slice(0, 160)}; fund-only ${saw?.onFile?.entityId === known} ${saw?.affinity?.name}`);
+  await db.query(`delete from sources.raw_record where source = 'affinity' and source_id = 'props-parties-person'`);
 }
 
 /**

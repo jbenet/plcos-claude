@@ -6,7 +6,7 @@ import type { LpFact } from '@/lib/lp-stats/model';
 
 export const licensedAccess = (user: Principal) => can(user, 'read', { fieldClass: 'R3' });
 export function redactAffiliations(user: Principal, rows: Affiliation[]): Affiliation[] {
-  return licensedAccess(user) ? rows : rows.filter(row => row.source !== 'dakota');
+  return licensedAccess(user) ? rows : rows.filter(row => !/^dakota/i.test(row.source ?? ''));
 }
 export function redactSpv(user: Principal, reading: SpvReading): SpvReading {
   return licensedAccess(user) ? reading : resolveSpv(reading.evidence.filter(e => e.kind !== 'dakota'));

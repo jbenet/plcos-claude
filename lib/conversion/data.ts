@@ -39,15 +39,16 @@ function touchOf(t: Touchpoint): Touch | null {
 
 export const conversionData = buildCache(async (vehicleId: string): Promise<ConversionData> => {
   const db = await getDb();
-  const [pursuits, touches, exposures, totals, stats, team] = await Promise.all([
-    pursuitsOn(vehicleId), touchesOn(vehicleId), listExposures(vehicleId), vehicleTotals(), lpStatsData(vehicleId), teamAddresses(db),
-  ]);
-  const ids = pursuits.map((p) => p.pursuitId);
-  const [mail, history] = await Promise.all([
+  // The mail and the status log start beside LP stats, not after it (performance pass, 17 Oct 2026): after a write,
+  // LP stats rebuilds behind the pipeline rows and is the slowest input, and these two waited for it to finish.
+  const listed = pursuitsOn(vehicleId);
+  const [[pursuits, touches, exposures, totals, stats, team], [mail, history]] = await Promise.all([Promise.all([
+    listed, touchesOn(vehicleId), listExposures(vehicleId), vehicleTotals(), lpStatsData(vehicleId), teamAddresses(db),
+  ]), Promise.all([
     // juanmail's comms trace, linked to a pursuit on this vehicle. Unlinked mail is left to the touchpoints.
-    db.query<{ pursuit_id: string; sent_at: Date; direction: 'ours' | 'theirs'; from_addr: string; subject: string | null; about_basis: string | null }>(
+    listed.then((ps) => db.query<{ pursuit_id: string; sent_at: Date; direction: 'ours' | 'theirs'; from_addr: string; subject: string | null; about_basis: string | null }>(
       `select pursuit_id::text, sent_at, direction, from_addr, subject, about_basis from email.comms_message
-        where pursuit_id = any($1::uuid[])`, [ids]),
+        where pursuit_id = any($1::uuid[])`, [ps.map((p) => p.pursuitId)])),
     // Status moves, through a merged pursuit to the one that carries it now (as modules/strategy/vehicle.ts reads them).
     db.query<{ subject_id: string; at: Date; detail: Record<string, unknown> }>(`select p.pursuit_id::text as subject_id, a.at, a.detail
         from platform.audit_log a
@@ -55,7 +56,7 @@ export const conversionData = buildCache(async (vehicleId: string): Promise<Conv
           and a.subject_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then a.subject_id::uuid end
         join strategy.active_pursuit p on p.pursuit_id = case when raw.merged_into is null then raw.pursuit_id else strategy.canonical_pursuit_id(raw.pursuit_id) end
        where p.vehicle_id = $1 and a.action = 'pursuit.status_set' order by a.at, a.id`, [vehicleId]),
-  ]);
+  ])]);
 
   const mailOf = new Map<string, Touch[]>();
   for (const m of mail) {
