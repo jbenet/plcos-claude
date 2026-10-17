@@ -2,6 +2,12 @@ import type { Check } from './harness';
 
 export async function markdownProperties(check: Check) {
   {
+    const { webHref } = await import('../../lib/markdown');
+    const got = ['https://a.example/x', 'HTTP://b.example', 'data:text/html,x', 'javascript:alert(1)', 'gmail', '/api/desktop/build', null].map(webHref);
+    check('Markdown: a stored URL is a link only when it is a web address (data:, javascript:, bare words and site paths stay text)',
+      got[0] === 'https://a.example/x' && got[1] === 'HTTP://b.example' && got.slice(2).every((x) => x === undefined), JSON.stringify(got));
+  }
+  {
     const { parseMarkdown, parseInline } = await import('../../lib/markdown');
     const sample = '| Location | Meaning |\n|---|---|\n| `data/<demo\\|real>/` | **Local** |';
     const table = parseMarkdown(sample, { document: true })[0];

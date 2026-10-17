@@ -1,3 +1,4 @@
+import { webHref } from '@/lib/markdown';
 import Link from '@/components/ui/AppLink';
 import { getDb } from '@/lib/db';
 import { shortDate } from '@/lib/time';
@@ -67,7 +68,7 @@ function Evidence({ e, r }: { e: SpvEvidence; r: SpvReading }) {
       {e.quote && <span className={s.quote}>“{e.quote}”</span>}
       <span className={s.prov}>
         {e.kind === 'person' ? 'LP page' : e.kind === 'dakota' ? 'Dakota, a vendor’s claim (tier C)' : e.kind === 'pipeline' ? 'Our commitments and statuses'
-          : e.url ? <a href={e.url} target="_blank" rel="noreferrer noopener">{hostOf(e.url)}</a> : e.source}
+          : e.url ? <a href={webHref(e.url)} target="_blank" rel="noreferrer noopener">{hostOf(e.url)}</a> : e.source}
         {' '}· as of {e.asOf} · confidence {e.confidence} · {e.kind === 'person' ? `set by ${e.lastVerifiedBy ?? 'someone'}` : e.kind === 'dakota' ? `imported by ${e.lastVerifiedBy ?? 'the Dakota job'}, not verified` : e.lastVerifiedBy ? `verified by ${e.lastVerifiedBy}` : 'nobody has verified it'}
       </span>
     </li>

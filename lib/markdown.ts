@@ -263,6 +263,9 @@ export function groupChangelog(blocks: Block[]): ChangelogDoc {
  * Where a Markdown link may go: the web or mail (`web`), a page of this app (`app`), or nowhere, shown as text
  * (red team, 17 Oct 2026): any other scheme (javascript:, data:, vbscript:) and a //host are refused.
  */
+/** A stored URL as a link target only when it is a web address: `data:` and other schemes stay text (red team, 17 Oct 2026). */
+export const webHref = (u: string | null | undefined): string | undefined => (u && /^https?:\/\//i.test(u) ? u : undefined);
+
 export function linkKind(href: string): 'web' | 'app' | null {
   if (/^(https?:\/\/|mailto:)/i.test(href)) return 'web';
   const bare = href.replace(/[\s\u0000-\u001f]/g, '');

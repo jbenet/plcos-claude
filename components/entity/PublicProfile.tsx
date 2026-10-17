@@ -1,3 +1,4 @@
+import { webHref } from '@/lib/markdown';
 import { capacityBandLabel } from '@/lib/capacity-bands';
 import { shortDate } from '@/lib/time';
 import { partialSearch } from '@/lib/enrich/schema';
@@ -92,7 +93,7 @@ export async function PublicProfile({ entityId }: { entityId: string }) {
                 <span>
                   {c.value}{' '}
                   {docs.get(c.provenance.source) ? (
-                    <a className="src" href={docs.get(c.provenance.source)!.origin} target="_blank" rel="noreferrer"
+                    <a className="src" href={webHref(docs.get(c.provenance.source)!.origin)} target="_blank" rel="noreferrer"
                       title={`${docs.get(c.provenance.source)!.title} · as of ${shortDate(c.provenance.asOf)} · ${c.provenance.confidence} confidence · ${docs.get(c.provenance.source)!.strength} source · unverified`}>
                       {host(docs.get(c.provenance.source)!.origin)} · {c.provenance.confidence}
                     </a>

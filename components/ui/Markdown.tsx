@@ -27,8 +27,8 @@ export function Spans({
         if (s.kind === 'image') {
           // Without a resolver, only this site's own pictures: one from another address tells its host who read the
           // text, and when (red-team pass, 17 Oct 2026).
-          const own = (h: string) => (h.startsWith('/') && !h.startsWith('//') && !h.startsWith('/\\') ? h : '');
-          const href = resolveImage ? resolveImage(s.href ?? '') : own(s.href ?? '');
+          // Not even this site's own paths: an image of /api/... fetched as whoever reads the text (red team, 17 Oct 2026).
+          const href = resolveImage ? resolveImage(s.href ?? '') : '';
           if (!href) {
             return (
               <span key={i} className="mdmissing">
@@ -43,7 +43,8 @@ export function Spans({
           const href = s.href ?? '';
           const kind = linkKind(href);
           if (kind === 'web') return <a key={i} href={href} target="_blank" rel="noreferrer">{s.text}</a>;
-          if (kind === 'app') return <Link key={i} href={href}>{s.text}</Link>;
+          // An in-app link is fetched ahead on hover: never one to the API or sign-in routes (red team, 17 Oct 2026).
+          if (kind === 'app') return /^\/*(api|auth)(\/|$|\?)/i.test(href) ? <span key={i}>{s.text}</span> : <Link key={i} href={href} prefetch={false}>{s.text}</Link>;
           return <span key={i}>{s.text}</span>;
         }
         return <span key={i}>{s.text}</span>;
