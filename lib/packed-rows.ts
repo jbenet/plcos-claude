@@ -21,7 +21,10 @@
  * - A text column of mostly unique values with a few shapes (`/meetings?e=<LP>&m=<meeting>`,
  *   `meet:<id>`) is split at its last `=`, `:` or `/`: the heads shared as above, the tails as they are, or `0`
  *   where a tail is the same as an earlier text column's (`r`): a calendar row's link ends in its id's meeting.
- * - A shared column with 36 distinct values or fewer sends its indexes as one base-36 character per row.
+ * - A shared column with 36 distinct values or fewer sends its indexes as one base-36 character per row; a run of five or
+ *   more equal characters is sent as the character, `~`, the run's length in base 36 and `.` (`0~pg.` is 916 zeros): most
+ *   of a list's columns are one value on nearly every row, and those runs were a fifth of Pipeline's and Visualizations'
+ *   packed rows (perf pass, 17 Oct 2026).
  * - A column of Dates (and nulls) is sent as epoch milliseconds, shared as above when that is shorter; each row reads
  *   back its own Date. A text column equal on every row to an earlier one with the same text before and after it
  *   (`<entityId>:neurotech`) is sent as that column's name and the two affixes.
@@ -51,6 +54,33 @@ const DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz';
 const DIGIT_OF = new Int8Array(128).fill(-1);
 for (let d = 0; d < DIGITS.length; d++) { DIGIT_OF[DIGITS.charCodeAt(d)] = d; DIGIT_OF[DIGITS.toUpperCase().charCodeAt(d)] = d; }
 const at = (i: Index, r: number) => (typeof i === 'string' ? DIGIT_OF[i.charCodeAt(r)]! : i[r]!);
+
+/** Runs of five or more equal characters as `<char>~<length in base 36>.`; shorter runs as they are (perf pass, 17 Oct 2026). */
+const RUN = 5;
+function runsOut(digits: string) {
+  let out = '';
+  for (let from = 0; from < digits.length;) {
+    const ch = digits.charCodeAt(from);
+    let to = from + 1;
+    while (to < digits.length && digits.charCodeAt(to) === ch) to++;
+    out += to - from >= RUN ? `${digits[from]}~${(to - from).toString(36)}.` : digits.slice(from, to);
+    from = to;
+  }
+  return out;
+}
+/** One character per row again; an index without runs is returned as it is. */
+function runsIn(i: Index): Index {
+  if (typeof i !== 'string' || !i.includes('~')) return i;
+  let out = '';
+  for (let at = 0; at < i.length;) {
+    if (i.charCodeAt(at + 1) === 126) { // ~
+      const end = i.indexOf('.', at + 2);
+      out += i[at]!.repeat(parseInt(i.slice(at + 2, end), 36));
+      at = end + 1;
+    } else out += i[at++];
+  }
+  return out;
+}
 
 function plain(value: unknown): boolean {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
@@ -87,9 +117,9 @@ function share(values: unknown[]) {
     indexLength += (index < 10 ? 1 : index < 100 ? 2 : index < 1000 ? 3 : index < 10000 ? 4 : String(index).length) + 1;
   }
   const small = d.length <= SMALL;
-  dictLength += small ? i.length : indexLength;
   let digits = '';
-  if (small) for (const x of i) digits += DIGITS[x]!;
+  if (small) { for (const x of i) digits += DIGITS[x]!; digits = runsOut(digits); }
+  dictLength += small ? digits.length : indexLength;
   return { d, i: small ? digits : i, rawLength, dictLength };
 }
 
@@ -278,26 +308,26 @@ export function unpackRows<T>(packed: PackedRows): T[] {
       let from = 0;
       values.set(k, col.k.map((count) => items.slice(from, (from += count))));
     } else if ('e' in col) {
-      const e = col.e;
-      values.set(k, column((r) => { const ms = 'v' in e ? e.v[r] : e.d[at(e.i, r)]; return ms === null ? null : new Date(ms as number); }));
+      const e = col.e, ei = 'i' in e ? runsIn(e.i) : [];
+      values.set(k, column((r) => { const ms = 'v' in e ? e.v[r] : e.d[at(ei, r)]; return ms === null ? null : new Date(ms as number); }));
     } else if ('u' in col) values.set(k, uuidsIn(col.u, n));
     else if ('v' in col) values.set(k, col.v);
-    else if ('h' in col && !col.r) values.set(k, col.t.map((tail, r) => (col.h.d[at(col.h.i, r)] as string) + tail));
-    else if ('d' in col) values.set(k, column((r) => col.d[at(col.i, r)]));
+    else if ('h' in col && !col.r) { const hi = runsIn(col.h.i); values.set(k, col.t.map((tail, r) => (col.h.d[at(hi, r)] as string) + tail)); }
+    else if ('d' in col) { const i = runsIn(col.i); values.set(k, column((r) => col.d[at(i, r)])); }
   }
   // A copied column reads its source's values; sources are always earlier, plain, and never copies.
   for (const [k, col] of Object.entries(packed.c)) {
-    if ('a' in col && 'x' in col) { const x = col.x, source = values.get(col.a)!; values.set(k, column((r) => (source[r] as string) + (x.d[at(x.i, r)] as string))); }
+    if ('a' in col && 'x' in col) { const x = col.x, xi = runsIn(x.i), source = values.get(col.a)!; values.set(k, column((r) => (source[r] as string) + (x.d[at(xi, r)] as string))); }
     else if ('a' in col) {
       const source = values.get(col.a)!;
       values.set(k, column((r) => { const v = source[r]; return v === undefined || !(col.p || col.s) ? v : `${col.p ?? ''}${v as string}${col.s ?? ''}`; }));
     }
     // A tail sent as 0 is the same row's tail of the column `r` names, which is never itself a reference.
     if ('h' in col && col.r) {
-      const source = values.get(col.r)!;
+      const source = values.get(col.r)!, hi = runsIn(col.h.i);
       values.set(k, col.t.map((tail, r) => {
         const from = source[r] as string;
-        return (col.h.d[at(col.h.i, r)] as string) + (tail === 0 ? from.slice(cut(from)) : tail);
+        return (col.h.d[at(hi, r)] as string) + (tail === 0 ? from.slice(cut(from)) : tail);
       }));
     }
   }
