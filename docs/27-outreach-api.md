@@ -446,6 +446,8 @@ vehicle (or on every vehicle the token reads), in one page:
 - `contacts` are the queue's, by the same reader (lib/outreach/addresses.ts): for a person, their own addresses; for an
   organisation, its contacts' (from the pursuit and affiliations, never licensed). At most three per person, best first.
   Addresses are R2: on a vehicle where the token does not read words, a row has `contacts: []` and `withheld`.
+  A contact a restriction bars from email (blanket, or a channel naming email or none) carries `doNotEmail: true`; a SEND
+  ticket naming such an address is refused to an agent and shows a blocking restriction to a person (rule 8, 17 Oct 2026).
 - `includePassed=1` adds the LPs that passed, each `passed: true`. Without it they are left out, as in the queue.
 - `updatedSince=<the previous cursor>` keeps only the rows that changed since then, by the queue's own test (§4).
 - `version` hashes the rows (not `cursor`). `ifChanged=<version>` answers `{ "unchanged": true, "version", "cursor" }`
