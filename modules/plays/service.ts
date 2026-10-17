@@ -61,9 +61,10 @@ export async function assignPlay(
 
   return db.transaction(async (tx) => {
     const rows = await tx.query<{ handle: string; name: string }>(
-      'select handle, name from platform.app_user where id = $1', [assigneeId],
+      `select handle, name from platform.app_user where id = $1 and active and role <> 'system'`, [assigneeId],
     );
     const assignee = rows[0];
+    // Someone on the team, not the system's actor or a deactivated person (red-team pass, 17 Oct 2026).
     if (!assignee) throw new Error('No such user.');
 
     await tx.query(

@@ -379,6 +379,9 @@ data on Juan's Mac.
   `plcos-pg` there is used only if it is this user's own private folder, not a link; otherwise a fresh private one.
   The Rust changes were checked with `cargo check` on Linux, not built or run on a Mac.
 
+- **A play is handed only to someone active on the team.** Assigning took any user id, the system's actor or a
+  deactivated person included, and the Linear handoff then named them (`modules/plays/service.ts`).
+
 ### Juan's calls, 17 Oct 2026
 
 - **JuanMail does more on its own.** Juan: "we should remove the rules that only people can change settings. It's
@@ -484,3 +487,6 @@ data on Juan's Mac.
   every autonomous write would block nothing; it waits until corrections are recorded.
 - A Team member's push token can begin runs in the cloud ledger without a cap and report any cost on finish; Juan
   asked for no new limits without asking, and the ledger serializes appends.
+- A Team member with all-vehicle access may undo anyone's "bad terms" mark (audited); limiting it to the marker or an
+  Admin would be a new refusal, so it waits for Juan. An ask's owner may be anyone active, even without access to
+  that vehicle. Pinning a stand-up day works for any unpinned day by design (the button shows on each).
