@@ -217,6 +217,9 @@ async function refreshInfo() {
   if (r.status === 307 || r.status === 303 || r.status === 401 || r.status === 403) {
     // Signed out on the server (expired, or "sign out everywhere"): pair again.
     if (r.status !== 403 || !r.json) await signOutLocally(`info answered ${r.status}`);
+    // Signed in, but refused (an Admin demoted with no vehicles left): the session stays, its access does not, so the
+    // local copy stops serving at once (red team, 17 Oct 2026). A 403 with a body left `access` at 'admin' before.
+    else if (state.user) state.user = { ...state.user, access: null };
   }
   return null;
 }

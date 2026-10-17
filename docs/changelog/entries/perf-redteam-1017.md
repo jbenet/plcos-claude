@@ -99,6 +99,18 @@ data on Juan's Mac.
   first plan 5.5 → 2.0 s. The same answers, by hash, for both people (licensed and not), and the same route
   searches for 60 sampled targets one at a time and in batches. Authorization and licensed-data redaction are
   unchanged and applied to each search as before.
+- **A W1c push with many reviews reads the inbox once.** Each review row whose grades missed the live finding listed
+  enrich/inbox and read one file per earlier push, so a push cost rows × inbox runs; the inbox is now listed once per
+  push and each finding's earlier versions read once, on first need (`lib/sync/push.ts`). The same answers.
+- **An LP's page with a long mail history opens about six times sooner.** Merging the Gmail messages into the
+  touchpoints tried every message against every Affinity email (450 × 300 = 135,000 tries for one heavy LP); a
+  message can only match an email on its own day or by its Message-ID, so it now tries only those, and a second
+  mailbox's copy is looked up rather than scanned for. The page's reads, which waited on seven rounds in a row, start
+  together, each waiting only for what it needs (`app/targets/[id]/load.ts`), and the Gmail read no longer waits for
+  the touchpoints. On perf4 as juan, in process, warm medians of 20: a typical LP 46–49 → 35 ms, a heavy one (40
+  contacts, 900 touchpoints, 300 messages, invented) 360–371 → 52–58 ms; all 933 LPs 38.0 → 25.9 s. The same
+  statements (56 and 59), and the same answers by hash for all 933 LPs with a frozen clock; old and new merges agree
+  on 43,000 random traces. Authorization and Dakota redaction are untouched.
 
 ### Red team
 
@@ -314,6 +326,10 @@ data on Juan's Mac.
   button, and an indicated amount can be withdrawn, which also puts an SPV seat the amount moved back to invited.
   `outreach_propose_contact`'s policy label now says it applies at once.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
+- **The Mac's local copy stops when its owner loses Admin with no vehicles left.** The info route then answers 403 with
+  a body, which left the person's access at Admin, so the copy kept serving and a refused sync only threw. Any 403 from
+  info now drops the access (the session stays), and a 401 or 403 from the sync route, which is Admins' only, turns the
+  copy off whatever the info said. Deactivation and sign-out everywhere sign the app out as before.
 
 ### Juan's calls, 17 Oct 2026
 
@@ -421,3 +437,5 @@ data on Juan's Mac.
   the desk's writes are attributable and undoable instead (see Red team).
 - The circuit breaker still gates only drafts. It cannot trip today (nothing records corrections), so wiring it into
   every autonomous write would block nothing; it waits until corrections are recorded.
+- A Team member's push token can begin runs in the cloud ledger without a cap and report any cost on finish; Juan
+  asked for no new limits without asking, and the ledger serializes appends.

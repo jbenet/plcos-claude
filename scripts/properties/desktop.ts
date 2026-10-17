@@ -1,5 +1,8 @@
 /** The desktop app's pairing and build excludes (docs/31). Pure: no database, no network. */
 import { createHash, randomBytes } from 'node:crypto';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { BUILD_INCLUDES, buildExcludes } from '../../lib/desktop/build';
 import { claimPairing, decidePairing, normalizeCode, pendingPairing, resetPairings, startPairing } from '../../lib/desktop/pair';
 import type { AppUser } from '../../modules/platform';
@@ -86,6 +89,30 @@ export async function desktopProperties(check: Check) {
   check('desktop build folder is named only by a plain name: a header naming anything else is refused (no ../ out of builds/)',
     buildName('5bcf0b12') === '5bcf0b12' && buildName('5bcf0b120b4b7515777986080f06a225cf446afb') !== null
       && [null, '', '../..', '..', '.hidden', '5bcf0b12/../x', 'a b', 'x'.repeat(65)].every((x) => buildName(x) === null), 'names');
+  // Red team, 17 Oct 2026: an Admin demoted with no vehicles gets a 403 with a JSON body from the info route, which left
+  // `access` at 'admin', so the copy kept serving. A refusal from the sync route (Admins only) now stops it whatever the
+  // info said, and the core's info refresh drops the access on any 403.
+  const { LocalCopy } = await import(core) as { LocalCopy: new (ctx: unknown) => { phase: string; remoteJson: (p: string) => Promise<unknown>; canServe: (u: URL, r?: unknown) => boolean } };
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'plcos-desktop-prop-'));
+  try {
+    const answers = [{ status: 403, body: '{"ok":false,"error":"Admins only."}' }, { status: 401, body: '{"ok":false}' }, { status: 403, body: 'Forbidden' }];
+    const stopped: string[] = [];
+    for (const a of answers) {
+      const state = { session: { id: 's' }, user: { id: 'u', access: 'admin' } };
+      // The info refresh as it was: the session and its 'admin' access left as they were.
+      const copy = new LocalCopy({ state, log: () => undefined, refreshInfo: async () => null, remoteFetch: async () => new Response(a.body, { status: a.status }), DATA_DIR: dir });
+      copy.phase = 'ready';
+      const before = copy.canServe(new URL('http://127.0.0.1/lps'));
+      let threw = false;
+      try { await copy.remoteJson('/api/desktop/sync?op=state'); } catch { threw = true; }
+      if (before && threw && copy.phase === 'off' && !copy.canServe(new URL('http://127.0.0.1/lps'))) stopped.push(String(a.status));
+    }
+    const coreSrc = readFileSync(path.join(process.cwd(), 'desktop/plcos/core/core.mjs'), 'utf8');
+    const info = coreSrc.slice(coreSrc.indexOf('async function refreshInfo'), coreSrc.indexOf('async function signOutLocally'));
+    check('desktop copy stops serving when the sync route refuses its owner (a 401, or a 403 with or without a JSON body), even while the info still says Admin; the core drops access on any 403',
+      stopped.length === answers.length && /status !== 403 \|\| !r\.json\) await signOutLocally/.test(info) && /access: null/.test(info),
+      `stopped on ${stopped.join(',')} of ${answers.map((a) => a.status).join(',')}`);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
   check('desktop sync page in another shape is parsed whole, not split',
     splitRowsPage('{"ok":true,"horizon":"1","next":null,"rows":[]}') === null && splitRowsPage('{"ok":false,"error":"x"}') === null && splitRowsPage(page(null, []))?.n === 0, 'shapes');
 }
