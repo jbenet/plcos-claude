@@ -327,16 +327,26 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
   const metaOf = new Map(meta.map((m) => [m.id, m]));
   const strategyOf = new Map(strategies.map((s) => [s.pursuit_id, s]));
   const rules = new Map<string, Awaited<ReturnType<typeof checkWrap>>>();
-  const materialsFor = async (v: Vehicle) => {
+  // Each LP's materials are checked against the instrument they hold on the vehicle, as sendGate and the Materials page
+  // check it, not the vehicle kind's (rule 11; red team, 17 Oct 2026): this flag is the desk's only wrap check at send.
+  const heldOf = new Map((page.length ? await (await getDb()).query<{ e: string; v: string; i: string }>(`select u::text e, x.vehicle_id::text v,
+      (array_agg(x.instrument::text order by x.amount desc))[1] i
+     from unnest($1::uuid[]) u join pipeline.exposure x on identity.canonical_entity_id(x.entity_id) = identity.canonical_entity_id(u)
+       and x.closed_at is null and x.vehicle_id = any($2::uuid[])
+     group by u, x.vehicle_id`, [[...new Set(page.map((b) => b.r.entityId))], [...new Set(page.map((b) => b.v.id))]]) : []).map((h) => [`${h.e}|${h.v}`, h.i]));
+  const instrumentFor = (entityId: string, v: Vehicle) => heldOf.get(`${entityId}|${v.id}`) ?? instrumentOf(v);
+  const materialsFor = async (v: Vehicle, instrument: string) => {
     const list = assets.filter((x) => x.audience && (x.vehicleId === v.id || x.vehicleId === null) && x.status !== 'draft' && x.status !== 'withdrawn').slice(0, 20);
     return Promise.all(list.map(async (x) => {
-      const k = `${v.id}:${x.assetId}`;
-      if (!rules.has(k)) rules.set(k, await checkWrap({ exemption: v.exemption, instrument: instrumentOf(v), audience: x.audience as Audience, permittedUse: x.permittedUse as PermittedUse }));
+      const k = `${v.id}:${instrument}:${x.assetId}`;
+      if (!rules.has(k)) rules.set(k, await checkWrap({ exemption: v.exemption, instrument: instrument as Parameters<typeof checkWrap>[0]['instrument'], audience: x.audience as Audience, permittedUse: x.permittedUse as PermittedUse }));
       const w = rules.get(k)!;
       return { assetId: x.assetId, title: x.title, permittedUse: x.permittedUse, allowed: w.allowed && x.status === 'approved' && x.flags.length === 0, link: x.link };
     }));
   };
-  const materialsByVehicle = new Map(await Promise.all(vehicles.map(async (v) => [v.id, await materialsFor(v)] as const)));
+  const wanted = new Map<string, [Vehicle, string]>([...vehicles.map((v) => [`${v.id}|${instrumentOf(v)}`, [v, instrumentOf(v)]] as [string, [Vehicle, string]]),
+    ...page.map((b) => { const i = instrumentFor(b.r.entityId, b.v); return [`${b.v.id}|${i}`, [b.v, i]] as [string, [Vehicle, string]]; })]);
+  const materialsByKey = new Map(await Promise.all([...wanted].map(async ([k, [v, i]]) => [k, await materialsFor(v, i)] as const)));
 
   let redacted = 0;
   const clean = (t: string | null | undefined) => {
@@ -447,7 +457,7 @@ export async function outreachQueue(user: AppUser, a: QueueArgs, fit: QueueFit =
         };
       })(),
       checks,
-      materials: materialsByVehicle.get(v.id) ?? [],
+      materials: materialsByKey.get(`${v.id}|${instrumentFor(r.entityId, v)}`) ?? [],
       bucket: b.bucket === 'passed' ? 'passed' as Bucket : held ? 'held' as Bucket : b.bucket,
       passed: r.status === 'passed',
       updatedAt: changed?.get(r.id)?.toISOString() ?? null,

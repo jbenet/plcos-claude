@@ -148,7 +148,7 @@ export async function influenceFor(
   const allLinks = [...targetLinks, ...neighbourLinks];
   const biggestHard = Math.max(
     1,
-    ...exposures.filter((x) => x.track === 'hard').map((x) => x.amount),
+    ...exposures.filter((x) => x.track === 'hard' && x.instrument !== 'grant').map((x) => x.amount),
   );
 
   const out = new Map<string, Influence>();
@@ -157,12 +157,17 @@ export async function influenceFor(
     const name = names.get(id) ?? 'Unknown';
 
     // ---- withUs: what they are to us, derived from money and delivered asks ----------
-    const theirHard = exposures
-      .filter((x) => x.entityId === id && x.track === 'hard')
-      .reduce((s, x) => s + x.amount, 0);
-    const theirSoft = exposures
-      .filter((x) => x.entityId === id && x.track === 'soft')
-      .reduce((s, x) => s + x.amount, 0);
+    // Per vehicle, never summed across them (invariant 1; red team, 17 Oct 2026): the largest one scores, each is shown.
+    // Grants are a funder's budget, not money with us.
+    const byVehicle = (track: 'hard' | 'soft') => {
+      const m = new Map<string, number>();
+      for (const x of exposures) if (x.entityId === id && x.track === track && x.instrument !== 'grant') m.set(x.vehicleName, (m.get(x.vehicleName) ?? 0) + x.amount);
+      return [...m].sort((a, b) => b[1] - a[1]);
+    };
+    const hardBy = byVehicle('hard'), softBy = byVehicle('soft');
+    const theirHard = hardBy[0]?.[1] ?? 0;
+    const theirSoft = softBy[0]?.[1] ?? 0;
+    const each = (by: Array<[string, number]>) => by.map(([v, a]) => `${v} $${(a / 1e6).toFixed(1)}M`).join(' · ');
     const carried = asks.filter((a) => a.connectorId === id);
     const delivered = carried.filter((a) => a.outcome === 'opted_in').length;
 
@@ -174,15 +179,15 @@ export async function influenceFor(
       // is most of the signal.
       withUs = 0.7 + 0.3 * Math.min(1, theirHard / biggestHard);
       withUsBasis =
-        `An LP with $${(theirHard / 1e6).toFixed(1)}M hard on file. They are vouching with `
+        `An LP with money hard on file (${each(hardBy)}). They are vouching with `
         + 'money already committed, which is the strongest form of introduction there is.';
-      standingWithUs = `LP · $${(theirHard / 1e6).toFixed(1)}M hard`;
+      standingWithUs = `LP · ${each(hardBy)} hard`;
     } else if (theirSoft > 0) {
       withUs = 0.45;
       withUsBasis =
-        `$${(theirSoft / 1e6).toFixed(1)}M soft and nothing hardened. Interested, not committed — `
+        `Soft on file (${each(softBy)}) and nothing hardened. Interested, not committed — `
         + 'an introduction from them carries interest rather than endorsement.';
-      standingWithUs = `Soft · $${(theirSoft / 1e6).toFixed(1)}M`;
+      standingWithUs = `Soft · ${each(softBy)}`;
     } else if (delivered > 0) {
       withUs = 0.55;
       withUsBasis =

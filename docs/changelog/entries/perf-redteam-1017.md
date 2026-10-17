@@ -292,6 +292,13 @@ data on Juan's Mac.
   page could replace the Mac app's window, which now refuses `data:` too. Mail-desk sources ("gmail") no longer show as
   broken links.
 - **The site's Content-Security-Policy adds `object-src 'none'` and `base-uri 'self'`.**
+- **The routes page shows a connector's money per vehicle.** "LP · $7.0M hard" summed Neurotech and an SPV (invariant
+  1); each vehicle's figure is shown, the largest one scores, and grants are left out.
+- **The mail desk's queue checks materials against the instrument the LP holds,** as the Materials page and the ticket
+  check do, not the vehicle kind's; the ticket's wrap-check line names that instrument (invariant 11).
+- **A grants funder who declined is invited anew.** Any invitation on file opened the gate, whatever the funder's
+  status; now only an invited or applied funder's does, and a declined one's needs a new reference (invariant 12).
+- **A collision's follow-up for the losing vehicle is a real date, today or later** (invariant 5).
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -391,3 +398,7 @@ data on Juan's Mac.
   runner at a time is enforced instead.
 - Child work envelopes may outlast their parent (deadline, seconds, an unset token budget), and a finished run row can
   still be updated. Nothing outside the tests makes a child envelope yet.
+- The Board counts an LP with a soft amount and an empty ladder at "Indication given": the Affinity list's amount is
+  the team's record of what the LP indicated. Their own ladder rung, when there is one, still wins.
+- The visualization lenses call A/B ties and reviewed ties "confirmed" and C/D ties "a clue, not a route". Wording for
+  a later pass; routing itself ranks every tier.

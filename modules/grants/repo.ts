@@ -47,7 +47,9 @@ export async function grantGate(entityId: string, q?: Queryable): Promise<GrantG
         'the same as being invited to apply, and the rail refuses outreach either way.',
     };
   }
-  const withInvitation = rows.find((r) => r.invitation_ref !== null);
+  // An invitation opens the gate while it is live: a funder who declined (or already awarded) is asked anew, with a new
+  // reference (rule 12; red team, 17 Oct 2026).
+  const withInvitation = rows.find((r) => r.invitation_ref !== null && (r.status === 'invited' || r.status === 'applied'));
   if (withInvitation) return { blocked: false, reason: null };
   const f = toFunder(rows[0]!);
   return {
@@ -71,7 +73,7 @@ export async function recordInvitation(
     await tx.query(
       `update grants.funder
           set invitation_ref = $2, invited_on = $3::date, invited_by = $4, status = 'invited'
-        where funder_id = $1`,
+        where funder_id = $1 and (status in ('sourced', 'invited', 'applied') or invitation_ref is distinct from $2)`,
       [args.funderId, args.reference, args.invitedOn, args.invitedBy],
     );
     await tx.query(

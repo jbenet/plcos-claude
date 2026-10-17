@@ -222,6 +222,19 @@ export async function outreachWriteProperties(check: Check, db: Db) {
       onFundGate.instrument === 'lp_commitment' && !onFundGate.refusals.length && onSpvGate.instrument === 'spv'
         && barredGate.refusals.some((r) => /restriction/.test(r)) && (!grantGateR || (grantGateR.instrument === 'grant' && grantGateR.refusals.length > 0)),
       JSON.stringify({ fund: onFundGate, spv: onSpvGate.instrument, barred: barredGate.refusals.length, grants: grantGateR }));
+    {
+      const { grantGate } = await import('../../modules/grants');
+      const live = db;
+      const firm = (await db.one<{ e: string }>('select entity_id::text e from strategy.pursuit where pursuit_id = $1', [lpC]))!.e;
+      const funder = (await live.one<{ id: string }>(`insert into grants.funder (entity_id, programme, status, invitation_ref, invited_on)
+        values ($1, 'Invented programme', 'declined', 'invented-ref-1', '2025-01-01') returning funder_id::text id`, [firm]))!.id;
+      const declined = await grantGate(firm);
+      await live.query(`update grants.funder set status = 'invited' where funder_id = $1`, [funder]);
+      const invited = await grantGate(firm);
+      await live.query(`delete from grants.funder where funder_id = $1`, [funder]);
+      check('Grants: an invitation opens the gate only while the funder is invited or applied; a declined one is asked anew (rule 12)',
+        declined.blocked && !invited.blocked, `declined ${declined.blocked ? 'blocked' : 'OPEN'}, invited ${invited.blocked ? 'BLOCKED' : 'open'}`);
+    }
   }
   check('Outreach writes: a person\'s link leaves an agent\'s approved ticket for the agent\'s own send; an agent\'s link of our own mail as received is refused',
     Boolean(t3) && personLink.status === 200 && personLink.json?.data?.ticketUsed !== true && keptOpen?.open === true && agentLink.status === 200
