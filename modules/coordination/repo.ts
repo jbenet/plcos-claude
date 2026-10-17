@@ -68,9 +68,14 @@ export async function listConflicts(status?: 'open'): Promise<ConflictCase[]> {
       ${status ? "where c.status = 'open'" : ''}
       order by c.opened_at desc`,
   );
+  // Every claimant's ask in one read, not two reads per case one case after another (17 Oct 2026).
+  const ids = [...new Set(rows.flatMap((r) => [r.claimant_a, r.claimant_b]))];
+  const asks = ids.length
+    ? new Map((await db.query<AskRow>(`${ASK_SELECT} where a.ask_id = any($1::uuid[])`, [ids])).map((r) => [r.ask_id, toAsk(r)]))
+    : new Map<string, Ask>();
   const out: ConflictCase[] = [];
   for (const r of rows) {
-    const [a, b] = await Promise.all([getAsk(r.claimant_a), getAsk(r.claimant_b)]);
+    const a = asks.get(r.claimant_a) ?? null, b = asks.get(r.claimant_b) ?? null;
     if (!a || !b) continue;
     out.push({
       caseId: r.case_id, entityId: r.entity_id, entityName: r.entity_name,

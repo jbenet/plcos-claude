@@ -9,7 +9,7 @@ import { LINK_ROLES, RELATIONS, type Relation } from './entity-reads';
 import { peopleWithAddress } from './addresses';
 import { changed, claimReliedOnSince, refCounts, UNDO_HOURS } from './lps';
 import { OutreachRefused } from './reads';
-import { deskActor, entityVehicles, once, type DeskContext } from './writes';
+import { deskActor, entityVehicles, onOthersVehicle, once, UNCONFIRMED_ELSEWHERE, type DeskContext } from './writes';
 
 /**
  * Who someone is to us when they are not an LP, and where mail to an LP goes (JuanMail feedback 0173 and 0174; Juan
@@ -116,6 +116,8 @@ export async function addEntity(ctx: DeskContext, raw: Record<string, unknown>) 
 
     // ── The company or LP a person is linked to: there, and one you may change ──
     let company: { id: string; name: string; type: string } | null = null;
+    // The company is also on a vehicle the caller may not change: the link is made, the address written unconfirmed.
+    let companyElsewhere = false;
     if (a.companyEntityId) {
       company = await db.one<{ id: string; name: string; type: string }>(`select e.entity_id::text id, e.display_name name, e.entity_type::text type
         from identity.entity e where e.entity_id = identity.canonical_entity_id($1::uuid) and e.retired_at is null`, [a.companyEntityId]);
@@ -125,6 +127,7 @@ export async function addEntity(ctx: DeskContext, raw: Record<string, unknown>) 
       if (a.role === 'team' && !ORG_TYPES.includes(company.type)) throw new OutreachRefused(422, `Not added: ${company.name} is a person, not a company. An LP's helper is role assistant.`);
       const mayChange = vehicles.length ? vehicles.some((v) => can(ctx.env.principal, 'mutate', { vehicle: v })) : can(ctx.env.principal, 'mutate', {});
       if (!mayChange) throw new OutreachRefused(404, 'No such companyEntityId.');
+      companyElsewhere = vehicles.some((v) => !can(ctx.env.principal, 'mutate', { vehicle: v }));
     } else if (!can(ctx.env.principal, 'mutate', {})) {
       throw new OutreachRefused(403, 'Your access may not add people or organisations.');
     }
@@ -213,6 +216,8 @@ export async function addEntity(ctx: DeskContext, raw: Record<string, unknown>) 
 
         // ── The address, as outreach_add_lp records one ──
         let claimId: string | null = null;
+        const elsewhere = companyElsewhere || (!createdEntity && await onOthersVehicle(ctx.env.principal, entityId, tx));
+        const verified = !autonomous && !elsewhere;
         if (a.email) {
           const doc = `gmail:${owner.handle}`;
           await tx.query(`insert into research.source_doc (doc_id, title, kind, origin, as_of, strength, supports, body)
@@ -222,7 +227,7 @@ export async function addEntity(ctx: DeskContext, raw: Record<string, unknown>) 
             and superseded_by is null and field = 'email' and lower(btrim(value)) = $2 limit 1`, [entityId, a.email]);
           claimId = same ? null : (await tx.one<{ id: string }>(`insert into research.claim (entity_id, field, value, source, as_of, confidence, last_verified_by, last_verified_at)
             values ($1, 'email', $2, $3, current_date, $4, $5, $6) returning claim_id::text id`,
-          [entityId, a.email, doc, autonomous ? 'medium' : 'high', autonomous ? null : owner.id, autonomous ? null : new Date()]))!.id;
+          [entityId, a.email, doc, verified ? 'high' : 'medium', verified ? owner.id : null, verified ? new Date() : null]))!.id;
         }
 
         if (!createdEntity && !relationAnswer && !affiliationId && !claimId) {
@@ -249,6 +254,7 @@ export async function addEntity(ctx: DeskContext, raw: Record<string, unknown>) 
           created: { entity: createdEntity, relation: !!relationAnswer, link: !!affiliationId },
           ...(relationAnswer?.previous ? { replacedRelation: relationAnswer.previous.relation } : {}),
           link: company && a.role ? { role: a.role, entityId: company.id, name: company.name } : null,
+          ...(elsewhere && !autonomous && claimId ? { unconfirmed: UNCONFIRMED_ELSEWHERE } : {}),
           next: `Recorded ${what}. Undo within ${UNDO_HOURS} hours: DELETE /api/outreach/entities?entityId=${entityId} (outreach_undo_add_entity).`,
         } };
       });
@@ -291,7 +297,8 @@ export async function undoAddEntity(ctx: DeskContext, raw: Record<string, unknow
       }
     }
     if (add.claimId && !(await claimReliedOnSince(tx, entityId, row.audit_id))) await tx.query('delete from research.claim where claim_id = $1', [add.claimId]);
-    if (add.sourceRecord && retire) {
+    // The alias it attached to a record already here goes too, as undoAddLp's does.
+    if (add.sourceRecord && (retire || !add.createdEntity)) {
       await tx.query(`delete from research.note where entity_id = $1 and kind = 'identity_creation' and data->>'source' = 'mail_desk' and data->>'sourceId' = $2`, [entityId, add.sourceRecord]);
       await tx.query(`delete from identity.source_record where source = 'mail_desk' and source_id = $1`, [add.sourceRecord]);
     }

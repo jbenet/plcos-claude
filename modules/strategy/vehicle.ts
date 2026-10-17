@@ -6,19 +6,24 @@ import { vehicleTotals, listExposures } from '@/modules/pipeline';
 import { touchpointSummaries, touchpointsByPair } from '@/modules/meetings';
 import { buildCache, liveRevisions, touchRevisions } from '@/lib/build-cache';
 import { strategyRouteSummaries, type RecordedRoute } from '@/modules/network';
-import { listPursuits } from './repo';
+import { cachedPursuits } from './repo';
+import type { Pursuit } from './types';
 import { publicProfiles, type ProfileParts } from './profile-parts';
 import { byVersion, VERSION } from './by-version';
 
 /** One vehicle's pursuits and their touchpoints, read once per revision for both the list and the
- * vehicle's plan, which each read them in full (performance pass, 8 Oct 2026). Immutable to callers. */
-export const pursuitsOn = buildCache((vehicleId: string) => listPursuits(vehicleId));
+ * vehicle's plan, which each read them in full (performance pass, 8 Oct 2026). Immutable to callers.
+ * The pursuit list's own cache, not a second one around a copy of it: each layer asked for the revision before it
+ * answered and again when its build ended, two more waits on the pool before a plan could begin (17 Oct 2026). */
+export const pursuitsOn = (vehicleId: string): Promise<Pursuit[]> => cachedPursuits(vehicleId, '');
 /** Kept by the touch revision (network 020): moving an LP's status leaves its vehicle's touchpoints standing. */
 export const touchesOn = buildCache(async (vehicleId: string) =>
   touchpointsByPair((await pursuitsOn(vehicleId)).map((p) => ({ entityId: p.entityId, vehicleId }))), 16, touchRevisions);
 import { STATUSES, type PursuitStatus } from './types';
 
 const rules = config.strategyRanking;
+/** localeCompare's own collator, made once: a new one per comparison was most of the plan's sort (17 Oct 2026). */
+const byName = new Intl.Collator().compare;
 const DAY = 86_400_000;
 export interface Transition { pursuitId: string; from: PursuitStatus; to: PursuitStatus; at: Date }
 /** Old audit rows used display labels. Normalize them; never infer history from today's stock. */
@@ -189,7 +194,7 @@ export async function vehicleStrategy(vehicleId: string, now = new Date()) {
       capacity, capacityBand, capacityBasis, usingDakota, likelihood, propensity, days, decision, routeWeight, conversion, score,
       action, group, risks, idleDays, stale, closed, held, ownerActive: byOwner.get(p.pursuitId) ?? false };
   });
-  rows.sort((a, b) => (b.score?.priority ?? -1) - (a.score?.priority ?? -1) || Number(a.closed) - Number(b.closed) || b.workPriority - a.workPriority || a.pursuit.entityName.localeCompare(b.pursuit.entityName));
+  rows.sort((a, b) => (b.score?.priority ?? -1) - (a.score?.priority ?? -1) || Number(a.closed) - Number(b.closed) || b.workPriority - a.workPriority || byName(a.pursuit.entityName, b.pursuit.entityName));
   return { total, rows, now, since, transitions, exposures,
     weekly: transitions.filter(t => t.at >= since),
     added: pursuits.filter(p => p.openedAt >= since && p.openedAt <= now).length,

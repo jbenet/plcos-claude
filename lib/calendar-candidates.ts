@@ -299,7 +299,9 @@ export async function recentAdds(q: Queryable, vehicleId: string | null): Promis
 
 /** When the calendar was last read, and whether the latest read failed: the section says so rather than look fresh. */
 export async function lastCalendarRead(q: Queryable): Promise<{ at: Date | null; failed: boolean }> {
-  const ok = await q.one<{ at: Date }>(`select finished_at at from sources.sync_run where source = 'calendar' and status = 'ok' order by id desc limit 1`);
-  const latest = await q.one<{ status: string }>(`select status from sources.sync_run where source = 'calendar' and status <> 'running' order by id desc limit 1`);
+  const [ok, latest] = await Promise.all([
+    q.one<{ at: Date }>(`select finished_at at from sources.sync_run where source = 'calendar' and status = 'ok' order by id desc limit 1`),
+    q.one<{ status: string }>(`select status from sources.sync_run where source = 'calendar' and status <> 'running' order by id desc limit 1`),
+  ]);
   return { at: ok?.at ? new Date(ok.at) : null, failed: latest?.status === 'failed' };
 }
