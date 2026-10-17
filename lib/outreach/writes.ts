@@ -108,7 +108,8 @@ export async function update(ctx: DeskContext, raw: Record<string, unknown>) {
     // The LP page's update box, exactly (lib/updates.ts): one transaction, once per key, each ticked box.
     const r = await addUpdate(ctx.env.owner.id, {
       pursuitId: p.pursuit_id, body: a.words, idempotencyKey: `desk:${ctx.env.owner.id}:${a.idempotencyKey}`,
-      status: t.status ? { to: t.status.to, passedBy: t.status.passedBy ?? null, reason: t.status.reason ?? null } : null,
+      // Red-team pass, 17 Oct 2026: an autonomous status read as a person's ('us'); it is the system's, as outreach_add_lp sets it.
+      status: t.status ? { to: t.status.to, passedBy: t.status.passedBy ?? null, reason: t.status.reason ?? null, source: ctx.env.autonomous ? 'rule' : 'us' } : null,
       touch: t.touch ? { channel: t.touch.channel, direction: t.touch.direction ?? (t.touch.channel === 'meeting' || t.touch.channel === 'call' ? 'both' : 'ours'), on: at(t.touch.on, '12'), read: t.touch.read ?? null } : null,
       nextStep: t.nextStep ? { step: t.nextStep.step, on: t.nextStep.on ? at(t.nextStep.on, '00') : null } : null,
       indicated: t.indicated ? { low: t.indicated.low, high: t.indicated.high ?? null, on: t.indicated.on ? at(t.indicated.on, '12') : null, touchpointId: t.indicated.touchpointId ?? null } : null,
@@ -297,6 +298,11 @@ export async function contacts(ctx: DeskContext, raw: Record<string, unknown>) {
     requireMutationProfile();
     const owner = ctx.env.owner;
     const confirmed = a.source === 'gmail';
+    // A confirmation is a person's, as outreach_add_lp keeps addresses unconfirmed when no person clicked; and where
+    // an LP's mail goes is a person's choice (red-team pass, 17 Oct 2026).
+    if (ctx.env.autonomous && (confirmed || a.role === 'send-to')) {
+      throw new OutreachRefused(400, `Not recorded: ${confirmed ? 'a confirmed address (source gmail) is a person\'s to confirm' : 'where an LP\'s mail goes (role send-to) is a person\'s choice'}. Called autonomously (no person clicked), use source gmail-signature${a.role === 'send-to' ? ' and leave out role' : ''}.`);
+    }
     if (a.confirmedBy) {
       // Juan picks the address in the wave review; the confirmation is the token owner's own, never someone else's.
       // Any of the owner's addresses (login, default-to, alias) names them.

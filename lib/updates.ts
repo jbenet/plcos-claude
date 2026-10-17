@@ -23,7 +23,8 @@ export interface UpdateInput {
   body: string;
   /** One per form, so a double click saves one update. */
   idempotencyKey: string;
-  status?: { to: PursuitStatus; passedBy?: PassedBy | null; reason?: string | null } | null;
+  /** `source` 'rule': set by the mail desk on its own (no person clicked), so a person's later choice wins (lib/outreach/lps.ts). */
+  status?: { to: PursuitStatus; passedBy?: PassedBy | null; reason?: string | null; source?: 'us' | 'rule' } | null;
   touch?: { channel: Channel; direction: Direction | null; on: Date; read: Read | null } | null;
   nextStep?: { step: string; on: Date | null } | null;
   /**
@@ -99,7 +100,7 @@ export async function addUpdate(actorId: string, input: UpdateInput, opts: { q?:
         // The next step stays unless the update names a new one.
         nextStep: next ? next.step : p.nextStep,
         nextStepOn: next ? next.on : p.nextStepOn,
-      }, { q: tx, updateId });
+      }, { q: tx, updateId, source: input.status!.source });
       applied.status = { from: p.status, to };
       if (next) applied.nextStep = { step: next.step, on: next.on?.toISOString().slice(0, 10) ?? null };
     } else if (next) {
