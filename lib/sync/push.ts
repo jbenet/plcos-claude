@@ -99,19 +99,47 @@ async function earlierVersions(enrich: string, key: string): Promise<Array<{ fac
   return found.filter((x): x is { facts?: unknown[] } => !!x && typeof x === 'object');
 }
 
+/** The body as text, or null once it passes `max` bytes (reading stops there). */
+async function capped(request: Request, max: number): Promise<string | null> {
+  if (!request.body) return '';
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    n += value.byteLength;
+    if (n > max) { await reader.cancel().catch(() => undefined); return null; }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 /** What the server holds that the push would contradict. */
 async function serverProblems(bundle: PushBundle, enrich: string, db: Db, caller: SyncCaller): Promise<Rejection[]> {
   const out: Rejection[] = [];
-  const vehicles = new Map((await db.query<{ id: string; slug: string }>('select id::text, slug from platform.vehicle')).map((v) => [v.slug, v.id]));
+  // Named as the import names them (lib/enrich/import.ts): slug or display name, any case (red-team pass, 17 Oct 2026:
+  // "SPV-Science" or the display name skipped an exact-slug check, then imported onto that vehicle).
+  const known = await db.query<{ id: string; slug: string; name: string }>('select id::text, slug, name from platform.vehicle');
+  const vehicleOf = (named: string) => known.find((v) => [v.slug.toLowerCase(), v.name.toLowerCase()].includes(named.trim().toLowerCase()))?.id;
+  const admin = can(caller.user, 'admin');
   for (const f of bundle.files) {
     const target = join(enrich, f.path);
-    if (DECISIONS.test(f.path)) continue;
+    if (DECISIONS.test(f.path)) {
+      // A merge that names its records needs no review group (issue 0138), so it can join any two identities on every
+      // vehicle: only an Admin's push carries one. A Team member's merge names the group the review exported.
+      const named = (f.content as Array<{ group?: unknown; decision?: unknown }>).flatMap((r, i) => r?.group === undefined && r?.decision === 'merge' ? [i + 1] : []);
+      if (named.length && !admin) out.push({ path: f.path, problems: named.map((n) => `row ${n}: a merge that names its records instead of a review group comes from an Admin's push`) });
+      continue;
+    }
     if (isRetire(f.content) && !retiring(bundle, f)) { out.push({ path: f.path, problems: ['only a W5 strategy file can be retired'] }); continue; }
     // A strategy for a vehicle is pushed only by someone who may change that vehicle, as prospects are (red-team pass, 14 Oct 2026).
     const folder = STRATEGY.exec(f.path)?.[1];
-    const asked = (f.content as { ask?: { vehicle?: unknown } } | null)?.ask?.vehicle;
-    for (const slug of new Set([folder, typeof asked === 'string' ? asked : undefined].filter((x): x is string => Boolean(x)))) {
-      const id = vehicles.get(slug);
+    const askedOf = (c: unknown) => { const v = (c as { ask?: { vehicle?: unknown } } | null)?.ask?.vehicle; return typeof v === 'string' ? v : undefined; };
+    // Replacing or retiring a strategy file also needs the vehicle of the file it replaces.
+    const held = STRATEGY.test(f.path) ? askedOf(await readJson(target)) : undefined;
+    for (const slug of new Set([folder, askedOf(f.content), held].filter((x): x is string => Boolean(x)))) {
+      const id = vehicleOf(slug);
       if (id && !can(caller.user, 'mutate', { vehicle: id })) out.push({ path: f.path, problems: [`vehicle "${slug}" is not one you can change; an Admin pushes it, or gives you that vehicle in Settings → People`] });
     }
     if (REVIEW.test(f.path)) {
@@ -190,12 +218,14 @@ export async function acceptPush(caller: SyncCaller, request: Request, o: PushOp
   if (refusal) return answer(403, 'refused', { error: refusal }, { reason: 'profile' });
   const declared = Number(request.headers.get('content-length') ?? 0);
   if (declared > config.sync.maxPushBytes) return answer(413, 'invalid', { error: `The push is larger than ${config.sync.maxPushBytes} bytes; push the batch in parts.` }, { reason: 'size', bytes: declared });
+  // Read whole before taking the one-at-a-time flag, and never past the limit (red-team pass, 17 Oct 2026: a chunked
+  // body has no length to check, and a slow one held the flag against every other push while it was read).
+  const raw = await capped(request, config.sync.maxPushBytes);
+  if (raw === null) return answer(413, 'invalid', { error: `The push is larger than ${config.sync.maxPushBytes} bytes; push the batch in parts.` }, { reason: 'size' });
+  const bytes = Buffer.byteLength(raw, 'utf8');
   if (g.__syncPushBusy) return answer(409, 'refused', { error: 'Another push is being taken. Try again in a moment.' }, { reason: 'busy' });
   g.__syncPushBusy = true;
   try {
-    const raw = await request.text();
-    const bytes = Buffer.byteLength(raw, 'utf8');
-    if (bytes > config.sync.maxPushBytes) return answer(413, 'invalid', { error: `The push is larger than ${config.sync.maxPushBytes} bytes; push the batch in parts.` }, { reason: 'size', bytes });
     let input: unknown;
     try { input = JSON.parse(raw); } catch { return answer(400, 'invalid', { error: 'The push is not JSON.', rejected: [{ path: null, problems: ['not JSON'] }] }, { reason: 'json', bytes }); }
     const { bundle, rejections } = checkBundle(input, config.sync.maxPushFiles);

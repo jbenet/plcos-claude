@@ -11,6 +11,12 @@ data on Juan's Mac.
   Strategy page fetched tiptap and the Markdown parser: 1,123 KB of script against 540–580 KB elsewhere. The box
   is now a plain text box until someone clicks into it; pointing at it starts the fetch, the editor swaps in with
   the cursor at the end, and what was typed before it arrived is kept. Strategy: 1,123 → 581 KB.
+- **Visualizations send a quarter of the data.** The network, coverage and radar lenses went to the browser as
+  lists of objects, every row repeating its field names. They are packed into columns now (`lib/lenses-client.ts`),
+  as the pipeline already was. On the real data: coverage 6.1 → 1.5 MB, radar 2.8 → 1.4 MB, network 2.5 → 1.6 MB.
+- **The all-vehicles pipeline rebuilds sooner after a write.** It is now built from each vehicle's own list, and
+  each vehicle's plans and touches start as soon as that list arrives, rather than after every list. On the real
+  data: 495 → 430 ms. The strategic filter reads each profile's kept text once, not the whole profile.
 
 ### Red team
 
@@ -29,7 +35,7 @@ data on Juan's Mac.
   writes ask: that the token's owner may change records on their vehicles.
 - **An amount is a person's to record, on `/update` too.** `outreach_add_lp` refuses an indicated amount from a
   call no person clicked and says "a person adds it with outreach_update"; `outreach_update` took one from the same
-  autonomous call. It now refuses it the same way. Status, touchpoints and next steps from the desk are unchanged.
+  autonomous call. It now refuses it the same way.
 - **Affinity writes: what was approved is what is written.** Proposing an address again replaced the mail and
   plan of an item already in the batch under the same id, so an Admin with Approvals open could approve mail they
   never saw, and the note named the first proposer for another person's mail. A changed item now gets a new id
@@ -52,6 +58,26 @@ data on Juan's Mac.
   and Host matched. A server on the real data, or a copy of it, now answers only an IP, a name with no dot or a
   `.local` name; anything else gets 421. The demo is unchanged; Railway signs people in and is unaffected.
 
+- **A Mac push changes only the vehicles its owner may change.** A strategy file naming a vehicle by its display
+  name or in another case skipped the check, which looked for the exact slug, and then imported onto that vehicle;
+  and replacing or retiring a strategy file never asked about the vehicle of the file already there. Both now
+  name the vehicle the way the import does, and both vehicles are checked.
+- **Only an Admin's push merges two named records.** An identity merge that names its records instead of a review
+  group can join any two people on every vehicle, and an Admin applies the file whole. A Team member's push of one
+  is refused, saying an Admin pushes it; their merges of a review group, separations and retypes are unchanged.
+- **A push is read whole before it waits for another, and never past the limit.** The size was checked only against
+  the declared length, so a body sent without one was read entire; and a slow upload held the one-at-a-time flag,
+  so every other push was told to wait until it ended. The body is now read up to the limit and refused past it,
+  and only then does the push take its turn.
+- **A status the mail desk sets on its own is the system's.** `outreach_update` recorded it as the person's own
+  choice; it is now marked as `outreach_add_lp` marks one (rule), so a person's later choice wins.
+- **An intro ask's ticket covers mail to its connector.** A message linked under an INTRO_ASK ticket was accepted
+  whoever it went to, the LP included. At least one recipient must now be the connector, by an address on record.
+  And no ticket is spent on a sent message that names no recipients: it said nothing of who got the mail.
+- **The mail desk can't confirm an address on its own.** An autonomous `outreach_propose_contact` could store an
+  address as confirmed by the token's owner and make it where the LP's mail goes. Both are refused when no person
+  clicked; an unconfirmed address read from a signature is still added, as `outreach_add_lp` adds one.
+
 ### Left as is
 
 - `/api/health?affinity=1` stays public: threads read the Affinity budget with it and it holds counts only.
@@ -63,3 +89,12 @@ data on Juan's Mac.
   403. The property suite asserts the current behaviour, so it reads as a later decision; LabOS sign-in is off today.
 - Off Railway, the setup code's per-address limit trusts one proxy hop. The code is 48 bits, so guessing stays
   impractical.
+- A research finding pushed by a Team member can lead the findings import to add the finding's firm as a new LP (by
+  rule, status New) on every vehicle where the person is pursued, including vehicles the Team member can't change.
+  Findings are shared research rather than any one vehicle's, and the import is the system's.
+- A meeting or call the mail desk logs on its own still lets Reconciliation record the conversation rungs (Juan,
+  8 Oct 2026: the system figures these out, marked and undoable). Refusing touchpoints from the desk would stop its
+  logging.
+- Under an intro ask's ticket, recipients other than the connector are not checked against restrictions.
+- A push identical to an earlier one answers that push's run and job ids, whoever pushed it; the job itself answers
+  only its own pusher.

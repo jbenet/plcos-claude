@@ -16,6 +16,7 @@ import { AUTONOMOUS, PERSON, requireApprovedTicket, TicketRequired } from '@/mod
 import { CHANNEL_LABEL, DIRECTION_LABEL, aboutThisRaise, eventAbout, raiseWindows, type Touchpoint } from '@/modules/meetings';
 import { appendAudit } from '@/modules/platform';
 import type { Envelope } from '@/lib/mcp/envelope';
+import { peopleWithAddress } from './addresses';
 import { OutreachRefused } from './reads';
 
 /**
@@ -178,7 +179,7 @@ export const sentInput = z.object({
 }).strict();
 
 type Ticketed = { kind: 'SEND'; sendId: string; contentSendId: string | null; recipients: string[]; sentAt: Date | null; ticketId: string }
-  | { kind: 'INTRO_ASK'; askId: string; ticketId: string; status: string };
+  | { kind: 'INTRO_ASK'; askId: string; ticketId: string; status: string; connectorId: string | null };
 
 /** The agent ticket a message uses: named, or for an autonomous send found among this LP's approved, unused ones. */
 async function ticketFor(q: Queryable, ticketId: string | null, pursuitId: string, entityId: string, vehicleId: string, recipients: string[]): Promise<Ticketed | null> {
@@ -194,11 +195,11 @@ async function ticketFor(q: Queryable, ticketId: string | null, pursuitId: strin
     return { kind: 'SEND', sendId: send.send_id, contentSendId: send.content_send_id, recipients: send.recipients, sentAt: send.sent_at ? new Date(send.sent_at) : null, ticketId: send.ticket_id };
   }
   if (!ticketId) return null;
-  const ask = await q.one<{ ask_id: string; status: string; entity: string; vehicle: string }>(`select ask_id::text, status::text, identity.canonical_entity_id(entity_id)::text entity,
-      vehicle_id::text vehicle from coordination.ask where ticket_id = $1`, [ticketId]);
+  const ask = await q.one<{ ask_id: string; status: string; entity: string; vehicle: string; connector: string | null }>(`select ask_id::text, status::text, identity.canonical_entity_id(entity_id)::text entity,
+      vehicle_id::text vehicle, identity.canonical_entity_id(connector_id)::text connector from coordination.ask where ticket_id = $1`, [ticketId]);
   if (ask) {
     if (ask.entity !== entityId || ask.vehicle !== vehicleId) throw new OutreachRefused(409, 'That ticket is for another LP. Nothing was linked.');
-    return { kind: 'INTRO_ASK', askId: ask.ask_id, ticketId, status: ask.status };
+    return { kind: 'INTRO_ASK', askId: ask.ask_id, ticketId, status: ask.status, connectorId: ask.connector };
   }
   throw new OutreachRefused(404, 'No agent send or intro ask is under that ticket. Nothing was linked.');
 }
@@ -219,6 +220,8 @@ async function useTicket(tx: Queryable, ticket: Ticketed, a: { sentAt: Date; rec
     if (e instanceof TicketRequired) throw new OutreachRefused(409, `${e.message} Nothing was linked.`);
     throw e;
   }
+  // Red-team pass, 17 Oct 2026: a ticketed message with no recipients said nothing of who got it, and spent the ticket.
+  if (!a.recipients.length) throw new OutreachRefused(409, 'A message sent under a ticket names its recipients (to, cc). Nothing was linked.');
   const decided = (await tx.one<{ at: Date | string | null }>('select decided_at at from governance.approval_ticket where id = $1', [ticket.ticketId]))?.at;
   if (decided && a.sentAt.getTime() < new Date(decided).getTime() - SKEW_MS) throw new OutreachRefused(409, 'The message was sent before the approval: a ticket covers a send after it. Nothing was linked.');
   if (ticket.kind === 'SEND') {
@@ -232,6 +235,13 @@ async function useTicket(tx: Queryable, ticket: Ticketed, a: { sentAt: Date; rec
       [ticket.sendId, a.sentAt, a.gmailMessageId, a.ownerId]);
   } else {
     if (ticket.status === 'made') throw new OutreachRefused(409, 'That intro ask was made already. Nothing was linked.');
+    // The approval was for asking this connector (red-team pass, 17 Oct 2026: any recipients were accepted, the LP's own included).
+    if (ticket.connectorId) {
+      const theirs = await Promise.all(a.recipients.map((r) => peopleWithAddress(r, tx)));
+      if (!theirs.some((people) => people.some((p) => p.id === ticket.connectorId))) {
+        throw new OutreachRefused(409, 'None of the recipients is the connector the intro ask was approved for (by an address on record). Nothing was linked.');
+      }
+    }
     try { await recordAskEmailed(a.ownerId, ticket.askId, ticket.ticketId, a.acting, tx); } catch (e) { throw new OutreachRefused(409, `${e instanceof Error ? e.message : 'The ask was refused.'} Nothing was linked.`); }
   }
 }
