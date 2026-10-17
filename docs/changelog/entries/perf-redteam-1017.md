@@ -110,6 +110,12 @@ data on Juan's Mac.
   grants funder could be checked as a PRI and cleared for an investment memo. The instrument now comes from the LP's
   commitment on that vehicle, else the vehicle's kind, and an email-barring restriction or a grants funder with no
   invitation refuses (rules 8, 11, 12).
+- **Being copied is not replying.** Affinity's mail marked every outside person on a message as having written it
+  whenever the sender was outside, so an intro email that copied an LP read as the LP's reply: LP opted in, the
+  connector rung "not applicable", status Discussing. Only the sender's touchpoint is now theirs. Matching a reply's
+  sender also no longer uses licensed (Dakota) addresses.
+- **An invite nobody accepted counts only if one of us sent it.** Today's invite fix kept any meeting organized from a
+  Protocol Labs domain; the organizer must now be a team member's own address.
 - **The feedback form has an overall size limit.** The browser route read the whole body before checking each
   picture; it now stops reading past 42 MB (the pictures' 40 MB plus text) and answers 413, as the token route does.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
@@ -173,5 +179,8 @@ data on Juan's Mac.
   only its own pusher.
 - Approving an already approved ticket runs its action again: that is how a hardening refused for a lapsed
   verification is retried. Hardening does nothing the second time, and the amount is now bound.
+- A received message's From is taken as sent: a spoofed sender can record "LP opted in" (undoable, marked). Checking
+  DMARC needs the mail desk to pass the verdict; not worth it yet.
+- A note Affinity attaches to a meeting still dates that meeting by the note: the meeting is Affinity's own record.
 - DocSend visits name the visitor by the email they typed, unchecked. Visits feed only the conversion charts, never
   the consent ladder, so a made-up address can't move an LP.
