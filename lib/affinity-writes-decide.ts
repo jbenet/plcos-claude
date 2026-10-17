@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db';
 import { requireMutationProfile } from '@/lib/mutation-policy';
 import { appendAudit, type AppUser } from '@/modules/platform';
 import { AffinityWriteError, AffinityWriteRefused, affinityWriter, type AffinityWriter } from '@/lib/connectors/affinity/write';
-import { callsFor, day, ROW, UNCERTAIN, type WriteItem } from '@/lib/affinity-writes';
+import { callsFor, day, messageKey, ROW, UNCERTAIN, type WriteItem } from '@/lib/affinity-writes';
 
 /**
  * Deciding a batch of Affinity writes, and writing it (lib/affinity-writes.ts says what the batch is). Only the
@@ -75,6 +75,13 @@ export async function decideWriteBatch(user: AppUser, batchId: string, approve: 
   for (const it of items) {
     let personId = it.affinityPersonId, created: number | null = null;
     try {
+      // Mail another item has written since this one was proposed (two batches over the same mail) is not noted twice.
+      const noted = new Set((await db.query<{ messages: WriteItem['messages'] }>(`select messages from sources.affinity_write_item
+        where address = $1 and state = 'written' and item_id <> $2`, [it.address, it.itemId])).flatMap((r) => r.messages.map(messageKey)));
+      if (noted.size && it.messages.every((m) => noted.has(messageKey(m)))) {
+        await db.query(`update sources.affinity_write_item set state = 'skipped', reason = 'Already written to Affinity by another batch.' where item_id = $1`, [it.itemId]);
+        continue;
+      }
       // A person already created for this address (an earlier batch, or an item before this one) is noted, never made twice.
       const made = it.plan === 'person+note' || !personId ? (await db.one<{ id: number }>(`select created_person_id::float8 id from sources.affinity_write_item
         where address = $1 and created_person_id is not null order by written_at desc nulls last limit 1`, [it.address]))?.id ?? null : null;

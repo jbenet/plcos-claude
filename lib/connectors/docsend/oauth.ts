@@ -114,11 +114,21 @@ export async function discover(t: OAuthTransport, server = DOCSEND_MCP_URL): Pro
     authorizationEndpoint: allowedUrl(asm.authorization_endpoint),
     tokenEndpoint: allowedUrl(asm.token_endpoint),
     registrationEndpoint: allowedUrl(asm.registration_endpoint),
-    scopes: ((prm?.scopes_supported ?? asm.scopes_supported) as string[] | undefined) ?? [],
+    scopes: readScopes(((prm?.scopes_supported ?? asm.scopes_supported) as string[] | undefined) ?? []),
   };
 }
 
-/** Register PLC OS as a public client for this redirect URI. Returns the client id. */
+/**
+ * Only the read scopes, when DocSend lists them apart (red team, 17 Oct 2026): PLC OS reads visits, so a stored token
+ * should not be able to change a data room. When none reads as read-only, all are asked for and the client refuses
+ * every tool but list_spaces and list_visits.
+ */
+export function readScopes(all: string[]): string[] {
+  const read = all.filter((s) => /(^|[:._-])(read|view|readonly)([:._-]|$)/i.test(s) && !/write|manage|admin/i.test(s));
+  // Sign-in scopes stay: offline_access is what gives a refresh token.
+  return read.length ? [...all.filter((s) => /^(openid|offline_access|profile|email)$/i.test(s)), ...read] : all;
+}
+
 /**
  * Register PLC OS as a public client for this redirect URI. Returns the client id. Servers differ in which optional
  * fields they accept, so a refused registration is tried once more with only the required ones (RFC 7591 §2).

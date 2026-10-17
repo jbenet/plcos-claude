@@ -13,7 +13,7 @@ import { migrate } from '../../lib/db/migrate';
 import { signInReturnsToLoopback, startConnect } from '../../lib/connectors/docsend/connection';
 import { finishDocsendFromPaste } from '../../lib/connectors/docsend/signin';
 import { docsendClient, NotSignedIn, parseAnswer, type McpTransport } from '../../lib/connectors/docsend/mcp';
-import { allowedUrl, discover, DocsendSignInError, register, type OAuthTransport } from '../../lib/connectors/docsend/oauth';
+import { allowedUrl, discover, DocsendSignInError, readScopes, register, type OAuthTransport } from '../../lib/connectors/docsend/oauth';
 import { normalizeVisit, syncDocsend, visitKey } from '../../lib/connectors/docsend/sync';
 import { DocsendRefused, READ_TOOLS } from '../../lib/connectors/docsend/tools';
 import { setSpaceVehicle, visitsFor } from '../../modules/docsend';
@@ -70,6 +70,12 @@ function scripted(opts: { status?: number; sse?: boolean } = {}) {
 }
 
 export async function docsendProperties(check: Check) {
+  {
+    const some = readScopes(['openid', 'offline_access', 'spaces:read', 'spaces:write', 'visits.read', 'content_manage']);
+    const none = readScopes(['all']);
+    check('DocSend: sign-in asks only for read scopes (and the sign-in ones) when the server lists them apart; else all',
+      some.join(' ') === 'openid offline_access spaces:read visits.read' && none.join(' ') === 'all', `${some.join(' ')} | ${none.join(' ')}`);
+  }
   // ── Read only ──────────────────────────────────────────────────────────────────────────────────────
   {
     const s = scripted();

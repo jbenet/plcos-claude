@@ -78,7 +78,7 @@ async function affinityPersonIds(addresses: string[]): Promise<Map<string, numbe
   return out;
 }
 
-const messageKey = (m: Message) => `${new Date(m.at).toISOString()}|${m.subject ?? ''}`;
+export const messageKey = (m: Message) => `${new Date(m.at).toISOString()}|${m.subject ?? ''}`;
 const mergeMessages = (a: Message[], b: Message[]) => {
   const seen = new Map<string, Message>();
   for (const m of [...a, ...b]) seen.set(messageKey(m), m);
@@ -134,10 +134,11 @@ async function proposeOnce(env: ProposeEnv, a: z.infer<typeof proposeInput>) {
   // by day: mail sent later on the day of a write still needs its note (red-team pass, 14 Oct 2026).
   // A write that failed with no answer from Affinity may still have landed (UNCERTAIN, lib/affinity-writes-decide.ts),
   // so its mail counts as noted too: proposing it again could put the same note in Affinity twice (17 Oct 2026).
+  // So does an approved item not yet written: its batch may be writing now, or stopped mid-write by a restart.
   const written = new Map<string, { at: string; keys: Set<string>; uncertain: boolean }>();
   for (const r of await db.query<{ address: string; at: Date; messages: Message[]; uncertain: boolean }>(`select address, coalesce(written_at, proposed_at) at, messages,
-      state = 'failed' uncertain from sources.affinity_write_item
-      where (state = 'written' or (state = 'failed' and error like '${UNCERTAIN}%')) and address = any($1::text[])`, [[...merged.keys()]])) {
+      state <> 'written' uncertain from sources.affinity_write_item
+      where (state in ('written', 'approved') or (state = 'failed' and error like '${UNCERTAIN}%')) and address = any($1::text[])`, [[...merged.keys()]])) {
     const w = written.get(r.address) ?? { at: new Date(r.at).toISOString(), keys: new Set<string>(), uncertain: false };
     if (r.uncertain) w.uncertain = true;
     if (new Date(r.at).toISOString() > w.at) w.at = new Date(r.at).toISOString();
@@ -180,8 +181,11 @@ async function proposeOnce(env: ProposeEnv, a: z.infer<typeof proposeInput>) {
             -- A changed item is a new item (red-team pass, 17 Oct 2026): an Admin who has the batch open saw the old
             -- mail and plan, so its old id must not approve the new ones; a new id moves it to the next batch, as an
             -- unseen item does. The note names whoever proposed this mail, not the first proposer.
-            item_id = case when (sources.affinity_write_item.messages, sources.affinity_write_item.plan, sources.affinity_write_item.affinity_person_id, sources.affinity_write_item.proposed_by)
-                is distinct from (excluded.messages, excluded.plan, excluded.affinity_person_id, excluded.proposed_by) then gen_random_uuid() else sources.affinity_write_item.item_id end
+            -- A name or firm filled in later is new too: the Admin saw the bare address.
+            item_id = case when (sources.affinity_write_item.messages, sources.affinity_write_item.plan, sources.affinity_write_item.affinity_person_id, sources.affinity_write_item.proposed_by,
+                  sources.affinity_write_item.name, sources.affinity_write_item.firm)
+                is distinct from (excluded.messages, excluded.plan, excluded.affinity_person_id, excluded.proposed_by,
+                  coalesce(sources.affinity_write_item.name, excluded.name), coalesce(sources.affinity_write_item.firm, excluded.firm)) then gen_random_uuid() else sources.affinity_write_item.item_id end
           returning item_id::text id`,
       [batchId, it.address, it.name ?? null, it.firm ?? null, JSON.stringify(it.messages), plan, reason, personId, env.owner.id, env.tokenId]);
       rows.push({ address: it.address, itemId: row!.id, plan, reason });

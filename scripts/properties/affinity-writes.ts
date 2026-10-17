@@ -169,4 +169,20 @@ export async function affinityWriteProperties(check: Check, db: Db) {
     rp.get('late@invented-aw.example')?.plan === 'skip' && /may have landed/.test(rp.get('late@invented-aw.example')?.reason ?? '')
     && rp.get('refused@invented-aw.example')?.plan !== 'skip',
     `plans ${JSON.stringify([...rp.values()].map((i) => [i.address, i.plan, String(i.reason).slice(0, 50)]))}`);
+
+  // A name filled in after the batch was shown is a new item; mail in an approved item not yet written is not proposed again.
+  await call(rw, 'affinity', {}, { method: 'POST', body: { items: [{ address: 'named@invented-aw.example', messages: [{ at: at('2026-10-14'), subject: 'Invented named' }] }] } });
+  const shownNoName = (await aw.openWriteBatch())!;
+  const bare = shownNoName.items.find((i) => i.address === 'named@invented-aw.example')!;
+  await call(rw, 'affinity', {}, { method: 'POST', body: { items: [{ address: 'named@invented-aw.example', name: 'Invented Changed Name', messages: [{ at: at('2026-10-14'), subject: 'Invented named' }] }] } });
+  sent.length = 0;
+  await aw.decideWriteBatch(juan, shownNoName.batchId, [bare.itemId], scripted, [bare.itemId]);
+  const renamed = (await aw.openWriteBatch())?.items.find((i) => i.address === 'named@invented-aw.example');
+  await db.query(`update sources.affinity_write_item set state = 'approved' where item_id = $1`, [renamed?.itemId ?? bare.itemId]);
+  const midWrite = await call(rw, 'affinity', {}, { method: 'POST', body: { items: [{ address: 'named@invented-aw.example', messages: [{ at: at('2026-10-14'), subject: 'Invented named' }] }] } });
+  const mw = (midWrite.json?.data?.items ?? []).find((i: any) => i.address === 'named@invented-aw.example');
+  check('Affinity writes: a name filled in after the batch was shown waits under a new id; mail in an approved, unwritten item is not proposed again',
+    sent.length === 0 && renamed !== undefined && renamed.itemId !== bare.itemId && renamed.name === 'Invented Changed Name'
+    && mw?.plan === 'skip' && /may have landed/.test(mw?.reason ?? ''),
+    `calls ${sent.length}; renamed ${renamed ? (renamed.itemId === bare.itemId ? 'same id' : 'new id') : 'missing'}; mid-write ${mw?.plan} ${String(mw?.reason).slice(0, 40)}`);
 }
