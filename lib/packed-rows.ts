@@ -28,8 +28,9 @@
  * - A text column that is, on every row, another plain text column (earlier or later) followed by one of a few endings
  *   (a floor item's key, `<entityId>:<vehicle>` across vehicles; 15 Oct 2026) is sent as that column's name and the
  *   endings, shared as above.
- * - A column of distinct ids (every value a lowercase uuid) is one string of 22 base64url characters per row, instead
- *   of 39 characters of quoted text: ids were over half of what Pipeline sent once text was shared (15 Oct 2026).
+ * - A column of ids (every value a lowercase uuid; repeats too, unless sharing them is shorter) is one string of 22
+ *   base64url characters per row, instead of 39 characters of quoted text: ids were over half of what Pipeline sent
+ *   once text was shared (15 Oct 2026).
  */
 export interface PackedRows {
   n: number;
@@ -189,7 +190,10 @@ export function packRows<T extends object>(rows: readonly T[]): PackedRows {
     if (values.every((v) => v === undefined || v === null || typeof v !== 'object')) plainColumns.push([k, values]);
     const { d, i, rawLength, dictLength } = share(values);
     const col = dictLength < rawLength ? { d, i } : split(values, rawLength, textTails) ?? { v: values };
-    c[k] = !('d' in col) && !('r' in col) && values.every((v) => typeof v === 'string' && UUID.test(v)) ? { u: uuidsOut(values as string[]) } : col;
+    // Ids, even repeated ones, unless sharing them is shorter still: the floor's entityId (an LP once per vehicle,
+    // 5,037 distinct of 6,039) was 236 KB shared and is 133 KB as ids (17 Oct 2026).
+    const ids = !('r' in col) && values.every((v) => typeof v === 'string' && UUID.test(v)) && (!('d' in col) || values.length * 22 < dictLength);
+    c[k] = ids ? { u: uuidsOut(values as string[]) } : col;
     if (!('r' in col) && values.every((v) => typeof v === 'string')) textTails.push({ k, values: values as string[] });
   }
   ending(c, plainColumns);
