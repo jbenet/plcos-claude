@@ -4,6 +4,7 @@ import { AuthorizationError, requireCan, type Principal } from './index';
 export interface DecisionTicket {
   kind: string;
   vehicle_id: string | null;
+  expired: boolean;
   requested_by: string;
   subject_type: string;
   subject_id: string;
@@ -17,7 +18,8 @@ export async function requireTicketDecision(q: Queryable, actorId: string, ticke
     where id=$1 and active for share`, [actorId]);
   if (!user) throw new AuthorizationError();
   const ticket = await q.one<DecisionTicket>(`select kind::text, vehicle_id::text, requested_by::text,
-    subject_type, subject_id, subject_label, decision::text from governance.approval_ticket
+    subject_type, subject_id, subject_label, decision::text,
+    coalesce(expires_at <= now(), false) expired from governance.approval_ticket
     where id=$1 for update`, [ticketId]);
   if (!ticket) throw new AuthorizationError();
   // Named per-vehicle money/allocation approvers are not configured yet: Admin only.

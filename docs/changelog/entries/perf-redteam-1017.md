@@ -198,6 +198,19 @@ data on Juan's Mac.
 - **A Team member's pushed decisions are their own and on their vehicles.** A Team token could push a merge decision
   signed with someone else's name, or one joining LPs on vehicles it can't change. Such a push now answers which row and
   why; an Admin pushes others' decisions.
+- **A draft made through the API no longer hands back the strategy's subject line.** The draft tool returned the
+  subject filled in from the LP's strategy, which can rest on licensed data; like the body and the address, it now
+  comes back only when the caller wrote it.
+- **The relationships list shows hard and soft money per vehicle.** An LP with $5M on Neurotech and $2M on Crypto
+  showed $7M, against its own label and invariant 1. Each vehicle's figure is shown on its own line, and the list is
+  ordered by the largest one.
+- **Issue bodies stay in the app for tokens kept to some vehicles.** The feedback issues tool withheld bodies from
+  Viewers only; a body can quote records on any vehicle, and the app already showed such a user titles only.
+- **The capital pool leaves grants out.** A funder holding a grant and an SPV position could show as over budget,
+  since the pool check added the grant (invariant 10: the pool is fund and SPV money).
+- **An expired ticket can't be approved late, and a stale Approve says what happened.** Approving a ticket someone else
+  had just rejected answered "Approved, but the action did not run"; it now says it was already rejected. An expired
+  ticket is asked for again.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
@@ -284,3 +297,5 @@ data on Juan's Mac.
 - The two data planes are kept apart by which module reads which schema, checked by `npm run boundaries`, not by
   Postgres grants: the app connects as one role. Separate roles need a second connection pool; worth it when a
   second process reads the database.
+- The capital pool check shows an LP over budget but does not stop a hardening: refusing would be a new blocking rule,
+  and those wait for Juan to ask for them.

@@ -7,8 +7,11 @@ export const ROLE_LABEL: Record<RelationshipRole, string> = {
 };
 export interface RelationshipRow {
   entityId: string; name: string; entityType: string; roles: RelationshipRole[];
-  /** Per actor only, never an aggregate headline across vehicles. */
-  hard: number; soft: number; vehicles: string[]; connectorAsks: number;
+  /** The largest on any one vehicle, for ordering only; never a sum across vehicles (invariant 1). */
+  hard: number; soft: number;
+  /** Each vehicle's own figure, largest first; these are what a page shows. */
+  hardBy: { vehicle: string; amount: number }[]; softBy: { vehicle: string; amount: number }[];
+  vehicles: string[]; connectorAsks: number;
   rung: string | null; status: string | null;
 }
 export const RELATIONSHIP_PAGE_SIZE = 100;
@@ -19,13 +22,17 @@ const filters: Record<RelationshipGroup, string> = {
 };
 /** Resolve each fact once, rather than each fact once per entity. Materialized sets
  * keep the optimizer from inlining canonical lookups into a 94K-row nested loop. */
-const facts = (only = 'true', materialized = true) => `with money as materialized (
-  select identity.canonical_entity_id(x.entity_id) entity_id,
+const facts = (only = 'true', materialized = true) => `with per_vehicle as materialized (
+  select identity.canonical_entity_id(x.entity_id) entity_id, v.name vehicle,
     coalesce(sum(x.amount) filter(where x.track = 'hard'),0) hard,
-    coalesce(sum(x.amount) filter(where x.track = 'soft'),0) soft,
-    array_agg(distinct v.name) vehicles
+    coalesce(sum(x.amount) filter(where x.track = 'soft'),0) soft
   from pipeline.exposure x join platform.vehicle v on v.id = x.vehicle_id
-  where x.closed_at is null group by identity.canonical_entity_id(x.entity_id)
+  where x.closed_at is null group by 1, v.name
+), money as materialized (
+  select entity_id, max(hard) hard, max(soft) soft, array_agg(vehicle order by vehicle) vehicles,
+    jsonb_agg(jsonb_build_array(vehicle, hard) order by hard desc, vehicle) filter(where hard > 0) hard_by,
+    jsonb_agg(jsonb_build_array(vehicle, soft) order by soft desc, vehicle) filter(where soft > 0) soft_by
+  from per_vehicle group by entity_id
 ), asks as materialized (
   select identity.canonical_entity_id(connector_id) entity_id, count(*) connector_asks
   from coordination.ask where made_at is not null group by identity.canonical_entity_id(connector_id)
@@ -40,7 +47,7 @@ const facts = (only = 'true', materialized = true) => `with money as materialize
   ) ids
 ), base as ${materialized ? 'materialized ' : ''}(
   select e.entity_id, e.display_name name, e.entity_type::text entity_type,
-    coalesce(m.hard,0) hard, coalesce(m.soft,0) soft, m.vehicles,
+    coalesce(m.hard,0) hard, coalesce(m.soft,0) soft, m.hard_by, m.soft_by, m.vehicles,
     coalesce(a.connector_asks,0) connector_asks, t.entity_id is not null is_team,
     f.entity_id is not null is_funder, c.entity_id is not null is_coinvestor
   from identity.entity e left join money m using(entity_id) left join asks a using(entity_id)
@@ -52,7 +59,9 @@ const FACTS = facts();
 const PREFILTER: Partial<Record<RelationshipGroup, string>> = {
   lps: 'coalesce(m.hard,0) > 0', 'co-funders': '(f.entity_id is not null or c.entity_id is not null)', connectors: 'coalesce(a.connector_asks,0) > 0',
 };
-type Row = { entity_id: string; name: string; entity_type: string; hard: string; soft: string;
+type ByVehicle = [string, string | number][] | null;
+const byVehicle = (b: ByVehicle) => (b ?? []).map(([vehicle, amount]) => ({ vehicle, amount: Number(amount) }));
+type Row = { entity_id: string; name: string; entity_type: string; hard: string; soft: string; hard_by: ByVehicle; soft_by: ByVehicle;
   vehicles: string[] | null; connector_asks: string; is_team: boolean; is_funder: boolean; is_coinvestor: boolean;
   rung: string | null; status: string | null };
 const map = (r: Row): RelationshipRow => {
@@ -64,7 +73,7 @@ const map = (r: Row): RelationshipRow => {
   if (Number(r.connector_asks) > 0) roles.push('connector');
   if (!roles.length || (soft > 0 && !roles.includes('lp'))) roles.push('prospect');
   return { entityId:r.entity_id, name:r.name, entityType:r.entity_type, roles, hard, soft,
-    vehicles:r.vehicles ?? [], connectorAsks:Number(r.connector_asks), rung:r.rung, status:r.status };
+    hardBy:byVehicle(r.hard_by), softBy:byVehicle(r.soft_by), vehicles:r.vehicles ?? [], connectorAsks:Number(r.connector_asks), rung:r.rung, status:r.status };
 };
 /** A name filter for ILIKE: the words in order, anything between them (issue 0134). Null for no filter. */
 export function namePattern(q?: string | null): string | null {

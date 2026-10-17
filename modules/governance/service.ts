@@ -118,6 +118,8 @@ export async function decideTicket(
       // Idempotent by intent: a double click must not re-decide something already decided.
       return;
     }
+    // An expired ticket is asked again, not approved late (red team, 17 Oct 2026).
+    if (decision === 'approve' && row.expired) throw new Error('This ticket has expired; ask for it again.');
     if (decision === 'approve' && row.requested_by === actorId) {
       // The sole exception is STAGE on the requester's own pursuit. Never infer
       // ownership from ticket scope supplied by the requester.
