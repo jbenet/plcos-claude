@@ -137,11 +137,22 @@ const BLOCKED_SQL = memoizable(`select entity_id::text as id from coordination.r
 /** No restriction text or private context leaves this policy reader. Restrictions and
  * public claims are read afresh; neither live safety nor size changes depend on a TTL. */
 export async function routePolicyFacts(ids: string[], vehicleId?: string): Promise<RoutePolicyFacts> {
-  if (!ids.length) return { blocked: new Set(), organizations: new Map(), badTerms: new Map(), groupOf: new Map() };
+  return (await routePolicyFactsMany([ids], vehicleId))[0]!;
+}
+
+const emptyPolicy = (): RoutePolicyFacts => ({ blocked: new Set(), organizations: new Map(), badTerms: new Map(), groupOf: new Map() });
+
+/**
+ * routePolicyFacts for several id sets on one vehicle: each answer is what routePolicyFacts(ids, vehicleId) returns,
+ * from one read of each kind for the whole batch (the route planner overlays a batch of targets at once; performance
+ * pass, 17 Oct 2026: the marks and headcount claims were read once per LP).
+ */
+export async function routePolicyFactsMany(idSets: string[][], vehicleId?: string): Promise<RoutePolicyFacts[]> {
+  if (!idSets.some((ids) => ids.length)) return idSets.map(emptyPolicy);
   const db = await getDb(), topology = await policyTopology(db);
   const canonical = (id: string) => topology.canonical.get(id) ?? id;
-  const wanted = [...new Set(ids.map(canonical))];
-  const orgIds = wanted.filter((id) => topology.organizations.has(id));
+  const orgIdsOf = idSets.map((ids) => [...new Set(ids.map(canonical))].filter((id) => topology.organizations.has(id)));
+  const orgIds = [...new Set(orgIdsOf.flat())];
   const orgAliases = orgIds.flatMap((id) => topology.aliases.get(id) ?? [id]);
   // Read only the organizations used by this route set. Separate directional scans
   // use endpoint indexes; scanning every organization on startup is unnecessarily costly.
@@ -183,21 +194,27 @@ export async function routePolicyFacts(ids: string[], vehicleId?: string): Promi
          join platform.app_user u on u.id = m.recorded_by where m.undone_at is null`),
   ]);
   const groupKey = (id: string) => topology.group.get(canonical(id)) ?? canonical(id);
+  const prohibited = new Set(restrictions.map(({ id }) => topology.group.get(canonical(id)) ?? canonical(id)));
+  // Each organization's largest recorded public headcount, as each set's own read of its claims would find it.
+  const headcount = new Map<string, number>();
+  for (const claim of claims) {
+    const count = parsePublicHeadcount(claim.value), id = canonical(claim.id);
+    if (count !== null) headcount.set(id, Math.max(headcount.get(id) ?? 0, count));
+  }
+  // The same marks for every set: read-only to every caller, so shared.
   const badTerms = new Map<string, BadTermsFact>();
   for (const m of marks) {
     const pair = [groupKey(m.a), groupKey(m.b)].sort().join('|');
     if (!badTerms.has(pair)) badTerms.set(pair, { markId: m.id, pair, aName: m.a_name, bName: m.b_name, note: m.note, byName: m.by_name, at: m.at });
   }
-  const groupOf = new Map(ids.map((id) => [id, groupKey(id)]));
-  const prohibited = new Set(restrictions.map(({ id }) => topology.group.get(canonical(id)) ?? canonical(id)));
-  const blocked = new Set<string>();
-  for (const id of [...wanted, ...ids]) if (prohibited.has(topology.group.get(canonical(id)) ?? canonical(id))) blocked.add(id);
-  const organizations = new Map<string, OrganizationRouteSize>(orgIds.map((id) => [id, { members: topology.members.get(id)!, headcount: null }]));
-  for (const claim of claims) {
-    const count = parsePublicHeadcount(claim.value), size = organizations.get(canonical(claim.id));
-    if (count !== null && size) size.headcount = Math.max(size.headcount ?? 0, count);
-  }
-  return { blocked, organizations, badTerms, groupOf };
+  return idSets.map((ids, i) => {
+    if (!ids.length) return emptyPolicy();
+    const groupOf = new Map(ids.map((id) => [id, groupKey(id)]));
+    const blocked = new Set<string>();
+    for (const id of [...new Set(ids.map(canonical)), ...ids]) if (prohibited.has(topology.group.get(canonical(id)) ?? canonical(id))) blocked.add(id);
+    const organizations = new Map<string, OrganizationRouteSize>(orgIdsOf[i]!.map((id) => [id, { members: topology.members.get(id)!, headcount: headcount.get(id) ?? null }]));
+    return { blocked, organizations, badTerms, groupOf };
+  });
 }
 
 /** Routing may reject a repeated uncertain identity without merging records or adding an

@@ -5,7 +5,7 @@ export type {
 export { REASON_LABEL, RULE_LABEL } from './types';
 export {
   asksToEntitySince, asksViaConnectorSince, competingAsks, connectorLoad, getAsk,
-  blanketRestricted, getConflictForAsk, listAsks, listConflicts, listRestrictions, restrictionsFor,
+  blanketRestricted, getConflictForAsk, listAsks, listConflicts, listRestrictions, restrictionsFor, restrictionsForMany,
 } from './repo';
 export { adjudicateConflict, evaluateGuards, makeAsk, proposeAsk, recordAskEmailed, recordOverlap, type OverlapChoice } from './service';
 export type { ProposeAskCommand } from './service';

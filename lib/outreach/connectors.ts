@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { config } from '@/config/deployment';
 import { pipelineData } from '@/lib/authz/read/pipeline';
-import { planRoutes, warmthReader, WARMTH_LABEL } from '@/lib/authz/read/network';
+import { planRoutesMany, warmthReader, WARMTH_LABEL } from '@/lib/authz/read/network';
 import { getDb, type Db } from '@/lib/db';
 import { withReadMemo } from '@/lib/db/read-memo';
 import { withBackgroundDb } from '@/lib/db/scheduling';
@@ -77,9 +77,10 @@ interface PlanJob { key: string; revision: string; asOf: string | undefined; ope
 const jobsByDb = new WeakMap<Db, Map<string, PlanJob>>();
 // GUESS — vehicles × people asking; a principal's job is replaced, never added to, as revisions move.
 const MAX_JOBS = 32;
-// GUESS — LPs planned at once. Each LP's plan is a handful of small reads; a few at a time fills the gaps between them
-// without taking the pool (lib/db/postgres.ts) from the pages.
-const PLAN_CONCURRENCY = 4;
+// GUESS — LPs planned in one batch. A batch reads its route inputs once, as set-based reads (planRoutesMany), so a
+// plan's statements grow with the batches, not the LPs: about twelve per LP before (performance pass, 17 Oct 2026). Small
+// enough that a partial answer still lands in priority order, and that the process yields between batches.
+const PLAN_BATCH = 64;
 // One background plan at a time in the process, at background database priority (pages' queries go first, as for
 // the route warm-up); the others queue for their turn. A cold plan is minutes of route
 // search: several at once (vehicles × principals, restarted as imports move the revision) took the server's CPU and
@@ -130,12 +131,12 @@ function startPlan(db: Db, jobs: Map<string, PlanJob>, user: AppUser, v: Vehicle
     const person = new Map<string, boolean>(), readWarmth = warmthReader(new Date());
     // A few LPs at a time, highest priority first; each batch lands in priority order, so a partial answer is still the
     // most important LPs.
-    for (let i = 0; i < job.open.length; i += PLAN_CONCURRENCY) {
+    for (let i = 0; i < job.open.length; i += PLAN_BATCH) {
       if (jobs.get(key) !== job) return;
       // Let waiting requests run between batches: route search is CPU, and pages share this process.
       await new Promise<void>((next) => setImmediate(next));
-      const batch = job.open.slice(i, i + PLAN_CONCURRENCY);
-      const searches = await Promise.all(batch.map((r) => planRoutes(user.handle, r.entityId, 3, v.kind, 'team', undefined, { vehicleId: v.id })));
+      const batch = job.open.slice(i, i + PLAN_BATCH);
+      const searches = await planRoutesMany(user.handle, batch.map((r) => r.entityId), 3, v.kind, 'team', undefined, { vehicleId: v.id });
       const usable = searches.map((search) => {
         const routes = search?.routes ?? [];
         const kept = routes.filter((x) => x.verdict === 'recommend');

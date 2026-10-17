@@ -1,7 +1,7 @@
 import { config } from '@/config/deployment';
 import { getDb } from '@/lib/db';
-import { assessmentsForEntity } from '@/modules/fit';
-import { orgsFor, peopleAt } from '@/modules/identity';
+import { assessmentsForEntities, type Assessment } from '@/modules/fit';
+import { orgsForMany, peopleAtMany } from '@/modules/identity';
 import { listExposures } from '@/modules/pipeline';
 import { listAsks } from '@/modules/coordination';
 import type { EvidenceTier } from './types';
@@ -108,34 +108,56 @@ const TIER_SCORE: Record<EvidenceTier, number> = { A: 1, B: 0.8, C: 0.45, D: 0.2
 export async function influenceFor(
   connectorIds: string[], targetId: string, vehicleKind: string,
 ): Promise<Map<string, Influence>> {
+  return (await influenceForMany([{ connectorIds, targetId }], vehicleKind))[0]!;
+}
+
+/**
+ * influenceFor for a batch of targets, each with its own connectors: the reads every target shares (standings, money,
+ * asks) once, and each target's own (its affiliations, the fit records on it and on its neighbours, the connectors'
+ * names) as one set-based read for the batch. Each answer is what influenceFor(connectorIds, targetId) returns
+ * (performance pass, 17 Oct 2026: top_connectors read these per LP, about six statements each).
+ */
+export async function influenceForMany(
+  requests: Array<{ connectorIds: string[]; targetId: string }>, vehicleKind: string,
+): Promise<Array<Map<string, Influence>>> {
+  if (!requests.length) return [];
   /**
    * A person and the institution they sign for are separate records, and a link recorded
    * on the foundation is evidence about its sole trustee. So the search for "what does
    * this target think of them" widens to the records the target is affiliated with, and
    * says which one it read.
    */
-  const [standings, exposures, asks, ownFit, sits, staff] = await Promise.all([
-    listStandings(), listExposures(null), listAsks(null), assessmentsForEntity(targetId),
-    orgsFor(targetId), peopleAt(targetId),
+  const targets = [...new Set(requests.map((r) => r.targetId))];
+  const [standings, exposures, asks, sitsBy, staffBy] = await Promise.all([
+    listStandings(), listExposures(null), listAsks(null), orgsForMany(targets), peopleAtMany(targets),
   ]);
-  const neighbours = [
-    ...sits.filter((x) => x.current).map((x) => ({ id: x.orgId, name: x.orgName })),
-    ...staff.filter((x) => x.current).map((x) => ({ id: x.personId, name: x.personName })),
-  ];
-  const neighbourFit = (
-    await Promise.all(neighbours.map((n) => assessmentsForEntity(n.id)))
-  ).flat();
-  const nameOfRecord = new Map(neighbours.map((n) => [n.id, n.name]));
-  const targetFit = ownFit;
-
+  const neighboursOf = new Map(targets.map((t) => [t, [
+    ...(sitsBy.get(t) ?? []).filter((x) => x.current).map((x) => ({ id: x.orgId, name: x.orgName })),
+    ...(staffBy.get(t) ?? []).filter((x) => x.current).map((x) => ({ id: x.personId, name: x.personName })),
+  ]]));
+  const connectors = [...new Set(requests.flatMap((r) => r.connectorIds))];
   const db = await getDb();
-  const names = new Map(
-    (await db.query<{ entity_id: string; display_name: string }>(
+  const [fitBy, nameRows] = await Promise.all([
+    assessmentsForEntities([...targets, ...[...neighboursOf.values()].flat().map((n) => n.id)]),
+    connectors.length ? db.query<{ entity_id: string; display_name: string }>(
       'select entity_id, display_name from identity.entity where entity_id in (select identity.canonical_entity_id(id) from unnest($1::uuid[]) id)',
-      [connectorIds],
-    )).map((r) => [r.entity_id, r.display_name]),
-  );
+      [connectors],
+    ) : Promise.resolve([] as Array<{ entity_id: string; display_name: string }>),
+  ]);
+  const names = new Map(nameRows.map((r) => [r.entity_id, r.display_name]));
+  return requests.map(({ connectorIds, targetId }) => {
+    const neighbours = neighboursOf.get(targetId) ?? [];
+    const neighbourFit = neighbours.flatMap((n) => fitBy.get(n.id) ?? []);
+    const nameOfRecord = new Map(neighbours.map((n) => [n.id, n.name]));
+    return scoreInfluence(connectorIds, vehicleKind, { standings, exposures, asks, names, targetFit: fitBy.get(targetId) ?? [], neighbourFit, nameOfRecord });
+  });
+}
 
+function scoreInfluence(connectorIds: string[], vehicleKind: string, read: {
+  standings: Standing[]; exposures: Awaited<ReturnType<typeof listExposures>>; asks: Awaited<ReturnType<typeof listAsks>>;
+  names: Map<string, string>; targetFit: Assessment[]; neighbourFit: Assessment[]; nameOfRecord: Map<string, string>;
+}): Map<string, Influence> {
+  const { standings, exposures, asks, names, targetFit, neighbourFit, nameOfRecord } = read;
   const wanted = VEHICLE_DOMAINS[vehicleKind] ?? ['allocators'];
   const cap = config.guard.asksPerConnectorPerQuarter;
   const w = config.routeInfluence;

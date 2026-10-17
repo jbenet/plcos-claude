@@ -362,3 +362,19 @@ export async function assessmentsForEntity(entityId: string): Promise<Assessment
   );
   return assemble(rows);
 }
+
+/** assessmentsForEntity for many records: every requested id, as given, to its list in the same order, from one read
+ * and one assembly (the route planner's influence scores a batch of targets at once; performance pass, 17 Oct 2026). */
+export async function assessmentsForEntities(entityIds: string[]): Promise<Map<string, Assessment[]>> {
+  const ids = [...new Set(entityIds)];
+  const out = new Map<string, Assessment[]>(ids.map((id) => [id, []]));
+  if (!ids.length) return out;
+  const db = await getDb();
+  const rows = await db.query<Parameters<typeof assemble>[0][number] & { requested: string }>(
+    `select req.requested::text as requested, s.* from unnest($1::uuid[]) req(requested)
+      cross join lateral (${ASSESSMENT_SELECT} where e.entity_id = identity.canonical_entity_id(req.requested) order by v.sort_order) s`, [ids],
+  );
+  const assembled = await assemble(rows);
+  rows.forEach((r, i) => out.get(r.requested)?.push(assembled[i]!));
+  return out;
+}

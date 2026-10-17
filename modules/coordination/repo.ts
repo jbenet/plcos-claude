@@ -150,6 +150,29 @@ export async function restrictionsFor(entityId: string, q?: Queryable): Promise<
   ).map(toRestriction);
 }
 
+/**
+ * restrictionsFor for many entities in one statement: each requested id, as given, to what restrictionsFor(id) returns.
+ * The route planner reads a batch of targets and their contacts at once (top_connectors planned 782 LPs with a read
+ * of restrictions each; performance pass, 17 Oct 2026).
+ */
+export async function restrictionsForMany(entityIds: string[]): Promise<Map<string, Restriction[]>> {
+  const ids = [...new Set(entityIds)];
+  const out = new Map<string, Restriction[]>(ids.map((id) => [id, []]));
+  if (!ids.length) return out;
+  const db = await getDb();
+  // restrictionsFor has no order of its own: it reads the table in storage order, so each list here is put in that
+  // order too (a join reads it in whatever order its plan picks, and the route's restrictions and reasons follow it).
+  const rows = await db.query<RestrictionRow & { requested: string; heap_pos: unknown }>(
+    `select req.requested::text as requested, s.* from unnest($1::uuid[]) req(requested)
+      cross join lateral (${RESTRICTION_SELECT.replace(/^\s*select /, 'select r.ctid as heap_pos, ')}
+        where e.entity_id = identity.canonical_entity_id(req.requested)
+        and (r.expires_at is null or r.expires_at > current_date)) s order by s.heap_pos`,
+    [ids],
+  );
+  for (const { requested, heap_pos: _pos, ...row } of rows) out.get(requested)?.push(toRestriction(row));
+  return out;
+}
+
 /** Asks made to this entity inside the window, across every vehicle. */
 export async function asksToEntitySince(entityId: string, since: Date, q?: Queryable): Promise<Ask[]> {
   const db = q ?? (await getDb());

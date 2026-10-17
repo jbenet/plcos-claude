@@ -110,7 +110,7 @@ async function touched(db: Db, targetId: string, since: string, upto: string, se
 
 /** Only structural graph state is cached. service applies authoritative guards and
  * dynamic scores to a fresh view on every call, never mutating this shared entry. */
-export async function cachedRoutes(targetId: string, kind: string, live: () => Promise<RouteSearch | null>): Promise<RouteSearch | null> {
+export async function cachedRoutes(targetId: string, kind: string, live: () => Promise<RouteSearch | null>, preload?: RoutePreload): Promise<RouteSearch | null> {
   // A resolver mutation changes the generation. Holding maintenance across this
   // search's yielded reads prevents repeated generation retries from starving a page.
   // Warm-up calls this once per target; no lease spans the whole warm-up.
@@ -118,7 +118,7 @@ export async function cachedRoutes(targetId: string, kind: string, live: () => P
     // Shared jobs validate one attempt only. Each caller retains its own retry budget
     // even when a new page request has started another attempt at a newer revision.
     for (let attempt = 0; ; attempt++) {
-      try { return await readCachedRoutes(targetId, kind, live); }
+      try { return await readCachedRoutes(targetId, kind, live, attempt ? undefined : preload); }
       catch (error) {
         if (!(error instanceof RevisionChanged)) throw error;
         if (attempt >= REVISION_RETRIES) throw new DbBusyError();
@@ -126,8 +126,34 @@ export async function cachedRoutes(targetId: string, kind: string, live: () => P
     }
   });
 }
-async function readCachedRoutes(targetId: string, kind: string, live: () => Promise<RouteSearch | null>): Promise<RouteSearch | null> {
-  targetId = await canonicalRouteEntity(targetId);
+
+/**
+ * What a batch of cachedRoutes reads would each ask first, read for the whole batch in two statements: each target's
+ * canonical record, and the stored row of every target at the current generation that this process does not hold.
+ * Only the memory cache's 48 entries were kept between reads, so top_connectors read every other LP's row one
+ * statement at a time (performance pass, 17 Oct 2026). A preloaded row is used only at the generation it was read at,
+ * and a target it has no row for reads its own, so a row stored in between is still found.
+ */
+export interface RoutePreload { generation: string; canonical: Map<string, string>; rows: Map<string, { search: string; input_revision: string }> }
+export async function preloadCachedRoutes(targetIds: string[], kind: string): Promise<RoutePreload> {
+  const db = await getDb(), version = await revisionFor(db);
+  const ids = [...new Set(targetIds)];
+  const canonical = new Map((ids.length ? await db.query<{ id: string; canon: string }>(
+    'select id::text, identity.canonical_entity_id(id)::text canon from unnest($1::uuid[]) id', [ids]) : []).map((r) => [r.id, r.canon]));
+  // A canonical record resolves to itself.
+  for (const id of [...canonical.values()]) canonical.set(id, id);
+  const held = memory.get(db);
+  const wanted = [...new Set(canonical.values())].filter((id) => {
+    const prior = held?.get(`${id}:${kind}`);
+    return !(prior?.generation === version.generation && prior.revision === version.revision);
+  });
+  const rows = new Map((wanted.length ? await db.query<{ target_id: string; search: string; input_revision: string }>(`select target_id::text, search::text as search,
+      input_revision::text from network.route_cache where target_id = any($1::uuid[]) and vehicle_kind = $2 and revision = $3`,
+  [wanted, kind, version.generation]) : []).map((r) => [r.target_id, { search: r.search, input_revision: r.input_revision }]));
+  return { generation: version.generation, canonical, rows };
+}
+async function readCachedRoutes(targetId: string, kind: string, live: () => Promise<RouteSearch | null>, preload?: RoutePreload): Promise<RouteSearch | null> {
+  targetId = preload?.canonical.get(targetId) ?? await canonicalRouteEntity(targetId);
   const db = await getDb(), version = await revisionFor(db), key = `${targetId}:${kind}`;
   let entries = memory.get(db);
   if (!entries) { entries = new Map(); memory.set(db, entries); }
@@ -140,7 +166,8 @@ async function readCachedRoutes(targetId: string, kind: string, live: () => Prom
   const job = (async () => {
     let entry = prior?.generation === version.generation ? prior : undefined;
     if (!entry) {
-      const row = await db.one<{ search: string; input_revision: string }>(`select search::text as search, input_revision::text
+      const row = (preload?.generation === version.generation ? preload.rows.get(targetId) : undefined)
+        ?? await db.one<{ search: string; input_revision: string }>(`select search::text as search, input_revision::text
         from network.route_cache where target_id = $1 and vehicle_kind = $2 and revision = $3`, [targetId, kind, version.generation]);
       if (row) entry = { search: decode(row.search), generation: version.generation,
         revision: row.input_revision, bytes: row.search.length * 2 };
