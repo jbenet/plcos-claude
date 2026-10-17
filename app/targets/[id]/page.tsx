@@ -241,8 +241,8 @@ async function TargetWorkspace({ params, searchParams }: {
             {isPerson ? (
               <div className="h1second">
                 {/* The firms come from the vehicle's pipeline, rebuilt after any write: the page shows without waiting for it. */}
-                <Suspense fallback={<LpUnitTags capacity={p.lpCapacity} review={p.lpReview} />}>
-                  <LpUnitLine pursuitId={p.pursuitId} personId={p.entityId} vehicleId={p.vehicleId} capacity={p.lpCapacity} review={p.lpReview} />
+                <Suspense fallback={<LpUnitTags capacity={p.lpCapacity} review={p.lpReview} historical={p.historical} />}>
+                  <LpUnitLine pursuitId={p.pursuitId} personId={p.entityId} vehicleId={p.vehicleId} capacity={p.lpCapacity} review={p.lpReview} historical={p.historical} />
                 </Suspense>
               </div>
             ) : relatedLps.length > 0 && (

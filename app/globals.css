@@ -1917,10 +1917,10 @@ details.thread .warnline{font-size:12px;color:var(--amber)}
 /* The LP's timeline (N56): touchpoints and notes in one thread, an icon on each row. The icon
    repeats what the row says in words; a colour marks only the rows that change an LP's state. */
 .timeline{margin-top:10px}
-.tl-row{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.tl-row{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start;padding:6px 0;border-top:1px solid var(--hair)}
 .tl-row:first-child{border-top:0;padding-top:0}
 .tl-row .anote{padding:0;border-top:0}
-.timeline details.more .tl-row:first-of-type{border-top:1px solid var(--hair);padding-top:9px}
+.timeline details.more .tl-row:first-of-type{border-top:1px solid var(--hair);padding-top:6px}
 .glyph{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--ground);border:1px solid var(--line);color:var(--muted)}
 .glyph svg{display:block}
 .glyph.g-signal{color:var(--purple);border-color:color-mix(in srgb,var(--purple) 35%,var(--line));background:color-mix(in srgb,var(--purple) 8%,var(--surface))}
@@ -1932,6 +1932,39 @@ details.thread .warnline{font-size:12px;color:var(--amber)}
 .tl-key>span{display:inline-flex;align-items:center;gap:6px}
 .tl-key .glyph{width:18px;height:18px}
 .tl-key .glyph svg{width:12px;height:12px}
+/* One line a row (17 Oct 2026, Juan: "aim for one single row, or two at most"): what and when first,
+   then the words, cut with an ellipsis where the line ends, then who and where from, and the tag.
+   Long text opens below the line in full; a note's text has a second line of its own. A phone puts
+   the words on a second line. */
+.tl-line{display:flex;flex-wrap:wrap;align-items:center;column-gap:10px;row-gap:1px;min-height:24px;min-width:0}
+.tl-meta{flex:0 1 auto;min-width:0;font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-meta .whatword{font-weight:600;color:var(--ink)}
+.tl-main{flex:1 1 14em;min-width:min(16em,40%);font-size:12.5px;line-height:1.5}
+.tl-clip{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-clip b{font-weight:600}
+details.thread.tl-main{margin-top:0}
+.anote details.thread.tl-main>summary{display:flex;align-items:baseline;gap:8px;min-width:0;margin-bottom:0;font-size:12.5px;color:var(--ink)}
+details.thread.tl-main>summary .tl-clip{flex:0 1 auto;min-width:3em}
+details.thread.tl-main>summary .open{margin-left:0;flex:none}
+details.thread.tl-main>summary .byline{flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+details.thread.tl-main[open]{flex-basis:100%;order:9}
+details.thread.tl-main[open]>summary .tl-clip{white-space:normal}
+.tl-tail{flex:0 1 auto;min-width:0;max-width:40%;margin-left:auto;overflow:hidden;display:inline-flex;align-items:center;justify-content:flex-end;gap:8px;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.tl-src{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-tail>:not(.tl-src){flex:none}
+.tl-tail>.flag{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--sans)}
+.tl-tail .tl-form{display:inline}
+.tl-line>.retag{margin-top:0;flex:none}
+.anote .tl-line>.retag:not([open])>summary{color:var(--muted);font-size:11px}
+.tl-line>.retag[open]{flex-basis:100%;order:10}
+@media (max-width:640px){
+  /* A phone: what and when, and the tag, on the first line; the words and where from on the second. */
+  .tl-meta{order:1;max-width:calc(100% - 5em)}
+  .tl-line>.retag{order:2;margin-left:auto}
+  .tl-main{order:3;flex:1 1 calc(72% - 10px);min-width:0}
+  .tl-tail{order:4;max-width:28%}
+  details.thread.tl-main[open]{order:9}
+}
 .readacts form{display:inline}
 .readacts .btn{padding:2px 8px;font-size:11px}
 
@@ -1986,7 +2019,7 @@ details.thread .warnline{font-size:12px;color:var(--amber)}
 .basis{font-size:11.5px;color:var(--muted);font-style:italic}
 .basis.warnish{color:var(--amber);font-style:normal}
 .willdo{margin:10px 0 0;font-size:12px;color:var(--ink);line-height:1.5}
-.tl-row .tl-state{display:flex;flex-direction:column;align-items:flex-start;gap:3px;margin-top:6px;font-size:12px}
+.tl-row .tl-state{display:flex;flex-wrap:wrap;align-items:center;gap:2px 16px;margin-top:2px;font-size:12px}
 .tl-row .tl-state>span{display:grid;grid-template-columns:18px minmax(0,1fr);gap:6px;align-items:center}
 .tl-row .tl-state>span>i{display:block}
 .tl-row .tl-state .glyph{width:18px;height:18px}

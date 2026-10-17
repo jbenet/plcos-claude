@@ -1,20 +1,32 @@
 import Link from '@/components/ui/AppLink';
 import { pipelineData } from '@/lib/authz/read/pipeline';
 import { LpUnitChoice } from './LpUnitChoice';
+import { LpUnitPicker } from './LpUnitPicker';
 import u from './lp-units.module.css';
 
 /**
  * A person's LP page (issues 0111, 0112; docs/23): this pursuit is them as an individual LP. Their
- * firms are context, each linked to its own LP row in this vehicle when it has one.
+ * firms are context, each linked to its own LP row in this vehicle when it has one. The mark after
+ * "Individual LP" settles who the LP is in place (17 Oct 2026), as the People tab's card does; not on
+ * a vehicle kept for its history, which stays as it was recorded.
  */
-export async function LpUnitLine({ pursuitId, vehicleId, capacity, review }: {
-  pursuitId: string; personId: string; vehicleId: string; capacity: 'organisation' | 'personal' | null; review: string | null;
+export async function LpUnitLine({ pursuitId, vehicleId, capacity, review, historical }: {
+  pursuitId: string; personId: string; vehicleId: string; capacity: 'organisation' | 'personal' | null; review: string | null; historical: boolean;
 }) {
   const row = (await pipelineData(vehicleId)).rows.find((r) => r.id === pursuitId);
   const firms = row?.firms ?? [];
+  const settled = capacity === 'personal' && !review;
+  // Something to choose: keeping the row (unless that is already settled), or a firm to move it to.
+  const choosable = !historical && (!settled || firms.length > 0);
   return (
     <>
-      <LpUnitTags capacity={capacity} review={review} />
+      {choosable ? (
+        <>
+          <span>Individual LP</span>
+          <LpUnitPicker pursuitId={pursuitId} capacity={capacity} review={review}
+            firms={firms.map((f) => ({ id: f.id, name: f.name, role: f.role, lpRow: f.lpRow }))} />
+        </>
+      ) : <LpUnitTags capacity={capacity} review={review} historical={historical} />}
       {firms.length > 0 && <span className="muted"> · </span>}
       {firms.map((f, i) => (
         <span key={f.id}>
@@ -28,13 +40,19 @@ export async function LpUnitLine({ pursuitId, vehicleId, capacity, review }: {
   );
 }
 
-/** The line's own words, which need no pipeline: also what shows while the firms load (an LP page's Suspense fallback). */
-export function LpUnitTags({ capacity, review }: { capacity: 'organisation' | 'personal' | null; review: string | null }) {
+/**
+ * The line's own words, which need no pipeline: also what shows while the firms load (an LP page's
+ * Suspense fallback), the same mark as the picker's, not yet a control.
+ */
+export function LpUnitTags({ capacity, review, historical = false }: {
+  capacity: 'organisation' | 'personal' | null; review: string | null; historical?: boolean;
+}) {
   return (
     <>
       <span>Individual LP</span>
       {review ? <span className={`${u.tag} ${u.review}`} title={review}>firm or personal?</span>
-        : capacity === 'personal' ? <span className={`${u.tag} ${u.personal}`}>personal</span> : null}
+        : capacity === 'personal' ? <span className={`${u.tag} ${u.personal}`}>personal</span>
+        : historical ? null : <span className={u.tag} title="Who is the LP? Not established yet">firm or personal?</span>}
     </>
   );
 }

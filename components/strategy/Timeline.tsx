@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Link from '@/components/ui/AppLink';
 import { ago, shortDate } from '@/lib/time';
 import {
@@ -16,6 +17,7 @@ import {
   ON_RECORD_NOTE, RUNG_LABEL, STATUS_LABEL, rungIndex, type LadderEvent, type LadderRung, type PursuitStatus, type PursuitUpdate,
 } from '@/lib/authz/read/strategy';
 import { EntryBox } from './EntryBox';
+import { ClipLine } from './ClipLine';
 import { TIMELINE_PAGE, TimelineRows, type TimelineOption, type TimelineRow } from './TimelineRows';
 import { TagControl, TagVehicles, type TagVehicle } from './TagControl';
 import { SOURCE_LABEL, type SameAs } from '@/lib/comms/trace';
@@ -122,37 +124,40 @@ export interface TraceExtra { key: string; at: Date; source: 'plcos' | 'linear';
  * someone's health shows a summary only if it was read with that detail redacted (N56), and its
  * own text stays closed until someone opens it: it is the team's note, so not hidden from them.
  */
-function Thread({ summary, by, text, health }: { summary: string | null; by: string | null; text: string; health: boolean }) {
+function Thread({ lead, summary, by, text, health }: { lead?: ReactNode; summary: string | null; by: string | null; text: string; health: boolean }) {
+  const head = lead ? <><b>{lead}</b>{' · '}</> : null;
   if (health && !summary) {
     return (
-      <details className="thread">
-        <summary><span className="warnline">Mentions someone&rsquo;s health — open to read</span></summary>
+      <details className="thread tl-main">
+        <summary><span className="tl-clip">{head}<span className="warnline">Mentions someone&rsquo;s health — open to read</span></span></summary>
         <div className="t full">{text}</div>
       </details>
     );
   }
-  if (!summary) {
-    const long = text.length > CLIP;
-    return long ? (
-      <details className="thread">
-        <summary><span className="t">{text.slice(0, CLIP).trimEnd()}…</span><span className="open">the rest</span></summary>
-        <div className="t full">{text}</div>
-      </details>
-    ) : (
-      <div className="t">{text || <span className="muted">No text.</span>}</div>
-    );
-  }
+  if (!summary) return <Clip lead={lead} text={text} open="the rest" />;
   return (
-    <details className="thread">
+    <details className="thread tl-main">
       <summary>
-        <span className="t">{summary}</span>
-        {by === 'claude' && <span className="byline"> · summary by Claude</span>}
+        <span className="tl-clip" title={summary}>{head}{summary}</span>
+        {by === 'claude' && <span className="byline">summary by Claude</span>}
         <span className="open">the note</span>
       </summary>
       {health && <div className="warnline" style={{ marginTop: 6 }}>The note mentions someone&rsquo;s health; the summary leaves it out.</div>}
       <div className="t full">{text}</div>
     </details>
   );
+}
+
+/**
+ * A row's words on its one line (17 Oct 2026, Juan: "aim for one single row, or two at most"): a bold
+ * lead — the title — then the text, cut with an ellipsis where the line ends. Text that was cut
+ * opens below the row in full, so nothing is lost but space.
+ */
+function Clip({ lead, text, open = 'the rest', muted }: { lead?: ReactNode; text: string; open?: string; muted?: boolean }) {
+  const head = lead ? <><b>{lead}</b>{text ? ' · ' : ''}</> : null;
+  if (!text && !lead) return <span className="tl-main muted">No text.</span>;
+  if (!text) return <span className="tl-main tl-clip">{head}</span>;
+  return <ClipLine line={<>{head}{muted ? <span className="muted">{text.slice(0, CLIP)}</span> : text.slice(0, CLIP)}</>} full={text} open={open} />;
 }
 
 /** A rung Reconciliation recorded on its own (issue 0137): it says so, and a person can take it back. */
@@ -186,7 +191,7 @@ function RungState({ rungs, waiting, proposalId, pursuitId }: { rungs: LadderEve
           <Glyph name="rung" title="On the ladder" tone="good" />
           <span>
             On the ladder: {rs.map((r) => `${RUNG_LABEL[r.rung]}${r.evidenceKind === 'not_applicable' ? ' (not applicable: in direct contact)' : ''}`).join(', ')}
-            <span className="muted"> — {rs.some(onItsOwn) ? 'recorded from the records on file' : 'confirmed'} {k.split('|')[0]} by {k.split('|')[1]}</span>
+            <span className="muted"> · {rs.some(onItsOwn) ? 'recorded from the records on file' : 'confirmed'} {k.split('|')[0]} by {k.split('|')[1]}</span>
             {rs.filter(onItsOwn).slice(0, 1).map((r) => <span key={r.eventId}> · <TakeBack e={r} pursuitId={pursuitId} /></span>)}
           </span>
         </span>
@@ -195,7 +200,7 @@ function RungState({ rungs, waiting, proposalId, pursuitId }: { rungs: LadderEve
         <span className="rungpend">
           <Glyph name="rung" title="On record, not confirmed" />
           <span>
-            The record for {waiting.map((r) => RUNG_LABEL[r]).join(', ')} — not confirmed yet
+            The record for {waiting.map((r) => RUNG_LABEL[r]).join(', ')}: not confirmed yet
             {proposalId ? <> · <Link href={`/approvals?t=${proposalId}`}>confirm it</Link></> : ''}
           </span>
         </span>
@@ -254,49 +259,54 @@ function TouchRow({ t, c, now, rungs = [], waiting = [], proposalId, fromUpdate,
   const ref = t.source === 'affinity' ? interactionRef(t.sourceRef) : null;
   const who = t.attendees.length ? `With ${t.attendees.join(', ')}` : t.ownerName === 'Not on the team' ? 'Who from our side: not recorded' : t.ownerName;
   const mark = touchMark(t, now);
+  const title = c?.title || (subject && t.source !== 'gmail' ? subject : null);
+  const via = t.viaOrganization ? `with ${t.viaOrganization}` : t.viaContact ? `with ${t.viaContact}` : '';
+  const from = [via, source(t)].filter(Boolean).join(' · ') + alsoIn(same);
+  // A note's text has a line of its own; who was there then joins the title on the first.
+  const lead = c?.text ? [title, who].filter(Boolean).join(' · ') : title;
   return (
     <div className="tl-row">
       <Glyph name={mark.name} title={mark.title} tone={mark.tone} />
       <div className="anote">
-        <div className="p2">
-          <AboutChips a={about} why={why} />{' '}
-          {on ? shortDate(on) : 'undated'}{!t.on && t.scheduledFor ? ' · scheduled' : ''} · {CHANNEL_LABEL[t.channel]}
-          {t.direction && !isEvent(t) ? ` · ${DIRECTION_LABEL[t.direction]}` : ''}
-          {isEvent(t) ? ` · an event, ${t.groupSize} of ours on it` : ''}
-          {t.viaOrganization ? ` · with ${t.viaOrganization}` : t.viaContact ? ` · with ${t.viaContact}` : ''} · {source(t)}{alsoIn(same)}
-          {c?.what && SIGNALS.includes(c.what) ? <> · <b className="whatword">{WHAT_LABEL[c.what]}</b></> : null}
+        <div className="tl-line">
+          <span className="tl-meta">
+            <AboutChips a={about} why={why} />
+            {on ? shortDate(on) : 'undated'}{!t.on && t.scheduledFor ? ' · scheduled' : ''} · {CHANNEL_LABEL[t.channel]}
+            {t.direction && !isEvent(t) ? ` · ${DIRECTION_LABEL[t.direction]}` : ''}
+            {isEvent(t) ? ` · an event, ${t.groupSize} of ours on it` : ''}
+            {c?.what && SIGNALS.includes(c.what) ? <> · <b className="whatword">{WHAT_LABEL[c.what]}</b></> : null}
+          </span>
+          {fromUpdate
+            ? <Clip lead={lead ?? undefined} muted text={`Logged from ${fromUpdate.createdByName}’s update of ${shortDate(fromUpdate.createdAt)}`} />
+            : c?.text ? <Clip lead={lead ?? undefined} muted text="" />
+            : <Clip lead={title} muted text={t.summary ?? who} />}
+          <span className="tl-tail">
+            {t.read && <span className="flag f-mute" title={`${READ_LABEL[t.read]}${t.readByName ? ` — ${t.readByName}` : ''}`}>{READ_LABEL[t.read]}{t.readByName ? ` — ${t.readByName}` : ''}</span>}
+            <span className="tl-src" title={from}>{from}</span>
+            {t.source === 'calendar' && isNameMatch(t.summary) && t.sourceRef && (
+              <form action={unmatchCalendarMeetingAction} className="tl-form">
+                <input type="hidden" name="ref" value={t.sourceRef} />
+                <button className="btn" type="submit" style={{ padding: '1px 7px', fontSize: 11 }} title={`${who}. Remove this meeting from this LP; the calendar read will not match it again`}>Not this LP</button>
+              </form>
+            )}
+          </span>
+          {ref && (
+            <TagControl
+              tagRef={ref} now={nowSaid(about, why)} general={about.kind === 'none'} pursuitId={tagging.pursuitId} what={CHANNEL_LABEL[t.channel].toLowerCase()}
+              checked={about.kind === 'vehicles' ? about.vehicles.map((v) => v.slug) : []}
+            />
+          )}
         </div>
-        {c?.title && <div className="t"><b>{c.title}</b></div>}
-        {!c?.title && subject && t.source !== 'gmail' && <div className="t"><b>{subject}</b></div>}
-        {fromUpdate ? (
-          <div className="t"><span className="muted">Logged from {fromUpdate.createdByName}&rsquo;s update of {shortDate(fromUpdate.createdAt)}</span></div>
-        ) : c?.text ? (
-          <Thread summary={c.summary ?? null} by={c.summaryBy ?? null} text={c.text} health={Boolean(c.health)} />
-        ) : (
-          <div className="t"><span className="muted">{t.summary ?? who}</span></div>
+        {c?.text && !fromUpdate && (
+          <div className="tl-line tl-sub">
+            <Thread summary={c.summary ?? null} by={c.summaryBy ?? null} text={c.text} health={Boolean(c.health)} />
+          </div>
         )}
-        {c?.text && <div className="p2" style={{ marginTop: 3 }}>{who}</div>}
-        {t.source === 'calendar' && isNameMatch(t.summary) && t.sourceRef && (
-          <form action={unmatchCalendarMeetingAction} style={{ marginTop: 4 }}>
-            <input type="hidden" name="ref" value={t.sourceRef} />
-            <span className="muted" style={{ fontSize: 12 }}>{who} · </span>
-            <button className="btn" type="submit" style={{ padding: '1px 7px', fontSize: 11 }} title="Remove this meeting from this LP; the calendar read will not match it again">Not this LP</button>
-          </form>
-        )}
-        {t.read && <span className="flag f-mute" style={{ marginTop: 4, display: 'inline-block' }}>{READ_LABEL[t.read]}{t.readByName ? ` — ${t.readByName}` : ''}</span>}
         <RungState rungs={rungs} waiting={waiting} proposalId={proposalId} pursuitId={tagging.pursuitId} />
-        {ref && (
-          <TagControl
-            tagRef={ref} now={nowSaid(about, why)} general={about.kind === 'none'} pursuitId={tagging.pursuitId} what={CHANNEL_LABEL[t.channel].toLowerCase()}
-            checked={about.kind === 'vehicles' ? about.vehicles.map((v) => v.slug) : []}
-          />
-        )}
       </div>
     </div>
   );
 }
-
-const CLIP_UPDATE = 480;
 
 /** An update from the team (N61), with what it changed folded in: the status, a touchpoint, a next step. */
 /** The chip for a row that belongs to this pursuit — an update, a status, a rung. */
@@ -304,18 +314,15 @@ const own = (v: TagVehicle): EventAbout => ({ kind: 'vehicles', vehicles: [{ slu
 
 function UpdateRow({ u, vehicle }: { u: PursuitUpdate; vehicle: TagVehicle }) {
   const a = u.applied;
-  const long = u.body.length > CLIP_UPDATE;
   return (
     <div className="tl-row upd">
       <Glyph name="update" title="An update from the team" tone="signal" />
       <div className="anote">
-        <div className="p2"><AboutChips a={own(vehicle)} why="On this pursuit" /> {shortDate(u.createdAt)} · <b className="whatword">Update</b> · {u.createdByName}</div>
-        {long ? (
-          <details className="thread">
-            <summary><span className="t">{u.body.slice(0, CLIP_UPDATE).trimEnd()}…</span><span className="open">the rest</span></summary>
-            <div className="t full">{u.body}</div>
-          </details>
-        ) : <div className="t" style={{ whiteSpace: 'pre-line' }}>{u.body}</div>}
+        <div className="tl-line">
+          <span className="tl-meta"><AboutChips a={own(vehicle)} why="On this pursuit" />{shortDate(u.createdAt)} · <b className="whatword">Update</b></span>
+          <Clip text={u.body} />
+          <span className="tl-tail"><span className="tl-src">{u.createdByName}</span></span>
+        </div>
         {(a.status || a.touch || a.nextStep) && (
           <div className="tl-state">
             {a.status && (
@@ -352,10 +359,13 @@ function StatusRow({ s, vehicle }: { s: StatusEvent; vehicle: TagVehicle }) {
     <div className="tl-row">
       <Glyph name="status" title="Status changed" />
       <div className="anote">
-        <div className="p2"><AboutChips a={own(vehicle)} why="On this pursuit" /> {shortDate(s.at)} · <b className="whatword">Status</b> · set by {s.byName ?? 'someone'}</div>
-        <div className="t">
-          <span className="statechg">{s.from} → <b>{s.to}</b></span>
-          {s.reason ? <span className="muted"> · &ldquo;{s.reason.replace(/_/g, ' ')}&rdquo;</span> : null}
+        <div className="tl-line">
+          <span className="tl-meta"><AboutChips a={own(vehicle)} why="On this pursuit" />{shortDate(s.at)} · <b className="whatword">Status</b></span>
+          <span className="tl-main tl-clip" title={s.reason ? `“${s.reason.replace(/_/g, ' ')}”` : undefined}>
+            <span className="statechg">{s.from} → <b>{s.to}</b></span>
+            {s.reason ? <span className="muted"> · &ldquo;{s.reason.replace(/_/g, ' ')}&rdquo;</span> : null}
+          </span>
+          <span className="tl-tail"><span className="tl-src">set by {s.byName ?? 'someone'}</span></span>
         </div>
       </div>
     </div>
@@ -368,10 +378,15 @@ function RungRow({ e, vehicle, pursuitId }: { e: LadderEvent; vehicle: TagVehicl
     <div className="tl-row">
       <Glyph name="rung" title="On the ladder" tone="good" />
       <div className="anote">
-        <div className="p2"><AboutChips a={own(vehicle)} why="On this pursuit" /> {shortDate(e.occurredAt)} · <b className="whatword">On the ladder</b> · {onItsOwn(e) ? 'recorded from the records on file' : 'confirmed'} {shortDate(e.recordedAt)} by {e.recordedByName}{onItsOwn(e) && <> · <TakeBack e={e} pursuitId={pursuitId} /></>}</div>
-        <div className="t">
-          <b>{RUNG_LABEL[e.rung]}</b>{e.evidenceKind === 'not_applicable' ? ' — not applicable' : ''}
-          <span className="muted"> · {e.evidenceNote}</span>
+        <div className="tl-line">
+          <span className="tl-meta"><AboutChips a={own(vehicle)} why="On this pursuit" />{shortDate(e.occurredAt)} · <b className="whatword">On the ladder</b></span>
+          <Clip lead={`${RUNG_LABEL[e.rung]}${e.evidenceKind === 'not_applicable' ? ' — not applicable' : ''}`} muted text={e.evidenceNote} />
+          <span className="tl-tail">
+            <span className="tl-src" title={`${onItsOwn(e) ? 'Recorded from the records on file' : 'Confirmed'} ${shortDate(e.recordedAt)} by ${e.recordedByName}`}>
+              {onItsOwn(e) ? 'recorded from the records on file' : 'confirmed'} {shortDate(e.recordedAt)} by {e.recordedByName}
+            </span>
+            {onItsOwn(e) && <TakeBack e={e} pursuitId={pursuitId} />}
+          </span>
         </div>
       </div>
     </div>
@@ -391,42 +406,47 @@ function NoteRow({ n, about, tagging }: { n: NoteView; about: EventAbout; taggin
   const mark = noteMark(n);
   const said = n.reading?.what ? WHAT_LABEL[n.reading.what] : n.deckView ? 'Viewed the deck' : null;
   const why = whySaid(n.tag?.by ?? 'rule', n.tag?.byName ?? null, n.tag?.basis ?? null);
+  const by = [
+    `${said ? `${n.kindLabel.toLowerCase()} by` : 'by'} ${n.author}${n.authorOnTeam ? '' : ' (not on the team)'}`,
+    n.via.kind === 'organization' ? `on ${n.via.name}` : '',
+    n.updatedAt ? `edited ${shortDate(n.updatedAt)}` : '',
+    n.replies ? `${n.replies} ${n.replies === 1 ? 'reply' : 'replies'} not read` : '',
+    n.alsoAttached ? `also on ${n.alsoAttached} other ${n.alsoAttached === 1 ? 'record' : 'records'}` : '',
+  ].filter(Boolean).join(' · ');
   return (
     <div className="tl-row">
       <Glyph name={mark.name} title={mark.title} tone={mark.tone} />
       <div className="anote">
-        <div className="p2">
-          <AboutChips a={about} why={why} />{' '}
-          {shortDate(n.createdAt)} · {said ? <><b className="whatword">{said}</b> · {n.kindLabel.toLowerCase()} by</> : `${n.kindLabel} ·`} {n.author}
-          {n.via.kind === 'organization' ? ` · on ${n.via.name}` : ''}
-          {n.authorOnTeam ? '' : ' (not on the team)'}
-          {n.updatedAt ? ` · edited ${shortDate(n.updatedAt)}` : ''}
-          {n.replies ? ` · ${n.replies} ${n.replies === 1 ? 'reply' : 'replies'} not read` : ''}
-          {n.alsoAttached ? ` · also on ${n.alsoAttached} other ${n.alsoAttached === 1 ? 'record' : 'records'}` : ''}
+        <div className="tl-line">
+          <span className="tl-meta">
+            <AboutChips a={about} why={why} />
+            {shortDate(n.createdAt)} · {said ? <b className="whatword">{said}</b> : n.kindLabel}
+          </span>
+          <Thread summary={n.reading?.summary ?? null} by={n.reading?.by ?? null} text={n.text} health={n.health} />
+          <span className="tl-tail"><span className="tl-src" title={by}>{by}</span></span>
+          <TagControl
+            tagRef={noteRef(n.noteId)} now={nowSaid(about, why)} general={about.kind === 'none'} pursuitId={tagging.pursuitId} what="note"
+            checked={about.kind === 'vehicles' ? about.vehicles.map((v) => v.slug) : []}
+          />
         </div>
-        <Thread summary={n.reading?.summary ?? null} by={n.reading?.by ?? null} text={n.text} health={n.health} />
-        <TagControl
-          tagRef={noteRef(n.noteId)} now={nowSaid(about, why)} general={about.kind === 'none'} pursuitId={tagging.pursuitId} what="note"
-          checked={about.kind === 'vehicles' ? about.vehicles.map((v) => v.slug) : []}
-        />
       </div>
     </div>
   );
 }
 
 function ExtraRow({ x }: { x: TraceExtra }) {
-  const long = x.text.length > CLIP;
   return (
     <div className="tl-row" data-trace-source={x.source}>
       <Glyph name={x.source === 'linear' ? 'list' : 'note'} title={x.label} />
       <div className="anote">
-        <div className="p2"><span className="vtag none">General</span> {shortDate(x.at)} · <b className="whatword">{x.label}</b>{x.by ? ` · ${x.by}` : ''}{x.href ? <> · <a href={x.href} rel="noreferrer" target="_blank">open</a></> : null}</div>
-        {long ? (
-          <details className="thread">
-            <summary><span className="t">{x.text.slice(0, CLIP).trimEnd()}…</span><span className="open">the rest</span></summary>
-            <div className="t full">{x.text}</div>
-          </details>
-        ) : <div className="t" style={{ whiteSpace: 'pre-line' }}>{x.text}</div>}
+        <div className="tl-line">
+          <span className="tl-meta"><span className="vtag none">General</span>{shortDate(x.at)} · <b className="whatword">{x.label}</b></span>
+          <Clip text={x.text} />
+          <span className="tl-tail">
+            {x.by && <span className="tl-src">{x.by}</span>}
+            {x.href ? <a href={x.href} rel="noreferrer" target="_blank">open</a> : null}
+          </span>
+        </div>
       </div>
     </div>
   );
