@@ -110,7 +110,9 @@ data on Juan's Mac.
     the path, and that folder is deleted first. `npm ci` runs without the app's keys and secrets in its environment.
   - The copy's launch secret is compared in constant time.
   - Not done, with reasons: the session stays in a Keychain item made by `/usr/bin/security`, which any program
-    running as Juan can read; moving it into the signed app needs a Mac build to test, so the Mac does it next.
+    running as Juan can read; the whole real-data copy sits in the same user's Library, so locking the item down
+    would not change what such a program reaches. Explore mode refuses only writes other than GET; none of the 27
+    GET route handlers writes.
     "Sign Out of This Mac" still does not end the session on the server: sessions have no table, and the only
     revoke (raising the person's epoch) would sign them out of every browser too. Install scripts still run in
     `npm ci`, since Next's native packages need them; a hash of the build download would come from the same server
