@@ -211,6 +211,12 @@ data on Juan's Mac.
 - **An expired ticket can't be approved late, and a stale Approve says what happened.** Approving a ticket someone else
   had just rejected answered "Approved, but the action did not run"; it now says it was already rejected. An expired
   ticket is asked for again.
+- **An Affinity write batch writes only what the Admin saw.** A name filled in after the batch was shown (the first
+  proposal had a bare address) kept the shown id, so approving it created the person under the later name; it now
+  waits in the next batch. Mail in an approved item not yet written (its batch writing, or stopped by a restart) is not
+  proposed again, and a write checks that no other batch has already noted the same mail.
+- **DocSend sign-in asks only for read scopes** when DocSend lists them apart, so a stored token can't change a data
+  room even outside PLC OS's own client.
 - ~~**The mail desk can't confirm an address on its own.**~~ Reversed the same day: see "Juan's calls" below.
 
 ### Juan's calls, 17 Oct 2026
