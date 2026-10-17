@@ -3,7 +3,7 @@ import Link from '@/components/ui/AppLink';
 import { Page } from '@/components/shell/Page';
 import { EntityLink } from '@/components/entity/EntityLink';
 import { EntitySummary } from '@/components/entity/EntitySummary';
-import { searchEntities } from '@/modules/identity';
+import { searchNames } from '@/modules/identity';
 import { moduleHref, OVERVIEW_SECTION, STATIC_SECTIONS, VEHICLE_MODULES } from '@/lib/nav';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ async function Search({ searchParams }: { searchParams: Promise<{ q?: string; e?
   const { q: raw, e } = await searchParams;
   const q = (raw ?? '').trim().slice(0, 120);
   const needle = q.toLowerCase();
-  const entities = q ? await searchEntities(q, LIMIT) : [];
+  const entities = q ? await searchNames(q, LIMIT) : [];
   const links = [...OVERVIEW_SECTION.links, ...STATIC_SECTIONS.flatMap((s) => s.links)]
     .map((l) => ({ label: l.label, href: l.href }))
     .concat(VEHICLE_MODULES.map((m) => ({ label: m.title, href: moduleHref(m, null) })));
@@ -30,7 +30,7 @@ async function Search({ searchParams }: { searchParams: Promise<{ q?: string; e?
       inspector={e ? <EntitySummary entityId={e} /> : (
         <>
           <div className="lbl">What this searches</div>
-          <p>Names of people and organisations on our records, and the app&rsquo;s pages. A name not found here is not on our records; it may still exist.</p>
+          <p>Names of people and organisations on our records, and the app&rsquo;s pages. Each word may be in the name or in the name of a firm or person it is tied to, so a firm&rsquo;s name also finds its people. Records with the same name are one row. A name not found here is not on our records; it may still exist.</p>
           <div className="note">On a list with its own search, such as Network&rsquo;s groups or Routes, the top bar searches that list first.</div>
         </>
       )}
@@ -49,12 +49,17 @@ async function Search({ searchParams }: { searchParams: Promise<{ q?: string; e?
         <div className="card">
           <div className="chead">
             <h2>Names</h2>
-            <span className="lbl">{entities.length === LIMIT ? `the first ${LIMIT}` : entities.length} · names starting with it first</span>
+            <span className="lbl">{entities.length === LIMIT ? `the first ${LIMIT}` : entities.length} · names holding every word first</span>
           </div>
           <div className="cbody">
             {entities.length === 0 ? <p className="muted" style={{ margin: 0 }}>No name on our records contains &ldquo;{q}&rdquo;.</p>
               : entities.map((x) => <div key={x.entityId} style={{ marginBottom: 4 }}>
-                <EntityLink id={x.entityId} name={x.displayName} keep={{ q }} /> <span className="muted" style={{ fontSize: 12 }}>{x.entityType === 'person' ? 'person' : 'organisation'}</span>
+                <EntityLink id={x.entityId} name={x.displayName} keep={{ q }} /> <span className="muted" style={{ fontSize: 12 }}>
+                  {x.entityType === 'person' ? 'person' : 'organisation'}
+                  {(x.via.length ? x.via : x.related).length > 0 && <> · {x.entityType === 'person' ? 'at' : 'with'} {(x.via.length ? x.via : x.related).slice(0, 3).join(', ')}{(x.via.length ? x.via : x.related).length > 3 ? ' …' : ''}</>}
+                  {x.sameName.length > 0 && <> · {x.sameName.length === 1 ? 'another record' : `${x.sameName.length} other records`} with this name:{' '}
+                    {x.sameName.map((id, i) => <span key={id}>{i > 0 ? ', ' : ''}<Link href={`/orgs/${id}`}>{i + 2}</Link></span>)}</>}
+                </span>
               </div>)}
             {entities.length === LIMIT && <p className="muted" style={{ marginBottom: 0 }}>More match. <Link href={`/orgs/g/all?q=${encodeURIComponent(q)}`}>Search Everyone</Link> to page through them all, with what each is to us.</p>}
           </div>
