@@ -7,6 +7,7 @@ import { vehicleReadings } from '@/lib/vehicle-readings';
 import { listVehicles } from '@/modules/platform';
 import { listAssessments, type Assessment } from '@/modules/fit';
 import { ticketEstimate } from '@/lib/connectors/dakota/rules';
+import { grouped } from '@/lib/money';
 import { countryOf } from './geo';
 import {
   bandOfAmount, bandOfText, lpTypeOf, sourceOf, spvBandOf,
@@ -46,44 +47,10 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
   const pursuitIds = rows.map((r) => r.id);
   const vehicleIds = [...new Set(rows.map((r) => r.vehicleId))];
   const orgIds = [...new Set(rows.filter((r) => r.isOrg).map((r) => r.entityId))];
-  // A firm's people now: their research can say what the firm is, and where it is. `speaks` marks the
-  // ones whose word counts for the firm's type — its contacts on a pursuit, or people whose primary
-  // affiliation it is and who are not on it only as a board member, adviser or investor (a family-office
-  // principal on a company's board does not make the company a family office).
-  const orgPeople = await db.query<{ org: string; person: string; speaks: boolean }>(
-    // The firms' aliases first (identity.alias_pairs; the row ids are canonical): index probes, not a
-    // merged-identity lookup on every affiliation (performance pass, 8 Oct 2026; 0.43 s -> 0.03 s).
-    `with oa as (select * from identity.alias_pairs($1::uuid[])),
-     spoken as (select distinct oa.canonical_id org, identity.canonical_entity_id(c.person_entity) person
-       from oa join strategy.active_pursuit p on p.entity_id=oa.entity_id join strategy.pursuit_contact c using(pursuit_id))
-     select oa.canonical_id::text org, identity.canonical_entity_id(a.person_entity)::text person,
-       bool_or((a.is_primary and coalesce(a.role,'') !~* '(board|advis|investor|limited partner|member)')
-         or exists(select 1 from spoken k where k.org=oa.canonical_id and k.person=identity.canonical_entity_id(a.person_entity))) speaks
-     from oa join identity.affiliation a on a.org_entity=oa.entity_id where a.ended_on is null
-     group by 1,2`, [orgIds]);
-  const people = [...new Set(orgPeople.map((p) => p.person))];
-  const firmIds = [...new Set(rows.filter((r) => !r.isOrg && r.orgId).map((r) => r.orgId!))];
-  /** Everyone whose place or type may be read: the LPs, individuals' firms, and firms' people. */
-  const allIds = [...new Set([...ids, ...firmIds, ...people])];
-
-  const [types, accounts, contactsOwn, profiles, claims, claimCounts, pursuits, prospects, strategies, exposures, routes] = await Promise.all([
+  // The reads that need only the LPs start now, beside the firms' people below rather than after them: a rebuild
+  // waited for that read before asking any of these (performance pass, 17 Oct 2026).
+  const lpReads = Promise.all([
     db.query<{ id: string; t: string }>(`select entity_id::text id, entity_type::text t from identity.entity where entity_id=any($1::uuid[])`, [ids]),
-    db.query<{ id: string; type: string | null; country: string | null; average_ticket_size__c: string | null; check_size_from__c: string | null;
-      private_equity_average_ticket_size__c: string | null; lastmodifieddate: Date }>(
-      `${WANTED} select w.target::text id, a.type, a.billingcountry country, a.average_ticket_size__c, a.check_size_from__c,
-         a.private_equity_average_ticket_size__c, a.lastmodifieddate
-       from wanted w join dakota.account a on a.entity_id=w.entity_id order by a.lastmodifieddate desc, a.id`, [allIds]),
-    db.query<{ id: string; country: string | null }>(
-      `${WANTED} select w.target::text id, c.mailingcountry country from wanted w join dakota.contact c on c.entity_id=w.entity_id
-       where c.mailingcountry is not null order by c.lastmodifieddate desc, c.id`, [allIds]),
-    db.query<{ id: string; itype: string | null; loc: string | null }>(
-      `${WANTED} select distinct on (w.target) w.target::text id, n.data#>>'{profile,investorType}' itype, n.data#>>'{identity,canonical,location}' loc
-       from wanted w join research.note n on n.entity_id=w.entity_id and n.kind='public_profile'
-       order by w.target, n.created_at desc, n.note_id`, [allIds]),
-    db.query<{ id: string; field: string; value: string }>(
-      `${WANTED} select w.target::text id, c.field, c.value from wanted w join research.claim c on c.entity_id=w.entity_id
-       where c.superseded_by is null and c.field in ('public.location','typical_check_usd')
-       order by c.as_of desc, c.created_at desc`, [allIds]),
     db.query<{ id: string; n: string }>(
       `${WANTED} select w.target::text id, count(*)::text n from wanted w join research.claim c on c.entity_id=w.entity_id
        where c.superseded_by is null group by 1`, [ids]),
@@ -106,6 +73,45 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
     ((contacts) => Promise.all([...new Set(vehicles.map(v => v.kind))].map(async kind =>
       [...(await strategyRouteSummaries(ids, kind, contacts)).values()].map(r => ({ id: r.entityId, kind, tier: r.tier })))).then(groups => groups.flat()))(lpContactsFor(ids)),
   ]);
+  lpReads.catch(() => undefined); // awaited below; a failure there, not an unhandled rejection here
+  // A firm's people now: their research can say what the firm is, and where it is. `speaks` marks the
+  // ones whose word counts for the firm's type — its contacts on a pursuit, or people whose primary
+  // affiliation it is and who are not on it only as a board member, adviser or investor (a family-office
+  // principal on a company's board does not make the company a family office).
+  const orgPeople = await db.query<{ org: string; person: string; speaks: boolean }>(
+    // The firms' aliases first (identity.alias_pairs; the row ids are canonical): index probes, not a
+    // merged-identity lookup on every affiliation (performance pass, 8 Oct 2026; 0.43 s -> 0.03 s).
+    `with oa as (select * from identity.alias_pairs($1::uuid[])),
+     spoken as (select distinct oa.canonical_id org, identity.canonical_entity_id(c.person_entity) person
+       from oa join strategy.active_pursuit p on p.entity_id=oa.entity_id join strategy.pursuit_contact c using(pursuit_id))
+     select oa.canonical_id::text org, identity.canonical_entity_id(a.person_entity)::text person,
+       bool_or((a.is_primary and coalesce(a.role,'') !~* '(board|advis|investor|limited partner|member)')
+         or exists(select 1 from spoken k where k.org=oa.canonical_id and k.person=identity.canonical_entity_id(a.person_entity))) speaks
+     from oa join identity.affiliation a on a.org_entity=oa.entity_id where a.ended_on is null
+     group by 1,2`, [orgIds]);
+  const people = [...new Set(orgPeople.map((p) => p.person))];
+  const firmIds = [...new Set(rows.filter((r) => !r.isOrg && r.orgId).map((r) => r.orgId!))];
+  /** Everyone whose place or type may be read: the LPs, individuals' firms, and firms' people. */
+  const allIds = [...new Set([...ids, ...firmIds, ...people])];
+
+  const [[accounts, contactsOwn, profiles, claims], [types, claimCounts, pursuits, prospects, strategies, exposures, routes]] = await Promise.all([Promise.all([
+    db.query<{ id: string; type: string | null; country: string | null; average_ticket_size__c: string | null; check_size_from__c: string | null;
+      private_equity_average_ticket_size__c: string | null; lastmodifieddate: Date }>(
+      `${WANTED} select w.target::text id, a.type, a.billingcountry country, a.average_ticket_size__c, a.check_size_from__c,
+         a.private_equity_average_ticket_size__c, a.lastmodifieddate
+       from wanted w join dakota.account a on a.entity_id=w.entity_id order by a.lastmodifieddate desc, a.id`, [allIds]),
+    db.query<{ id: string; country: string | null }>(
+      `${WANTED} select w.target::text id, c.mailingcountry country from wanted w join dakota.contact c on c.entity_id=w.entity_id
+       where c.mailingcountry is not null order by c.lastmodifieddate desc, c.id`, [allIds]),
+    db.query<{ id: string; itype: string | null; loc: string | null }>(
+      `${WANTED} select distinct on (w.target) w.target::text id, n.data#>>'{profile,investorType}' itype, n.data#>>'{identity,canonical,location}' loc
+       from wanted w join research.note n on n.entity_id=w.entity_id and n.kind='public_profile'
+       order by w.target, n.created_at desc, n.note_id`, [allIds]),
+    db.query<{ id: string; field: string; value: string }>(
+      `${WANTED} select w.target::text id, c.field, c.value from wanted w join research.claim c on c.entity_id=w.entity_id
+       where c.superseded_by is null and c.field in ('public.location','typical_check_usd')
+       order by c.as_of desc, c.created_at desc`, [allIds]),
+  ]), lpReads]);
 
   const first = <T extends { id: string }>(list: T[]) => { const m = new Map<string, T>(); for (const x of list) if (!m.has(x.id)) m.set(x.id, x); return m; };
   const typeOf = new Map(types.map((t) => [t.id, t.t]));
@@ -168,8 +174,8 @@ export const lpStatsData = buildCache(async (vehicleId: string): Promise<StatsDa
     const listedAsProspect = prospectsOf.get(r.entityId) ?? [];
     const prospect = listedAsProspect.find((x) => (!x.vehicle || x.vehicle === r.vehicleId) && x.band);
     if (strategyBand !== 'unknown') { check = strategyBand; checkBasis = 'strategy'; checkText = r.capacity; }
-    else if (ticket) { check = bandOfAmount(ticket.amount); checkBasis = 'dakota'; checkText = `$${Math.round(ticket.amount).toLocaleString('en-US')}`; }
-    else if (Number.isFinite(listed) && listed > 0) { check = bandOfAmount(listed); checkBasis = 'affinity'; checkText = `$${Math.round(listed).toLocaleString('en-US')}`; }
+    else if (ticket) { check = bandOfAmount(ticket.amount); checkBasis = 'dakota'; checkText = `$${grouped(Math.round(ticket.amount))}`; }
+    else if (Number.isFinite(listed) && listed > 0) { check = bandOfAmount(listed); checkBasis = 'affinity'; checkText = `$${grouped(Math.round(listed))}`; }
     else if (prospect && bandOfText(prospect.band) !== 'unknown') { check = bandOfText(prospect.band); checkBasis = 'prospect'; checkText = `${prospect.band} (guess)`; }
 
     // Country: Dakota's, else the research profile's place, else a sourced location claim.

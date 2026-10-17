@@ -35,6 +35,10 @@ data on Juan's Mac.
   full route warm-up on every routes view, and the page warm-up opens those after each write. Now one per kind and
   route generation: the server's CPU after a write on the large invented data went from about 5.8 to 3.5 s.
 
+- **LP stats rebuilds a little sooner after a write.** Its LP-only reads start alongside the firms' people read,
+  country lookups and number formatters are kept, Dakota estimates stop at each LP's newest row, and packed ids keep
+  their codes: on the large invented data stats 330 → 294 ms, pipeline 168 → 158 ms (medians of 20 cycles).
+
 ### Red team
 
 - **Score detail and the desktop app's sign-in check for people limited to some vehicles.** `/selection/detail` and

@@ -34,7 +34,9 @@ export async function dakotaCapacities(tx: Queryable,entityIds: string[]) {
     join dakota.contact c on c.entity_id=r.entity_id join dakota.account a on a.id=c.accountid
     order by lastmodifieddate desc,id`,[entityIds]);
   for(const r of rows) {
-    const estimate=ticketEstimate(r);if(estimate&&!result.has(r.target))result.set(r.target,{...estimate,basis:`${estimate.basis} The basis belongs to the matched account; for a contact it describes their employer, not personal wealth.`,asOf:new Date(r.lastmodifieddate).toISOString(),verifiedBy:r.last_verified_by});
+    // The newest estimate per LP wins, so an LP that has one is not estimated again from its older rows.
+    if(result.has(r.target))continue;
+    const estimate=ticketEstimate(r);if(estimate)result.set(r.target,{...estimate,basis:`${estimate.basis} The basis belongs to the matched account; for a contact it describes their employer, not personal wealth.`,asOf:new Date(r.lastmodifieddate).toISOString(),verifiedBy:r.last_verified_by});
   }
   return result;
 }

@@ -143,12 +143,26 @@ const CJK = Object.entries(PLACES).filter(([n]) => /[\u3000-\u9fff\uac00-\ud7af]
 /** The region a country (as named by countryOf) rolls up to; unknown for anything else. */
 export const regionOf = (country: string | null): Region => (country ? REGION_OF.get(country) ?? 'other' : 'unknown');
 
+const read = new Map<string, string | null>();
+const READ_KEPT = 50_000; // GUESS: well above the distinct places on file.
+
 /**
  * The country a piece of location text names, or null. Reads the text's comma parts from the last
  * (the broadest) to the first, so "Cambridge, United Kingdom" is the UK and "Cambridge, MA" the US.
  */
 export function countryOf(text: string | null | undefined): string | null {
   if (!text) return null;
+  // Kept per text: LP stats reads the same few thousand places again on every build, and an unmatched one scans every
+  // known name (performance pass, 17 Oct 2026). Bounded; cleared whole when full.
+  const kept = read.get(text);
+  if (kept !== undefined) return kept;
+  const country = readCountry(text);
+  if (read.size >= READ_KEPT) read.clear();
+  read.set(text, country);
+  return country;
+}
+
+function readCountry(text: string): string | null {
   const parts = text.split(/[,;/|]|\s[-–—]\s|\(|\)/).map((p) => p.trim().toLowerCase().replace(/\.$/, '')).filter(Boolean);
   for (let i = parts.length - 1; i >= 0; i--) {
     const p = parts[i]!;
